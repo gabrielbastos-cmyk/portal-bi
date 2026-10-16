@@ -1,5 +1,5 @@
-const SUPABASE_URL = "URL_REAL_DO_SEU_PROJETO";
-const SUPABASE_PUBLISHABLE_KEY = "CHAVE_PUBLICA_REAL";
+const SUPABASE_URL = "https://oigqmmkaqbpzgaeztajx.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_--VlC5l4qTiPI6uivLIf5w_Ww6uPbyb";
 
 if (!window.supabase) {
   console.error("A biblioteca do Supabase não foi carregada.");
