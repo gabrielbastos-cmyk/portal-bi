@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vagas Aprendiz | Portal BI GERAR</title>
+
+  <link rel="stylesheet" href="vagas-aprendiz.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="vagas-aprendiz.js" defer></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <a class="back-link" href="index.html">← Voltar ao Portal BI</a>
+    <div>
+      <p class="eyebrow">GERAR · PORTAL BI</p>
+      <h1>Controle de Vagas Aprendiz</h1>
+      <p class="subtitle">Acompanhamento de vagas e processos seletivos</p>
+    </div>
+    <button id="btnAtualizar" class="btn-primary">Atualizar dados</button>
+  </header>
+
+  <main class="container">
+    <div id="mensagem" class="message" role="status">
+      Carregando informações...
+    </div>
+
+    <section class="filters">
+      <div class="field">
+        <label for="busca">Pesquisar</label>
+        <input id="busca" type="search" placeholder="Unidade, vaga, cidade...">
+      </div>
+
+      <div class="field">
+        <label for="filtroSubsede">Subsede</label>
+        <select id="filtroSubsede">
+          <option value="">Todas as subsedes</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="filtroStatus">Status</label>
+        <select id="filtroStatus">
+          <option value="">Todos os status</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="filtroCurso">Curso / área</label>
+        <select id="filtroCurso">
+          <option value="">Todas as áreas</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="dataInicial">Data inicial</label>
+        <input id="dataInicial" type="date">
+      </div>
+
+      <div class="field">
+        <label for="dataFinal">Data final</label>
+        <input id="dataFinal" type="date">
+      </div>
+
+      <button id="btnLimpar" class="btn-secondary">Limpar filtros</button>
+    </section>
+
+    <section class="kpis">
+      <article class="kpi">
+        <span>Total de vagas</span>
+        <strong id="totalVagas">0</strong>
+      </article>
+      <article class="kpi">
+        <span>Vagas em aberto</span>
+        <strong id="vagasAbertas">0</strong>
+      </article>
+      <article class="kpi">
+        <span>Em andamento</span>
+        <strong id="vagasAndamento">0</strong>
+      </article>
+      <article class="kpi">
+        <span>Unidades identificadas</span>
+        <strong id="totalUnidades">0</strong>
+      </article>
+    </section>
+
+    <section class="charts">
+      <article class="panel">
+        <h2>Vagas por status</h2>
+        <div class="chart-area">
+          <canvas id="graficoStatus"></canvas>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Vagas por subsede</h2>
+        <div class="chart-area">
+          <canvas id="graficoSubsede"></canvas>
+        </div>
+      </article>
+
+      <article class="panel panel-wide">
+        <h2>Evolução das vagas por mês</h2>
+        <div class="chart-area chart-tall">
+          <canvas id="graficoMensal"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="table-heading">
+        <div>
+          <h2>Detalhamento das vagas</h2>
+          <p id="contadorTabela">0 registros</p>
+        </div>
+        <button id="btnExportar" class="btn-secondary">Exportar CSV</button>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Unidade</th>
+              <th>Subsede</th>
+              <th>Vaga / Curso</th>
+              <th>Status</th>
+              <th>Data de solicitação</th>
+              <th>Data de início</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabela">
+            <tr><td colspan="7">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>GERAR · Painel de acompanhamento de Vagas Aprendiz</footer>
+  </main>
+</body>
+</html>
