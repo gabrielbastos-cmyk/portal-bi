@@ -1,17 +1,14 @@
+
 "use strict";
 
 const sb = window.sb;
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 let currentUser = null;
 let currentProfile = null;
 let allDashboards = [];
 let adminUsers = [];
-
-// ==================================================
-// MENSAGENS
-// ==================================================
 
 function showMessage(id, message, type = "error") {
   const element = $(id);
@@ -56,14 +53,31 @@ function friendlyError(error) {
   }
 
   if (/failed to fetch|networkerror/i.test(message)) {
-    return "Não foi possível conectar. Confira sua internet e a configuração do Supabase.";
+    return "Não foi possível conectar. Confira a internet e a configuração do Supabase.";
   }
 
   return message || "Ocorreu um erro inesperado.";
 }
 
+function isSafeDashboardUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function normalize(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 // ==================================================
-// VALIDAÇÃO INICIAL
+// INICIALIZAÇÃO E SESSÃO
 // ==================================================
 
 if (!sb) {
@@ -75,14 +89,9 @@ if (!sb) {
   iniciarPortal();
 }
 
-// ==================================================
-// INICIALIZAÇÃO E SESSÃO
-// ==================================================
-
 async function iniciarPortal() {
   try {
     const { data, error } = await sb.auth.getSession();
-
     if (error) throw error;
 
     if (data.session) {
@@ -114,6 +123,7 @@ function mostrarLogin() {
   $("login-section").hidden = false;
   $("portal-section").hidden = true;
   $("admin-section").hidden = true;
+  $("admin-nav-link").hidden = true;
   $("user-email").textContent = "";
 }
 
@@ -127,7 +137,7 @@ function mostrarPortal() {
 // LOGIN
 // ==================================================
 
-$("login-form").addEventListener("submit", async (event) => {
+$("login-form").addEventListener("submit", async event => {
   event.preventDefault();
   clearMessage("login-message");
 
@@ -140,7 +150,7 @@ $("login-form").addEventListener("submit", async (event) => {
 
     const { error } = await sb.auth.signInWithPassword({
       email,
-      password,
+      password
     });
 
     if (error) throw error;
@@ -171,14 +181,14 @@ $("logout-btn").addEventListener("click", async () => {
 });
 
 // ==================================================
-// ATUALIZAR PORTAL
+// ATUALIZAR PORTAL E PERFIL
 // ==================================================
 
 async function atualizarPortal() {
   try {
     const {
       data: { user },
-      error: userError,
+      error: userError
     } = await sb.auth.getUser();
 
     if (userError) throw userError;
@@ -207,26 +217,25 @@ async function atualizarPortal() {
     currentProfile = profile;
     mostrarPortal();
 
-    $("admin-section").hidden = profile.role !== "admin";
+    const isAdmin = profile.role === "admin";
+
+    $("admin-section").hidden = !isAdmin;
+    $("admin-nav-link").hidden = !isAdmin;
 
     await carregarDashboards();
 
-    if (profile.role === "admin") {
+    if (isAdmin) {
       await carregarAdministracao();
     }
   } catch (error) {
     console.error("Erro ao atualizar portal:", error);
-
-    showMessage(
-      "dashboard-message",
-      friendlyError(error)
-    );
+    showMessage("dashboard-message", friendlyError(error));
   }
 }
 
 // ==================================================
 // CARREGAR DASHBOARDS
-// O RLS DO SUPABASE DEVE FILTRAR OS ACESSOS
+// A POLÍTICA RLS PRECISA FILTRAR OS ACESSOS
 // ==================================================
 
 async function carregarDashboards() {
@@ -244,16 +253,17 @@ async function carregarDashboards() {
 
   allDashboards = data || [];
 
-  if (allDashboards.length === 0) {
+  if (!allDashboards.length) {
     showMessage(
       "dashboard-message",
       "Nenhum dashboard foi liberado para sua conta.",
       "success"
     );
+    atualizarResumo();
     return;
   }
 
-  allDashboards.forEach((dashboard) => {
+  allDashboards.forEach(dashboard => {
     const card = document.createElement("article");
     card.className = "dashboard-card";
 
@@ -264,6 +274,8 @@ async function carregarDashboards() {
     description.textContent = dashboard.description || "";
 
     const category = document.createElement("p");
+    category.className = "card-category";
+    category.dataset.category = dashboard.category || "outros";
     category.textContent =
       "Categoria: " + (dashboard.category || "Outros");
 
@@ -284,33 +296,76 @@ async function carregarDashboards() {
 
     grid.appendChild(card);
   });
-}
 
-function isSafeDashboardUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
+  atualizarResumo();
+  aplicarFiltrosDashboards();
 }
 
 // ==================================================
-// CHAMAR A EDGE FUNCTION PORTAL-ADMIN
+// BUSCA, FILTRO E RESUMO
+// ==================================================
+
+function atualizarResumo() {
+  $("summary-total").textContent = String(allDashboards.length);
+
+  const categories = new Set(
+    allDashboards.map(d => normalize(d.category || "outros"))
+  );
+
+  $("summary-categories").textContent = String(categories.size);
+}
+
+function aplicarFiltrosDashboards() {
+  const term = normalize($("dashboard-search").value);
+  const selectedCategory = normalize($("category-filter").value);
+  const cards = [...$("dashboard-grid").querySelectorAll(".dashboard-card")];
+
+  let visible = 0;
+
+  cards.forEach(card => {
+    const category = normalize(
+      card.querySelector(".card-category")?.dataset.category
+    );
+
+    const matchesSearch = normalize(card.innerText).includes(term);
+    const matchesCategory =
+      !selectedCategory || category === selectedCategory;
+
+    const show = matchesSearch && matchesCategory;
+    card.hidden = !show;
+
+    if (show) visible++;
+  });
+
+  $("filter-empty").hidden = visible > 0 || cards.length === 0;
+}
+
+$("dashboard-search").addEventListener(
+  "input",
+  aplicarFiltrosDashboards
+);
+
+$("category-filter").addEventListener(
+  "change",
+  aplicarFiltrosDashboards
+);
+
+// ==================================================
+// CHAMAR EDGE FUNCTION portal-admin
 // ==================================================
 
 async function adminCall(action, payload = {}) {
   const { data, error } = await sb.functions.invoke("portal-admin", {
     body: {
       action,
-      ...payload,
-    },
+      ...payload
+    }
   });
 
   if (error) {
     console.error("Erro na função portal-admin:", error);
     throw new Error(
-      "Não foi possível executar a operação administrativa. Confira se a função foi publicada e se sua conta é administradora."
+      "Não foi possível executar a operação administrativa. Confira a publicação da função e o perfil da sua conta."
     );
   }
 
@@ -335,11 +390,7 @@ async function carregarAdministracao() {
     renderizarDashboardsAdministrativos();
   } catch (error) {
     console.error("Erro ao carregar administração:", error);
-
-    showMessage(
-      "permission-message",
-      friendlyError(error)
-    );
+    showMessage("permission-message", friendlyError(error));
   }
 }
 
@@ -354,20 +405,15 @@ function preencherListaUsuarios() {
   placeholder.textContent = "Selecione um usuário";
   select.appendChild(placeholder);
 
-  adminUsers.forEach((user) => {
+  adminUsers.forEach(user => {
     const option = document.createElement("option");
     option.value = user.id;
     option.textContent =
       `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
-
-    if (user.role === "admin") {
-      option.textContent += " (acesso total)";
-    }
-
     select.appendChild(option);
   });
 
-  if (adminUsers.some((user) => user.id === previousValue)) {
+  if (adminUsers.some(user => user.id === previousValue)) {
     select.value = previousValue;
   }
 
@@ -380,7 +426,7 @@ function preencherListaUsuarios() {
 // CRIAR USUÁRIO
 // ==================================================
 
-$("user-create-form").addEventListener("submit", async (event) => {
+$("user-create-form").addEventListener("submit", async event => {
   event.preventDefault();
   clearMessage("user-create-message");
 
@@ -388,14 +434,10 @@ $("user-create-form").addEventListener("submit", async (event) => {
   setLoading(button, true, "Criando usuário...");
 
   try {
-    const email = $("new-user-email").value.trim();
-    const password = $("new-user-password").value;
-    const role = $("new-user-role").value;
-
     await adminCall("create_user", {
-      email,
-      password,
-      role,
+      email: $("new-user-email").value.trim(),
+      password: $("new-user-password").value,
+      role: $("new-user-role").value
     });
 
     $("user-create-form").reset();
@@ -409,23 +451,20 @@ $("user-create-form").addEventListener("submit", async (event) => {
     await carregarAdministracao();
   } catch (error) {
     console.error("Erro ao criar usuário:", error);
-
-    showMessage(
-      "user-create-message",
-      friendlyError(error)
-    );
+    showMessage("user-create-message", friendlyError(error));
   } finally {
     setLoading(button, false);
   }
 });
 
 // ==================================================
-// SELECIONAR USUÁRIO PARA PERMISSÕES
+// PERMISSÕES
 // ==================================================
 
-$("permission-user").addEventListener("change", () => {
-  carregarPermissoesUsuario();
-});
+$("permission-user").addEventListener(
+  "change",
+  carregarPermissoesUsuario
+);
 
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
@@ -436,10 +475,7 @@ async function carregarPermissoesUsuario() {
 
   if (!userId) return;
 
-  const selectedUser = adminUsers.find(
-    (user) => user.id === userId
-  );
-
+  const selectedUser = adminUsers.find(user => user.id === userId);
   if (!selectedUser) return;
 
   if (selectedUser.role === "admin") {
@@ -460,29 +496,20 @@ async function carregarPermissoesUsuario() {
     if (error) throw error;
 
     const permittedIds = new Set(
-      (data || []).map((item) => item.dashboard_id)
+      (data || []).map(item => item.dashboard_id)
     );
 
-    if (allDashboards.length === 0) {
+    if (!allDashboards.length) {
       const { data: dashboards, error: dashboardsError } = await sb
         .from("dashboards")
         .select("id, name")
         .order("name");
 
       if (dashboardsError) throw dashboardsError;
-
       allDashboards = dashboards || [];
     }
 
-    if (allDashboards.length === 0) {
-      showMessage(
-        "permission-message",
-        "Cadastre pelo menos um dashboard antes de configurar acessos."
-      );
-      return;
-    }
-
-    allDashboards.forEach((dashboard) => {
+    allDashboards.forEach(dashboard => {
       const label = document.createElement("label");
       label.className = "permission-option";
 
@@ -499,17 +526,9 @@ async function carregarPermissoesUsuario() {
     });
   } catch (error) {
     console.error("Erro ao carregar permissões:", error);
-
-    showMessage(
-      "permission-message",
-      friendlyError(error)
-    );
+    showMessage("permission-message", friendlyError(error));
   }
 }
-
-// ==================================================
-// SALVAR PERMISSÕES
-// ==================================================
 
 $("save-permissions-btn").addEventListener("click", async () => {
   clearMessage("permission-message");
@@ -517,16 +536,11 @@ $("save-permissions-btn").addEventListener("click", async () => {
   const userId = $("permission-user").value;
 
   if (!userId) {
-    showMessage(
-      "permission-message",
-      "Selecione um usuário primeiro."
-    );
+    showMessage("permission-message", "Selecione um usuário primeiro.");
     return;
   }
 
-  const selectedUser = adminUsers.find(
-    (user) => user.id === userId
-  );
+  const selectedUser = adminUsers.find(user => user.id === userId);
 
   if (!selectedUser) {
     showMessage("permission-message", "Usuário inválido.");
@@ -549,11 +563,11 @@ $("save-permissions-btn").addEventListener("click", async () => {
       $("permission-dashboard-list").querySelectorAll(
         'input[type="checkbox"]:checked'
       )
-    ).map((checkbox) => checkbox.value);
+    ).map(checkbox => checkbox.value);
 
     await adminCall("set_permissions", {
       user_id: userId,
-      dashboard_ids: dashboardIds,
+      dashboard_ids: dashboardIds
     });
 
     showMessage(
@@ -563,25 +577,21 @@ $("save-permissions-btn").addEventListener("click", async () => {
     );
   } catch (error) {
     console.error("Erro ao salvar permissões:", error);
-
-    showMessage(
-      "permission-message",
-      friendlyError(error)
-    );
+    showMessage("permission-message", friendlyError(error));
   } finally {
     setLoading(button, false);
   }
 });
 
 // ==================================================
-// LISTA ADMINISTRATIVA DE DASHBOARDS
+// LISTA ADMINISTRATIVA
 // ==================================================
 
 function renderizarDashboardsAdministrativos() {
   const container = $("admin-dashboard-list");
   container.replaceChildren();
 
-  allDashboards.forEach((dashboard) => {
+  allDashboards.forEach(dashboard => {
     const item = document.createElement("article");
     item.className = "admin-dashboard-item";
 
@@ -603,7 +613,7 @@ function renderizarDashboardsAdministrativos() {
     container.appendChild(item);
   });
 
-  if (allDashboards.length === 0) {
+  if (!allDashboards.length) {
     const empty = document.createElement("p");
     empty.textContent = "Nenhum dashboard cadastrado.";
     container.appendChild(empty);
@@ -613,13 +623,13 @@ function renderizarDashboardsAdministrativos() {
 function preencherFormularioDashboard(dashboard) {
   $("dashboard-id").value = dashboard.id;
   $("dashboard-name").value = dashboard.name;
-  $("dashboard-description").value = dashboard.description;
-  $("dashboard-category").value = dashboard.category;
-  $("dashboard-url").value = dashboard.url;
+  $("dashboard-description").value = dashboard.description || "";
+  $("dashboard-category").value = dashboard.category || "outros";
+  $("dashboard-url").value = dashboard.url || "";
 
   $("dashboard-form").scrollIntoView({
     behavior: "smooth",
-    block: "start",
+    block: "start"
   });
 }
 
@@ -627,7 +637,7 @@ function preencherFormularioDashboard(dashboard) {
 // CADASTRAR OU ATUALIZAR DASHBOARD
 // ==================================================
 
-$("dashboard-form").addEventListener("submit", async (event) => {
+$("dashboard-form").addEventListener("submit", async event => {
   event.preventDefault();
   clearMessage("dashboard-form-message");
 
@@ -640,7 +650,7 @@ $("dashboard-form").addEventListener("submit", async (event) => {
       name: $("dashboard-name").value.trim(),
       description: $("dashboard-description").value.trim(),
       category: $("dashboard-category").value,
-      url: $("dashboard-url").value.trim(),
+      url: $("dashboard-url").value.trim()
     };
 
     if (
@@ -650,7 +660,7 @@ $("dashboard-form").addEventListener("submit", async (event) => {
       !isSafeDashboardUrl(dashboard.url)
     ) {
       throw new Error(
-        "Preencha todos os campos e informe uma URL válida começando com http:// ou https://."
+        "Preencha todos os campos e informe uma URL válida."
       );
     }
 
@@ -672,11 +682,7 @@ $("dashboard-form").addEventListener("submit", async (event) => {
     await carregarAdministracao();
   } catch (error) {
     console.error("Erro ao salvar dashboard:", error);
-
-    showMessage(
-      "dashboard-form-message",
-      friendlyError(error)
-    );
+    showMessage("dashboard-form-message", friendlyError(error));
   } finally {
     setLoading(button, false);
   }
