@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Portal BI — acesso aos dashboards e indicadores.">
+  <title>Portal BI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main class="container">
+    <header class="header">
+      <h1>Portal BI</h1>
+      <p>Acesse seus dashboards em um só lugar.</p>
+    </header>
+
+    <section id="login-section" class="panel">
+      <h2>Entrar no portal</h2>
+
+      <form id="login-form">
+        <label for="email">E-mail</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          autocomplete="username"
+          placeholder="seu@email.com"
+          required
+        >
+
+        <label for="password">Senha</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          placeholder="Digite sua senha"
+          required
+        >
+
+        <button type="submit">Entrar</button>
+        <p id="login-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section id="portal-section" hidden>
+      <header class="portal-header">
+        <div>
+          <h2>Meus dashboards</h2>
+          <p id="user-email"></p>
+        </div>
+        <button id="logout-btn" type="button">Sair</button>
+      </header>
+
+      <div id="dashboard-grid" class="dashboard-grid"></div>
+      <p id="dashboard-message" role="status" aria-live="polite"></p>
+
+      <section id="admin-section" class="panel" hidden>
+        <h2>Administração do portal</h2>
+
+        <h3>Cadastrar usuário</h3>
+        <form id="user-create-form">
+          <label for="new-user-email">E-mail do usuário</label>
+          <input
+            type="email"
+            id="new-user-email"
+            autocomplete="off"
+            required
+          >
+
+          <label for="new-user-password">Senha inicial</label>
+          <input
+            type="password"
+            id="new-user-password"
+            minlength="8"
+            autocomplete="new-password"
+            required
+          >
+
+          <label for="new-user-role">Perfil</label>
+          <select id="new-user-role">
+            <option value="user">Usuário comum</option>
+            <option value="admin">Administrador</option>
+          </select>
+
+          <button type="submit">Criar usuário</button>
+          <p id="user-create-message" role="status" aria-live="polite"></p>
+        </form>
+
+        <h3>Permissões de acesso</h3>
+        <label for="permission-user">Selecione um usuário</label>
+        <select id="permission-user">
+          <option value="">Selecione um usuário</option>
+        </select>
+
+        <div id="permission-dashboard-list"></div>
+        <button id="save-permissions-btn" type="button">
+          Salvar permissões
+        </button>
+        <p id="permission-message" role="status" aria-live="polite"></p>
+
+        <h3>Dashboards cadastrados</h3>
+        <div id="admin-dashboard-list"></div>
+
+        <h3>Cadastrar ou atualizar dashboard</h3>
+        <form id="dashboard-form">
+          <label for="dashboard-id">Identificador</label>
+          <input id="dashboard-id" required>
+
+          <label for="dashboard-name">Nome do dashboard</label>
+          <input id="dashboard-name" required>
+
+          <label for="dashboard-description">Descrição</label>
+          <input id="dashboard-description" required>
+
+          <label for="dashboard-category">Categoria</label>
+          <select id="dashboard-category" required>
+            <option value="metas">Metas</option>
+            <option value="operacao">Operação</option>
+            <option value="localidades">Localidades</option>
+            <option value="outros">Outros</option>
+          </select>
+
+          <label for="dashboard-url">URL do dashboard</label>
+          <input id="dashboard-url" type="url" required>
+
+          <button type="submit">Salvar dashboard</button>
+          <p id="dashboard-form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="script.js" defer></script>
+</body>
+</html>
