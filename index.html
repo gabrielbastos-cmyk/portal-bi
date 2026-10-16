@@ -4,136 +4,294 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Portal BI — acesso aos dashboards e indicadores.">
-  <title>Portal BI</title>
+  <title>Portal BI | GERAR</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-  <main class="container">
-    <header class="header">
+  <section id="login-section" class="login-shell">
+    <div class="login-brand">
+      <div class="brand-mark">BI</div>
+      <p class="eyebrow">GERAR · INTELIGÊNCIA DE DADOS</p>
       <h1>Portal BI</h1>
-      <p>Acesse seus dashboards em um só lugar.</p>
-    </header>
-
-    <section id="login-section" class="panel">
-      <h2>Entrar no portal</h2>
-
+      <p class="login-intro">Seus indicadores, análises e dashboards em um só lugar.</p>
+      <div class="login-decoration" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+    </div>
+    <div class="login-panel">
+      <div class="section-kicker">ACESSO RESTRITO</div>
+      <h2>Bem-vindo de volta</h2>
+      <p class="muted">Entre com suas credenciais para continuar.</p>
       <form id="login-form">
         <label for="email">E-mail</label>
-        <input
-          type="email"
-          id="email"
-          name="email"
-          autocomplete="username"
-          placeholder="seu@email.com"
-          required
-        >
-
+        <input type="email" id="email" name="email" autocomplete="username" placeholder="seu@email.com" required>
         <label for="password">Senha</label>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          autocomplete="current-password"
-          placeholder="Digite sua senha"
-          required
-        >
-
-        <button type="submit">Entrar</button>
+        <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+        <button type="submit">Entrar no portal <span aria-hidden="true">→</span></button>
         <p id="login-message" role="status" aria-live="polite"></p>
       </form>
-    </section>
+      <p class="login-footnote">Acesso protegido · GERAR</p>
+    </div>
+  </section>
 
-    <section id="portal-section" hidden>
-      <header class="portal-header">
-        <div>
-          <h2>Meus dashboards</h2>
-          <p id="user-email"></p>
+  <div id="portal-section" class="app-shell" hidden>
+    <aside class="sidebar">
+      <a class="brand-lockup" href="#inicio" aria-label="Portal BI início">
+        <span class="brand-mark small">BI</span>
+        <span><strong>Portal BI</strong><small>GERAR · Dados & Gestão</small></span>
+      </a>
+      <div class="nav-label">MENU PRINCIPAL</div>
+      <a class="nav-link active" href="#inicio"><span class="nav-icon">▦</span> Visão geral</a>
+      <a class="nav-link" href="#dashboards"><span class="nav-icon">▤</span> Meus dashboards</a>
+      <a class="nav-link" href="#admin-section" id="admin-nav-link"><span class="nav-icon">⚙</span> Administração</a>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span>
+        <span>Portal operacional</span>
+        <small>Ambiente seguro</small>
+      </div>
+    </aside>
+
+    <main class="main-content" id="inicio">
+      <header class="topbar">
+        <div class="breadcrumbs">Portal BI <span>/</span> <strong>Visão geral</strong></div>
+        <div class="topbar-user">
+          <span class="avatar">BI</span>
+          <div><strong>Área de trabalho</strong><small id="user-email"></small></div>
+          <button id="logout-btn" type="button" class="logout-button">Sair ↗</button>
         </div>
-        <button id="logout-btn" type="button">Sair</button>
       </header>
 
-      <div id="dashboard-grid" class="dashboard-grid"></div>
-      <p id="dashboard-message" role="status" aria-live="polite"></p>
-
-      <section id="admin-section" class="panel" hidden>
-        <h2>Administração do portal</h2>
-
-        <h3>Cadastrar usuário</h3>
-        <form id="user-create-form">
-          <label for="new-user-email">E-mail do usuário</label>
-          <input
-            type="email"
-            id="new-user-email"
-            autocomplete="off"
-            required
-          >
-
-          <label for="new-user-password">Senha inicial</label>
-          <input
-            type="password"
-            id="new-user-password"
-            minlength="8"
-            autocomplete="new-password"
-            required
-          >
-
-          <label for="new-user-role">Perfil</label>
-          <select id="new-user-role">
-            <option value="user">Usuário comum</option>
-            <option value="admin">Administrador</option>
-          </select>
-
-          <button type="submit">Criar usuário</button>
-          <p id="user-create-message" role="status" aria-live="polite"></p>
-        </form>
-
-        <h3>Permissões de acesso</h3>
-        <label for="permission-user">Selecione um usuário</label>
-        <select id="permission-user">
-          <option value="">Selecione um usuário</option>
-        </select>
-
-        <div id="permission-dashboard-list"></div>
-        <button id="save-permissions-btn" type="button">
-          Salvar permissões
-        </button>
-        <p id="permission-message" role="status" aria-live="polite"></p>
-
-        <h3>Dashboards cadastrados</h3>
-        <div id="admin-dashboard-list"></div>
-
-        <h3>Cadastrar ou atualizar dashboard</h3>
-        <form id="dashboard-form">
-          <label for="dashboard-id">Identificador</label>
-          <input id="dashboard-id" required>
-
-          <label for="dashboard-name">Nome do dashboard</label>
-          <input id="dashboard-name" required>
-
-          <label for="dashboard-description">Descrição</label>
-          <input id="dashboard-description" required>
-
-          <label for="dashboard-category">Categoria</label>
-          <select id="dashboard-category" required>
-            <option value="metas">Metas</option>
-            <option value="operacao">Operação</option>
-            <option value="localidades">Localidades</option>
-            <option value="outros">Outros</option>
-          </select>
-
-          <label for="dashboard-url">URL do dashboard</label>
-          <input id="dashboard-url" type="url" required>
-
-          <button type="submit">Salvar dashboard</button>
-          <p id="dashboard-form-message" role="status" aria-live="polite"></p>
-        </form>
+      <section class="welcome-banner">
+        <div class="welcome-copy">
+          <p class="eyebrow light">CENTRAL DE INDICADORES</p>
+          <h1>Olá! Que bom ter você aqui.</h1>
+          <p>Acompanhe os dados e encontre os indicadores que ajudam a transformar informação em decisão.</p>
+        </div>
+        <div class="welcome-art" aria-hidden="true">
+          <div class="art-ring ring-one"></div>
+          <div class="art-ring ring-two"></div>
+          <div class="art-bars"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="art-line"></div>
+        </div>
       </section>
-    </section>
-  </main>
+
+      <section class="summary-grid" aria-label="Resumo dos dashboards">
+        <article class="summary-card">
+          <span class="summary-icon navy">▦</span>
+          <div><p>Dashboards disponíveis</p><strong id="summary-total">—</strong><small>Na sua área de acesso</small></div>
+        </article>
+        <article class="summary-card">
+          <span class="summary-icon blue">⌕</span>
+          <div><p>Categorias</p><strong id="summary-categories">—</strong><small>Temas de análise</small></div>
+        </article>
+        <article class="summary-card">
+          <span class="summary-icon green">↗</span>
+          <div><p>Acesso</p><strong>Ativo</strong><small>Sessão autenticada</small></div>
+        </article>
+      </section>
+
+      <section class="dashboard-section" id="dashboards">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">SUA CENTRAL DE DADOS</p>
+            <h2>Meus dashboards</h2>
+            <p class="muted">Selecione um painel para consultar os indicadores.</p>
+          </div>
+          <span class="access-pill"><span class="status-dot"></span> Acesso personalizado</span>
+        </div>
+
+        <div class="dashboard-tools">
+          <label class="search-box" for="dashboard-search">
+            <span>⌕</span>
+            <input id="dashboard-search" type="search" placeholder="Buscar dashboard por nome ou descrição...">
+          </label>
+          <label class="filter-box" for="category-filter">
+            <span>Categoria</span>
+            <select id="category-filter">
+              <option value="">Todas as categorias</option>
+              <option value="metas">Metas</option>
+              <option value="operacao">Operação</option>
+              <option value="localidades">Localidades</option>
+              <option value="outros">Outros</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="dashboard-grid" class="dashboard-grid"></div>
+        <p id="dashboard-message" role="status" aria-live="polite"></p>
+        <p id="filter-empty" class="filter-empty" hidden>Nenhum dashboard corresponde à sua busca. Tente outro termo ou categoria.</p>
+      </section>
+
+      <section id="admin-section" class="admin-panel" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">GESTÃO DO PORTAL</p>
+            <h2>Administração</h2>
+            <p class="muted">Gerencie usuários, acessos e dashboards cadastrados.</p>
+          </div>
+          <span class="admin-pill">⚙ Administrador</span>
+        </div>
+
+        <div class="admin-grid">
+          <section class="admin-card">
+            <h3><span class="admin-card-icon">＋</span> Cadastrar usuário</h3>
+            <form id="user-create-form">
+              <label for="new-user-email">E-mail do usuário</label>
+              <input type="email" id="new-user-email" autocomplete="off" placeholder="nome@empresa.com" required>
+              <label for="new-user-password">Senha inicial</label>
+              <input type="password" id="new-user-password" minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres" required>
+              <label for="new-user-role">Perfil</label>
+              <select id="new-user-role">
+                <option value="user">Usuário comum</option>
+                <option value="admin">Administrador</option>
+              </select>
+              <button type="submit">Criar usuário</button>
+              <p id="user-create-message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="admin-card">
+            <h3><span class="admin-card-icon">✓</span> Permissões de acesso</h3>
+            <label for="permission-user">Selecione um usuário</label>
+            <select id="permission-user"><option value="">Selecione um usuário</option></select>
+            <div id="permission-dashboard-list"></div>
+            <button id="save-permissions-btn" type="button">Salvar permissões</button>
+            <p id="permission-message" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="admin-card admin-card-wide">
+            <h3><span class="admin-card-icon">▤</span> Dashboards cadastrados</h3>
+            <div id="admin-dashboard-list"></div>
+          </section>
+
+          <section class="admin-card admin-card-wide">
+            <h3><span class="admin-card-icon">＋</span> Cadastrar ou atualizar dashboard</h3>
+            <form id="dashboard-form" class="dashboard-admin-form">
+              <div>
+                <label for="dashboard-id">Identificador</label>
+                <input id="dashboard-id" required>
+              </div>
+              <div>
+                <label for="dashboard-name">Nome do dashboard</label>
+                <input id="dashboard-name" required>
+              </div>
+              <div>
+                <label for="dashboard-description">Descrição</label>
+                <input id="dashboard-description" required>
+              </div>
+              <div>
+                <label for="dashboard-category">Categoria</label>
+                <select id="dashboard-category" required>
+                  <option value="metas">Metas</option>
+                  <option value="operacao">Operação</option>
+                  <option value="localidades">Localidades</option>
+                  <option value="outros">Outros</option>
+                </select>
+              </div>
+              <div class="form-wide">
+                <label for="dashboard-url">URL do dashboard</label>
+                <input id="dashboard-url" type="url" required>
+              </div>
+              <div class="form-wide">
+                <button type="submit">Salvar dashboard</button>
+                <p id="dashboard-form-message" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <footer class="page-footer">
+        <span>Portal BI <span class="footer-separator">·</span> GERAR</span>
+        <span>Informação para melhores decisões.</span>
+      </footer>
+    </main>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="script.js" defer></script>
+  <script>
+    // Complemento visual: busca, filtro e resumo.
+    // Não altera login, Supabase ou permissões.
+    (() => {
+      const search = document.getElementById('dashboard-search');
+      const category = document.getElementById('category-filter');
+      const grid = document.getElementById('dashboard-grid');
+
+      if (!search || !category || !grid) return;
+
+      const normalize = value =>
+        (value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+
+      function updateCards() {
+        const cards = [...grid.querySelectorAll('.dashboard-card')];
+        const term = normalize(search.value.trim());
+        const selectedCategory = normalize(category.value);
+        let visible = 0;
+
+        cards.forEach(card => {
+          const text = normalize(card.innerText);
+          const categoryText = normalize(
+            card.querySelector('.card-category')?.dataset.category ||
+            card.innerText.match(/categoria:\s*([^\n]+)/i)?.[1] ||
+            'outros'
+          );
+
+          const show =
+            text.includes(term) &&
+            (!selectedCategory || categoryText.includes(selectedCategory));
+
+          card.hidden = !show;
+          if (show) visible++;
+        });
+
+        document.getElementById('summary-total').textContent =
+          String(cards.length);
+
+        const allCategories = cards.map(card => {
+          const categoryValue =
+            card.querySelector('.card-category')?.dataset.category ||
+            card.innerText.match(/categoria:\s*([^\n]+)/i)?.[1] ||
+            'outros';
+          return normalize(categoryValue);
+        });
+
+        document.getElementById('summary-categories').textContent =
+          String(new Set(allCategories).size);
+
+        document.getElementById('filter-empty').hidden =
+          visible !== 0 || cards.length === 0;
+      }
+
+      search.addEventListener('input', updateCards);
+      category.addEventListener('change', updateCards);
+
+      new MutationObserver(updateCards).observe(grid, {
+        childList: true,
+        subtree: true
+      });
+
+      const adminSection = document.getElementById('admin-section');
+      const adminLink = document.getElementById('admin-nav-link');
+
+      const syncAdminLink = () => {
+        if (adminSection && adminLink) {
+          adminLink.hidden = adminSection.hidden;
+        }
+      };
+
+      if (adminSection) {
+        new MutationObserver(syncAdminLink).observe(adminSection, {
+          attributes: true,
+          attributeFilter: ['hidden']
+        });
+      }
+
+      syncAdminLink();
+      updateCards();
+    })();
+  </script>
 </body>
 </html>
