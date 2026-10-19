@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -11,7 +12,33 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="script.js" defer></script>
+
+  <style>
+    /* Incorporação do painel de Vagas Aprendiz */
+    .vagas-embed-container {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    #vagas-aprendiz-frame {
+      display: block;
+      width: 100%;
+      height: 800px;
+      min-height: 300px;
+      border: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    @media (max-width: 700px) {
+      #vagas-aprendiz-frame {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
+
 <body>
   <!-- LOGIN -->
   <section id="login-section" class="login-shell">
@@ -87,7 +114,6 @@
         <span class="nav-icon">▤</span> Meus dashboards
       </a>
 
-      <!-- NOVO MENU: CONTROLE DE VAGAS APRENDIZ -->
       <a class="nav-link" href="#vagas-aprendiz-section">
         <span class="nav-icon">▥</span> Controle de Vagas Aprendiz
       </a>
@@ -229,7 +255,7 @@
         </p>
       </section>
 
-      <!-- NOVA SEÇÃO: CONTROLE DE VAGAS APRENDIZ -->
+      <!-- CONTROLE DE VAGAS APRENDIZ -->
       <section
         id="vagas-aprendiz-section"
         class="dashboard-section"
@@ -261,8 +287,8 @@
             title="Painel de Controle de Vagas Aprendiz"
             loading="lazy"
             width="100%"
-            height="1800"
-            style="display: block; width: 100%; border: 0;"
+            height="800"
+            scrolling="no"
           ></iframe>
         </div>
       </section>
@@ -427,5 +453,32 @@
       </footer>
     </main>
   </div>
+
+  <!-- AJUSTE AUTOMÁTICO DA ALTURA DO PAINEL -->
+  <script>
+    (() => {
+      "use strict";
+
+      const iframe = document.getElementById("vagas-aprendiz-frame");
+
+      if (!iframe) return;
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.source !== iframe.contentWindow) return;
+
+        const data = event.data;
+
+        if (!data || data.type !== "vagas-aprendiz-height") return;
+
+        const altura = Number(data.height);
+
+        if (!Number.isFinite(altura)) return;
+        if (altura < 300 || altura > 20000) return;
+
+        iframe.style.height = `${Math.ceil(altura)}px`;
+      });
+    })();
+  </script>
 </body>
 </html>
