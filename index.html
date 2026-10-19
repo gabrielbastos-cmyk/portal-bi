@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#102c4c">
   <title>Portal BI | GERAR</title>
 
-  <!-- CSS principal com atualização de cache -->
+  <!-- CSS principal -->
   <link rel="stylesheet" href="./style.css?v=20261019">
 
   <!-- Bibliotecas e configurações existentes -->
@@ -34,9 +34,64 @@
       background: transparent;
     }
 
+    /* Filtros do BI de Substituições */
+    .substituicoes-filtros {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+      align-items: end;
+    }
+
+    .substituicoes-filtros label {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .substituicoes-filtros select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    /* Paginação da tabela */
+    .sub-paginacao {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .sub-paginacao-controles {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sub-paginacao button {
+      cursor: pointer;
+    }
+
+    .sub-paginacao button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
     @media (max-width: 700px) {
       #vagas-aprendiz-frame {
         width: 100%;
+      }
+
+      .substituicoes-filtros {
+        grid-template-columns: 1fr;
+      }
+
+      .sub-paginacao {
+        align-items: flex-start;
+        flex-direction: column;
       }
     }
   </style>
@@ -318,6 +373,7 @@
 
         <!-- FILTROS -->
         <div class="substituicoes-filtros">
+
           <label for="sub-filtro-subsede">
             Subsede
             <select id="sub-filtro-subsede">
@@ -325,10 +381,24 @@
             </select>
           </label>
 
+          <label for="sub-filtro-angariador">
+            Angariador
+            <select id="sub-filtro-angariador">
+              <option value="">Todos os angariadores</option>
+            </select>
+          </label>
+
           <label for="sub-filtro-ano">
             Ano do fechamento
             <select id="sub-filtro-ano">
               <option value="">Todos os anos</option>
+            </select>
+          </label>
+
+          <label for="sub-filtro-periodo-fechamento">
+            Período de Fechamento
+            <select id="sub-filtro-periodo-fechamento">
+              <option value="">Todos os períodos</option>
             </select>
           </label>
 
@@ -341,6 +411,7 @@
               <option value="atrasada">Em atraso</option>
             </select>
           </label>
+
         </div>
 
         <!-- INDICADORES -->
@@ -402,9 +473,14 @@
           <div class="sub-tabela-heading">
             <div>
               <h3>Detalhamento das substituições</h3>
-              <p class="muted">Os resultados respeitam os filtros selecionados.</p>
+              <p class="muted">
+                Os resultados respeitam os filtros selecionados.
+              </p>
             </div>
-            <span id="sub-tabela-contagem" class="sub-tabela-contagem">0 registros</span>
+
+            <span id="sub-tabela-contagem" class="sub-tabela-contagem">
+              0 registros
+            </span>
           </div>
 
           <div class="sub-tabela-scroll">
@@ -421,12 +497,40 @@
                   <th>Prioridade</th>
                 </tr>
               </thead>
+
               <tbody id="sub-tabela-corpo">
                 <tr>
-                  <td colspan="8">Carregue os dados para visualizar os registros.</td>
+                  <td colspan="8">
+                    Carregue os dados para visualizar os registros.
+                  </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- O JavaScript poderá inserir os controles de paginação aqui. -->
+          <div id="sub-paginacao" class="sub-paginacao">
+            <span id="sub-paginacao-info">
+              Página 1
+            </span>
+
+            <div class="sub-paginacao-controles">
+              <button
+                id="sub-pagina-anterior"
+                type="button"
+                disabled
+              >
+                ← Anterior
+              </button>
+
+              <button
+                id="sub-pagina-proxima"
+                type="button"
+                disabled
+              >
+                Próxima →
+              </button>
+            </div>
           </div>
         </article>
       </section>
