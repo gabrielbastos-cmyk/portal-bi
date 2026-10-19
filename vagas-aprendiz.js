@@ -1,4 +1,4 @@
-
+```javascript
 /**
  * GERAR — CONTROLE DE VAGAS APRENDIZ
  * Fonte: public.vw_vagas_aprendiz_bi
@@ -51,8 +51,18 @@ function formatarData(valor) {
     : data.toLocaleDateString("pt-BR");
 }
 
+function escaparHTML(valor) {
+  return String(valor ?? "").replace(/[&<>"']/g, caractere => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[caractere]);
+}
+
 /* =====================================================
-   CARREGAMENTO PAGINADO DOS DADOS
+   CARREGAMENTO PAGINADO
 ===================================================== */
 
 async function carregarDados() {
@@ -60,27 +70,33 @@ async function carregarDados() {
 
   if (!sb || typeof sb.from !== "function") {
     throw new Error(
-      "Cliente Supabase não encontrado. Confira config.js."
+      "Cliente Supabase não encontrado. Confira se config.js inicializa window.sb ou window.supabaseClient."
     );
   }
 
   const todos = [];
+  let inicio = 0;
 
-  for (let inicio = 0; ; inicio += PAGE_SIZE) {
+  while (true) {
+    const fim = inicio + PAGE_SIZE - 1;
+
     const { data, error } = await sb
       .from(VIEW)
       .select("*")
-      .range(inicio, inicio + PAGE_SIZE - 1);
+      .range(inicio, fim);
 
     if (error) {
       throw new Error(
-        "Erro ao consultar os dados: " + error.message
+        "Erro ao consultar a view: " + error.message
       );
     }
 
-    todos.push(...(data || []));
+    const lote = data || [];
+    todos.push(...lote);
 
-    if (!data || data.length < PAGE_SIZE) break;
+    if (lote.length < PAGE_SIZE) break;
+
+    inicio += PAGE_SIZE;
   }
 
   return todos;
@@ -94,12 +110,16 @@ function preencherFiltro(id, valores, textoInicial) {
   const select = $(id);
   if (!select) return;
 
-  const anterior = select.value;
+  const valorAnterior = select.value;
 
   const unicos = [...new Set(
     valores
-      .map(v => String(v ?? "").trim())
-      .filter(v => v && v !== "Não informado" && v !== "Não informada")
+      .map(valor => String(valor ?? "").trim())
+      .filter(valor =>
+        valor &&
+        valor !== "Não informado" &&
+        valor !== "Não informada"
+      )
   )].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   select.replaceChildren(new Option(textoInicial, ""));
@@ -108,8 +128,8 @@ function preencherFiltro(id, valores, textoInicial) {
     select.add(new Option(valor, valor));
   });
 
-  if (unicos.includes(anterior)) {
-    select.value = anterior;
+  if (unicos.includes(valorAnterior)) {
+    select.value = valorAnterior;
   }
 }
 
@@ -136,6 +156,7 @@ function aplicarFiltros() {
       r.cidade_uf,
       r.subsede,
       r.curso,
+      r.tipo_curso,
       r.angariador,
       r.solicitado_por,
       r.status,
@@ -144,26 +165,11 @@ function aplicarFiltros() {
     ].join(" "));
 
     if (busca && !textoBusca.includes(busca)) return false;
-
-    if (subsede && String(r.subsede || "") !== subsede) {
-      return false;
-    }
-
-    if (status && statusRegistro(r) !== status) {
-      return false;
-    }
-
-    if (curso && cursoRegistro(r) !== curso) {
-      return false;
-    }
-
-    if (empresa && empresaRegistro(r) !== empresa) {
-      return false;
-    }
-
-    if (solicitante && solicitanteRegistro(r) !== solicitante) {
-      return false;
-    }
+    if (subsede && String(r.subsede || "") !== subsede) return false;
+    if (status && statusRegistro(r) !== status) return false;
+    if (curso && cursoRegistro(r) !== curso) return false;
+    if (empresa && empresaRegistro(r) !== empresa) return false;
+    if (solicitante && solicitanteRegistro(r) !== solicitante) return false;
 
     const data = String(r.solicitado_em || "").slice(0, 10);
 
@@ -181,8 +187,11 @@ function aplicarFiltros() {
 function contarPor(lista, obterValor) {
   const contagem = {};
 
-  lista.forEach(r => {
-    const chave = obterValor(r) || "Não informado";
+  lista.forEach(registro => {
+    const chave = String(
+      obterValor(registro) || "Não informada"
+    );
+
     contagem[chave] = (contagem[chave] || 0) + 1;
   });
 
@@ -205,7 +214,6 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
 
   charts[id] = new Chart(canvas, {
     type: tipo,
-
     data: {
       labels,
       datasets: [{
@@ -217,22 +225,21 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
         fill: false
       }]
     },
-
     options: {
       responsive: true,
       maintainAspectRatio: false,
-
       plugins: {
         legend: {
           display: tipo === "doughnut",
           position: "bottom"
         }
       },
-
       scales: tipo === "doughnut" ? {} : {
         y: {
           beginAtZero: true,
-          ticks: { precision: 0 }
+          ticks: {
+            precision: 0
+          }
         }
       }
     }
@@ -246,7 +253,6 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
 function atualizarGraficos(lista) {
   destruirGraficos();
 
-  // 1. Vagas por status
   const porStatus = contarPor(
     lista,
     statusRegistro
@@ -255,12 +261,11 @@ function atualizarGraficos(lista) {
   criarGrafico(
     "graficoStatus",
     "doughnut",
-    porStatus.map(x => x[0]),
-    porStatus.map(x => x[1]),
+    porStatus.map(item => item[0]),
+    porStatus.map(item => item[1]),
     "Vagas por status"
   );
 
-  // 2. Vagas por subsede
   const porSubsede = contarPor(
     lista,
     r => r.subsede || "Não informada"
@@ -269,14 +274,11 @@ function atualizarGraficos(lista) {
   criarGrafico(
     "graficoSubsede",
     "bar",
-    porSubsede.map(x => x[0]),
-    porSubsede.map(x => x[1]),
+    porSubsede.map(item => item[0]),
+    porSubsede.map(item => item[1]),
     "Vagas por subsede"
   );
 
-  // 3. Evolução mensal das solicitações
-  // Usa ano_solicitacao e mes_solicitacao;
-  // caso estejam vazios, utiliza solicitado_em.
   const meses = {};
 
   lista.forEach(r => {
@@ -294,8 +296,7 @@ function atualizarGraficos(lista) {
       mes = data.getMonth() + 1;
     }
 
-    const chave =
-      `${ano}-${String(mes).padStart(2, "0")}`;
+    const chave = `${ano}-${String(mes).padStart(2, "0")}`;
 
     meses[chave] = (meses[chave] || 0) + 1;
   });
@@ -359,8 +360,9 @@ function atualizarIndicadores(lista) {
 
   if ($("totalUnidades")) {
     $("totalUnidades").textContent =
-      new Set(lista.map(r => r.subsede).filter(Boolean)).size
-        .toLocaleString("pt-BR");
+      new Set(
+        lista.map(r => r.subsede).filter(Boolean)
+      ).size.toLocaleString("pt-BR");
   }
 }
 
@@ -372,29 +374,21 @@ function atualizarTabela(lista) {
   const corpo = $("corpoTabela");
   if (!corpo) return;
 
-  corpo.replaceChildren();
-
   if (!lista.length) {
-    const linha = corpo.insertRow();
-    const celula = linha.insertCell();
-    celula.colSpan = 7;
-    celula.textContent = "Nenhum registro encontrado.";
+    corpo.innerHTML =
+      '<tr><td colspan="7">Nenhuma vaga encontrada.</td></tr>';
   } else {
-    lista.slice(0, 500).forEach(r => {
-      const linha = corpo.insertRow();
-
-      [
-        r.id_vaga ?? r.id_registro ?? "—",
-        empresaRegistro(r),
-        r.subsede || "—",
-        cursoRegistro(r),
-        statusRegistro(r),
-        formatarData(r.solicitado_em),
-        r.periodo || "—"
-      ].forEach(valor => {
-        linha.insertCell().textContent = String(valor);
-      });
-    });
+    corpo.innerHTML = lista.slice(0, 500).map(r => `
+      <tr>
+        <td>${escaparHTML(r.id_vaga ?? r.id_registro ?? "—")}</td>
+        <td>${escaparHTML(empresaRegistro(r))}</td>
+        <td>${escaparHTML(r.subsede || "—")}</td>
+        <td>${escaparHTML(cursoRegistro(r))}</td>
+        <td>${escaparHTML(statusRegistro(r))}</td>
+        <td>${escaparHTML(formatarData(r.solicitado_em))}</td>
+        <td>${escaparHTML(r.periodo || "—")}</td>
+      </tr>
+    `).join("");
   }
 
   if ($("contadorTabela")) {
@@ -407,7 +401,7 @@ function atualizarTabela(lista) {
 }
 
 /* =====================================================
-   ATUALIZAÇÃO GERAL DO PAINEL
+   ATUALIZAÇÃO GERAL
 ===================================================== */
 
 function atualizarPainel() {
@@ -449,183 +443,4 @@ function exportarCSV() {
   ];
 
   const escapar = valor =>
-    '"' + String(valor ?? "").replace(/"/g, '""') + '"';
-
-  const conteudo = [
-    colunas.map(c => escapar(c[0])).join(";"),
-    ...lista.map(r =>
-      colunas.map(c => escapar(c[1](r))).join(";")
-    )
-  ].join("\r\n");
-
-  const blob = new Blob(["\uFEFF" + conteudo], {
-    type: "text/csv;charset=utf-8;"
-  });
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = "vagas-aprendiz.csv";
-  link.click();
-
-  URL.revokeObjectURL(url);
-}
-
-/* =====================================================
-   INICIALIZAÇÃO
-===================================================== */
-
-async function iniciarPainel() {
-  if ($("mensagem")) {
-    $("mensagem").textContent =
-      "Carregando dados do Supabase...";
-  }
-
-  try {
-    registros = await carregarDados();
-
-    preencherFiltro(
-      "filtroSubsede",
-      registros.map(r => r.subsede),
-      "Todas as subsedes"
-    );
-
-    preencherFiltro(
-      "filtroStatus",
-      registros.map(statusRegistro),
-      "Todos os status"
-    );
-
-    preencherFiltro(
-      "filtroCurso",
-      registros.map(cursoRegistro),
-      "Todas as áreas"
-    );
-
-    preencherFiltro(
-      "filtroEmpresa",
-      registros.map(empresaRegistro),
-      "Todas as empresas"
-    );
-
-    preencherFiltro(
-      "filtroSolicitante",
-      registros.map(solicitanteRegistro),
-      "Todos os solicitantes"
-    );
-
-    [
-      "busca",
-      "filtroSubsede",
-      "filtroStatus",
-      "filtroCurso",
-      "filtroEmpresa",
-      "filtroSolicitante",
-      "dataInicial",
-      "dataFinal"
-    ].forEach(id => {
-      $(id)?.addEventListener(
-        id === "busca" ? "input" : "change",
-        atualizarPainel
-      );
-    });
-
-    $("btnLimpar")?.addEventListener("click", () => {
-      [
-        "busca",
-        "filtroSubsede",
-        "filtroStatus",
-        "filtroCurso",
-        "filtroEmpresa",
-        "filtroSolicitante",
-        "dataInicial",
-        "dataFinal"
-      ].forEach(id => {
-        if ($(id)) $(id).value = "";
-      });
-
-      atualizarPainel();
-    });
-
-    $("btnExportar")?.addEventListener(
-      "click",
-      exportarCSV
-    );
-
-    $("btnAtualizar")?.addEventListener("click", async () => {
-      $("btnAtualizar").disabled = true;
-
-      try {
-        if ($("mensagem")) {
-          $("mensagem").textContent = "Atualizando dados...";
-        }
-
-        registros = await carregarDados();
-
-        preencherFiltro(
-          "filtroSubsede",
-          registros.map(r => r.subsede),
-          "Todas as subsedes"
-        );
-
-        preencherFiltro(
-          "filtroStatus",
-          registros.map(statusRegistro),
-          "Todos os status"
-        );
-
-        preencherFiltro(
-          "filtroCurso",
-          registros.map(cursoRegistro),
-          "Todas as áreas"
-        );
-
-        preencherFiltro(
-          "filtroEmpresa",
-          registros.map(empresaRegistro),
-          "Todas as empresas"
-        );
-
-        preencherFiltro(
-          "filtroSolicitante",
-          registros.map(solicitanteRegistro),
-          "Todos os solicitantes"
-        );
-
-        atualizarPainel();
-      } catch (erro) {
-        mostrarErro(erro);
-      } finally {
-        $("btnAtualizar").disabled = false;
-      }
-    });
-
-    atualizarPainel();
-
-  } catch (erro) {
-    mostrarErro(erro);
-  }
-}
-
-function mostrarErro(erro) {
-  console.error("Painel Vagas Aprendiz:", erro);
-
-  if ($("mensagem")) {
-    $("mensagem").textContent =
-      erro.message || "Não foi possível carregar os dados.";
-
-    $("mensagem").className = "message error";
-  }
-
-  if ($("corpoTabela")) {
-    $("corpoTabela").innerHTML =
-      '<tr><td colspan="7">Erro ao carregar os dados.</td></tr>';
-  }
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", iniciarPainel);
-} else {
-  iniciarPainel();
-}
+    `"${String
