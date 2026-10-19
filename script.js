@@ -2,13 +2,45 @@
 "use strict";
 
 const sb = window.sb;
-
 const $ = id => document.getElementById(id);
 
 let currentUser = null;
 let currentProfile = null;
 let allDashboards = [];
 let adminUsers = [];
+
+// ==================================================
+// BI DE SUBSTITUIÇÕES — ESTADO
+// ==================================================
+
+const SUB_VIEW = "vw_substituicoes_bi";
+
+const SUB_FIELDS = [
+  "id",
+  "subsede",
+  "cidade",
+  "jovem",
+  "empresa",
+  "motivo",
+  "jovem_substituto",
+  "mes_da_substituicao",
+  "dentro_do_prazo",
+  "faixa_de_atraso",
+  "prioridade",
+  "inicio_fechamento",
+  "fim_fechamento",
+  "mes_fechamento",
+  "ano_fechamento",
+  "fechamento_da_substituicao",
+  "dias_pendentes",
+  "dias_em_aberto",
+  "substituido_em_outro_fechamento",
+  "ultima_atualizacao"
+];
+
+let subRegistros = [];
+let subGraficos = {};
+let subInicializado = false;
 
 // ==================================================
 // MENSAGENS E FUNÇÕES AUXILIARES
@@ -36,13 +68,18 @@ function setLoading(button, loading, loadingText = "Aguarde...") {
   if (!button) return;
 
   if (loading) {
-    button.dataset.originalText = button.textContent;
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent;
+    }
+
     button.textContent = loadingText;
     button.disabled = true;
   } else {
     button.textContent =
       button.dataset.originalText || button.textContent;
+
     button.disabled = false;
+    delete button.dataset.originalText;
   }
 }
 
@@ -61,6 +98,10 @@ function friendlyError(error) {
     return "Não foi possível conectar. Confira a internet e a configuração do Supabase.";
   }
 
+  if (/permission denied|row-level security|42501/i.test(message)) {
+    return "Acesso negado. Confira as políticas de acesso do Supabase.";
+  }
+
   return message || "Ocorreu um erro inesperado.";
 }
 
@@ -74,11 +115,46 @@ function isSafeDashboardUrl(value) {
 }
 
 function normalize(value) {
-  return String(value || "")
+  return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function valorTexto(value, fallback = "—") {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return fallback;
+  }
+
+  return String(value).trim();
+}
+
+function numeroSeguro(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const result = Number(String(value).replace(",", "."));
+  return Number.isFinite(result) ? result : null;
+}
+
+function valorVerdadeiro(value) {
+  const text = normalize(value);
+
+  if (!text) return false;
+
+  return ![
+    "nao",
+    "false",
+    "0",
+    "nenhum",
+    "nenhuma",
+    "nao substituido",
+    "nao realizada",
+    "pendente",
+    "null"
+  ].includes(text);
 }
 
 // ==================================================
@@ -121,6 +197,10 @@ async function iniciarPortal() {
       currentProfile = null;
       allDashboards = [];
       adminUsers = [];
+      subRegistros = [];
+      subInicializado = false;
+
+      destruirGraficosSubstituicoes();
       mostrarLogin();
     }
   });
@@ -138,6 +218,12 @@ function mostrarLogin() {
   if (adminSection) adminSection.hidden = true;
   if (adminNavLink) adminNavLink.hidden = true;
   if (userEmail) userEmail.textContent = "";
+
+  const subSection = $("substituicoes-section");
+  const subNavLink = $("substituicoes-nav-link");
+
+  if (subSection) subSection.hidden = true;
+  if (subNavLink) subNavLink.hidden = true;
 }
 
 function mostrarPortal() {
@@ -253,11 +339,13 @@ async function atualizarPortal() {
 
     const isAdmin = profile.role === "admin";
 
-    const adminSection = $("admin-section");
-    const adminNavLink = $("admin-nav-link");
+    if ($("admin-section")) {
+      $("admin-section").hidden = !isAdmin;
+    }
 
-    if (adminSection) adminSection.hidden = !isAdmin;
-    if (adminNavLink) adminNavLink.hidden = !isAdmin;
+    if ($("admin-nav-link")) {
+      $("admin-nav-link").hidden = !isAdmin;
+    }
 
     await carregarDashboards();
 
@@ -305,6 +393,7 @@ async function carregarDashboards() {
 
     atualizarResumo();
     atualizarListaAdministrativa();
+    configurarAcessoSubstituicoes();
     return;
   }
 
@@ -347,6 +436,8 @@ async function carregarDashboards() {
   atualizarResumo();
   aplicarFiltrosDashboards();
   renderizarDashboardsAdministrativos();
+
+  configurarAcessoSubstituicoes();
 }
 
 // ==================================================
@@ -372,19 +463,12 @@ function atualizarResumo() {
 
 function aplicarFiltrosDashboards() {
   const grid = $("dashboard-grid");
-
   if (!grid) return;
 
-  const searchInput = $("dashboard-search");
-  const categoryFilter = $("category-filter");
+  const term = normalize($("dashboard-search")?.value || "");
+  const selectedCategory = normalize($("category-filter")?.value || "");
 
-  const term = normalize(searchInput?.value || "");
-  const selectedCategory = normalize(categoryFilter?.value || "");
-
-  const cards = [
-    ...grid.querySelectorAll(".dashboard-card")
-  ];
-
+  const cards = [...grid.querySelectorAll(".dashboard-card")];
   let visible = 0;
 
   cards.forEach(card => {
@@ -398,7 +482,6 @@ function aplicarFiltrosDashboards() {
       !selectedCategory || category === selectedCategory;
 
     const show = matchesSearch && matchesCategory;
-
     card.hidden = !show;
 
     if (show) visible++;
@@ -469,22 +552,18 @@ async function carregarAdministracao() {
 
 function preencherListaUsuarios() {
   const select = $("permission-user");
-
   if (!select) return;
 
   const previousValue = select.value;
-
   select.replaceChildren();
 
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.textContent = "Selecione um usuário";
-
   select.appendChild(placeholder);
 
   adminUsers.forEach(user => {
     const option = document.createElement("option");
-
     option.value = user.id;
     option.textContent =
       `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
@@ -518,7 +597,6 @@ if (userCreateForm) {
     clearMessage("user-create-message");
 
     const button = event.submitter;
-
     setLoading(button, true, "Criando usuário...");
 
     try {
@@ -530,11 +608,7 @@ if (userCreateForm) {
         throw new Error("Preencha todos os campos do usuário.");
       }
 
-      await adminCall("create_user", {
-        email,
-        password,
-        role
-      });
+      await adminCall("create_user", { email, password, role });
 
       userCreateForm.reset();
 
@@ -576,11 +650,9 @@ async function carregarPermissoesUsuario() {
   if (!container) return;
 
   container.replaceChildren();
-
   if (!userId) return;
 
   const selectedUser = adminUsers.find(user => user.id === userId);
-
   if (!selectedUser) return;
 
   if (selectedUser.role === "admin") {
@@ -589,7 +661,6 @@ async function carregarPermissoesUsuario() {
       "Administradores possuem acesso a todos os dashboards.",
       "success"
     );
-
     return;
   }
 
@@ -605,28 +676,26 @@ async function carregarPermissoesUsuario() {
       (data || []).map(item => item.dashboard_id)
     );
 
-    // Carrega a lista completa de dashboards para configurar permissões.
-    if (!allDashboards.length) {
-      const {
-        data: dashboards,
-        error: dashboardsError
-      } = await sb
-        .from("dashboards")
-        .select("id, name, description, category, url")
-        .order("name");
+    // Consulta o catálogo para preencher a lista de permissões.
+    const {
+      data: dashboards,
+      error: dashboardsError
+    } = await sb
+      .from("dashboards")
+      .select("id, name, description, category, url")
+      .order("name");
 
-      if (dashboardsError) throw dashboardsError;
+    if (dashboardsError) throw dashboardsError;
 
-      allDashboards = dashboards || [];
-    }
+    // A consulta de permissões precisa conseguir listar o catálogo
+    // completo para que o administrador possa conceder acessos.
+    allDashboards = dashboards || [];
 
-    // CORREÇÃO: informa quando não há dashboards cadastrados.
     if (!allDashboards.length) {
       showMessage(
         "permission-message",
         "Cadastre pelo menos um dashboard antes de configurar acessos."
       );
-
       return;
     }
 
@@ -660,11 +729,7 @@ if (savePermissionsButton) {
     const userId = $("permission-user")?.value;
 
     if (!userId) {
-      showMessage(
-        "permission-message",
-        "Selecione um usuário primeiro."
-      );
-
+      showMessage("permission-message", "Selecione um usuário primeiro.");
       return;
     }
 
@@ -680,12 +745,10 @@ if (savePermissionsButton) {
         "permission-message",
         "Administradores já possuem acesso a todos os dashboards."
       );
-
       return;
     }
 
     const button = $("save-permissions-btn");
-
     setLoading(button, true, "Salvando...");
 
     try {
@@ -724,7 +787,6 @@ function atualizarListaAdministrativa() {
 
 function renderizarDashboardsAdministrativos() {
   const container = $("admin-dashboard-list");
-
   if (!container) return;
 
   container.replaceChildren();
@@ -755,7 +817,6 @@ function renderizarDashboardsAdministrativos() {
   if (!allDashboards.length) {
     const empty = document.createElement("p");
     empty.textContent = "Nenhum dashboard cadastrado.";
-
     container.appendChild(empty);
   }
 }
@@ -785,7 +846,6 @@ if (dashboardForm) {
     clearMessage("dashboard-form-message");
 
     const button = event.submitter;
-
     setLoading(button, true, "Salvando...");
 
     try {
@@ -834,4 +894,586 @@ if (dashboardForm) {
       setLoading(button, false);
     }
   });
+}
+
+// ==================================================
+// BI DE SUBSTITUIÇÕES — CONTROLE DE ACESSO NA INTERFACE
+// ==================================================
+
+function dashboardEhSubstituicoes(dashboard) {
+  const nome = normalize(dashboard?.name);
+  const id = normalize(dashboard?.id);
+
+  return (
+    nome.includes("bi de substituicoes") ||
+    nome.includes("bi substituicoes") ||
+    id === "bi_substituicoes" ||
+    id === "bi-substituicoes"
+  );
+}
+
+function configurarAcessoSubstituicoes() {
+  const section = $("substituicoes-section");
+  const navLink = $("substituicoes-nav-link");
+
+  if (!section || !navLink) return;
+
+  // Administradores podem ver o BI pela interface.
+  // Para usuários comuns, é necessário haver um dashboard
+  // de Substituições entre os dashboards liberados à conta.
+  const isAdmin = currentProfile?.role === "admin";
+
+  const hasPermission = isAdmin ||
+    allDashboards.some(dashboardEhSubstituicoes);
+
+  section.hidden = !hasPermission;
+  navLink.hidden = !hasPermission;
+
+  if (hasPermission && !subInicializado) {
+    subInicializado = true;
+    prepararInterfaceSubstituicoes();
+
+    carregarSubstituicoes().catch(error => {
+      console.error("Erro ao carregar BI de Substituições:", error);
+      mostrarErroSubstituicoes(friendlyError(error));
+    });
+  }
+}
+
+function prepararInterfaceSubstituicoes() {
+  const botao = $("substituicoes-atualizar");
+
+  if (botao) {
+    botao.addEventListener("click", async () => {
+      setLoading(botao, true, "Atualizando...");
+
+      try {
+        await carregarSubstituicoes();
+      } catch (error) {
+        console.error(error);
+        mostrarErroSubstituicoes(friendlyError(error));
+      } finally {
+        setLoading(botao, false);
+      }
+    });
+  }
+
+  [
+    "sub-filtro-subsede",
+    "sub-filtro-ano",
+    "sub-filtro-situacao"
+  ].forEach(id => {
+    const element = $(id);
+    if (element) element.addEventListener("change", renderizarBISelecionado);
+  });
+}
+
+function mostrarErroSubstituicoes(message) {
+  const element = $("substituicoes-message");
+  if (!element) return;
+
+  element.textContent = message;
+  element.className = "message-error";
+}
+
+// ==================================================
+// BUSCAR DADOS DA VIEW SUPABASE
+// PAGINA OS RESULTADOS PARA NÃO PARAR EM 1.000 LINHAS
+// ==================================================
+
+async function carregarSubstituicoes() {
+  if (!sb || !currentUser || !currentProfile) return;
+
+  const message = $("substituicoes-message");
+  if (message) {
+    message.textContent = "Carregando dados de substituições...";
+    message.className = "";
+  }
+
+  const acumulado = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await sb
+      .from(SUB_VIEW)
+      .select(SUB_FIELDS.join(","))
+      .range(offset, offset + pageSize - 1);
+
+    if (error) throw error;
+
+    const page = data || [];
+    acumulado.push(...page);
+
+    if (page.length < pageSize) break;
+
+    offset += pageSize;
+  }
+
+  subRegistros = acumulado.map(normalizarRegistroSubstituicao);
+
+  preencherFiltrosSubstituicoes();
+
+  if (message) {
+    message.textContent =
+      `${subRegistros.length.toLocaleString("pt-BR")} registros carregados.`;
+    message.className = "message-success";
+  }
+
+  renderizarBISelecionado();
+}
+
+function normalizarRegistroSubstituicao(row) {
+  const diasPendentes = numeroSeguro(row.dias_pendentes);
+  const diasEmAberto = numeroSeguro(row.dias_em_aberto);
+
+  const temSubstituto = Boolean(
+    String(row.jovem_substituto || "").trim()
+  );
+
+  const outroFechamento = valorVerdadeiro(
+    row.substituido_em_outro_fechamento
+  );
+
+  const fechamentoSubstituicao = normalize(
+    row.fechamento_da_substituicao
+  );
+
+  const temFechamentoSubstituicao =
+    fechamentoSubstituicao !== "" &&
+    ![
+      "nao",
+      "false",
+      "0",
+      "pendente",
+      "nao substituido",
+      "nao realizada"
+    ].includes(fechamentoSubstituicao);
+
+  const realizada =
+    temSubstituto || outroFechamento || temFechamentoSubstituicao;
+
+  const prazoTexto = normalize(row.dentro_do_prazo);
+  const faixaTexto = normalize(row.faixa_de_atraso);
+  const prioridadeTexto = normalize(row.prioridade);
+
+  const sinalAtraso =
+    faixaTexto.includes("atras") ||
+    prioridadeTexto.includes("atras") ||
+    prazoTexto === "nao" ||
+    prazoTexto === "fora do prazo";
+
+  // Critério provisório para pendências:
+  // atrasada se o campo de prazo ou os dias indicarem atraso.
+  // O valor final deve seguir a regra de negócio da base.
+  const diasAtraso =
+    (diasPendentes !== null && diasPendentes > 30) ||
+    (diasEmAberto !== null && diasEmAberto > 30);
+
+  const atrasada = !realizada && (sinalAtraso || diasAtraso);
+
+  return {
+    ...row,
+    _realizada: realizada,
+    _atrasada: atrasada,
+    _situacao: realizada
+      ? "realizada"
+      : atrasada
+        ? "atrasada"
+        : "pendente",
+    _dias: diasPendentes ?? diasEmAberto,
+    _mes: valorTexto(row.mes_fechamento, valorTexto(row.mes_ano_desligamento, "Sem mês")),
+    _ano: valorTexto(row.ano_fechamento, "Sem ano")
+  };
+}
+
+// ==================================================
+// FILTROS
+// ==================================================
+
+function preencherFiltrosSubstituicoes() {
+  const subsedeSelect = $("sub-filtro-subsede");
+  const anoSelect = $("sub-filtro-ano");
+
+  if (subsedeSelect) {
+    const current = subsedeSelect.value;
+    const values = [...new Set(
+      subRegistros
+        .map(row => String(row.subsede || "").trim())
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+    subsedeSelect.replaceChildren();
+
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "Todas as subsedes";
+    subsedeSelect.appendChild(all);
+
+    values.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      subsedeSelect.appendChild(option);
+    });
+
+    if (values.includes(current)) subsedeSelect.value = current;
+  }
+
+  if (anoSelect) {
+    const current = anoSelect.value;
+    const values = [...new Set(
+      subRegistros
+        .map(row => String(row.ano_fechamento || "").trim())
+        .filter(Boolean)
+    )].sort((a, b) => b.localeCompare(a, "pt-BR", { numeric: true }));
+
+    anoSelect.replaceChildren();
+
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "Todos os anos";
+    anoSelect.appendChild(all);
+
+    values.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      anoSelect.appendChild(option);
+    });
+
+    if (values.includes(current)) anoSelect.value = current;
+  }
+}
+
+function obterRegistrosFiltrados() {
+  const subsede = $("sub-filtro-subsede")?.value || "";
+  const ano = $("sub-filtro-ano")?.value || "";
+  const situacao = $("sub-filtro-situacao")?.value || "";
+
+  return subRegistros.filter(row => {
+    if (subsede && String(row.subsede || "") !== subsede) return false;
+    if (ano && String(row.ano_fechamento || "") !== ano) return false;
+    if (situacao && row._situacao !== situacao) return false;
+    return true;
+  });
+}
+
+function renderizarBISelecionado() {
+  const rows = obterRegistrosFiltrados();
+
+  atualizarIndicadoresSubstituicoes(rows);
+  renderizarGraficosSubstituicoes(rows);
+  renderizarTabelaSubstituicoes(rows);
+}
+
+// ==================================================
+// INDICADORES
+// ==================================================
+
+function atualizarIndicadoresSubstituicoes(rows) {
+  const realizadas = rows.filter(row => row._situacao === "realizada").length;
+  const pendentes = rows.filter(row => row._situacao === "pendente").length;
+  const atrasadas = rows.filter(row => row._situacao === "atrasada").length;
+
+  if ($("sub-total")) {
+    $("sub-total").textContent = rows.length.toLocaleString("pt-BR");
+  }
+
+  if ($("sub-realizadas")) {
+    $("sub-realizadas").textContent = realizadas.toLocaleString("pt-BR");
+  }
+
+  if ($("sub-pendentes")) {
+    $("sub-pendentes").textContent = pendentes.toLocaleString("pt-BR");
+  }
+
+  if ($("sub-atrasadas")) {
+    $("sub-atrasadas").textContent = atrasadas.toLocaleString("pt-BR");
+  }
+}
+
+// ==================================================
+// GRÁFICOS CHART.JS
+// ==================================================
+
+function destruirGraficosSubstituicoes() {
+  Object.values(subGraficos).forEach(chart => {
+    if (chart && typeof chart.destroy === "function") {
+      chart.destroy();
+    }
+  });
+
+  subGraficos = {};
+}
+
+function criarGraficoSubstituicoes(id, config) {
+  const canvas = $(id);
+
+  if (!canvas || typeof Chart === "undefined") {
+    console.warn("Chart.js ou canvas não encontrado:", id);
+    return;
+  }
+
+  if (subGraficos[id]) {
+    subGraficos[id].destroy();
+  }
+
+  subGraficos[id] = new Chart(canvas, config);
+}
+
+function agruparContagem(rows, keyFn) {
+  const counts = new Map();
+
+  rows.forEach(row => {
+    const label = String(keyFn(row) || "Não informado").trim();
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function renderizarGraficosSubstituicoes(rows) {
+  if (typeof Chart === "undefined") {
+    mostrarErroSubstituicoes(
+      "A biblioteca Chart.js não carregou. Confira sua conexão com a internet."
+    );
+    return;
+  }
+
+  const meses = agruparContagem(rows, row => row._mes);
+
+  const mensalRealizada = [];
+  const mensalPendente = [];
+  const mensalAtrasada = [];
+
+  meses.forEach(([mes]) => {
+    const mesRows = rows.filter(row => row._mes === mes);
+
+    mensalRealizada.push(
+      mesRows.filter(row => row._situacao === "realizada").length
+    );
+    mensalPendente.push(
+      mesRows.filter(row => row._situacao === "pendente").length
+    );
+    mensalAtrasada.push(
+      mesRows.filter(row => row._situacao === "atrasada").length
+    );
+  });
+
+  criarGraficoSubstituicoes("sub-grafico-mensal", {
+    type: "line",
+    data: {
+      labels: meses.map(item => item[0]),
+      datasets: [
+        {
+          label: "Realizadas",
+          data: mensalRealizada,
+          borderColor: "#16835b",
+          backgroundColor: "rgba(22,131,91,.12)",
+          tension: 0.25
+        },
+        {
+          label: "Pendentes",
+          data: mensalPendente,
+          borderColor: "#3678c8",
+          backgroundColor: "rgba(54,120,200,.10)",
+          tension: 0.25
+        },
+        {
+          label: "Em atraso",
+          data: mensalAtrasada,
+          borderColor: "#c94c4c",
+          backgroundColor: "rgba(201,76,76,.10)",
+          tension: 0.25
+        }
+      ]
+    },
+    options: opcoesGraficoSubstituicoes()
+  });
+
+  const porSubsede = agruparContagem(rows, row => row.subsede).slice(0, 12);
+
+  criarGraficoSubstituicoes("sub-grafico-subsede", {
+    type: "bar",
+    data: {
+      labels: porSubsede.map(item => item[0]),
+      datasets: [{
+        label: "Registros",
+        data: porSubsede.map(item => item[1]),
+        backgroundColor: "#3678c8",
+        borderRadius: 5
+      }]
+    },
+    options: {
+      ...opcoesGraficoSubstituicoes(),
+      indexAxis: "y"
+    }
+  });
+
+  const porMotivo = agruparContagem(
+    rows,
+    row => row.motivo || "Não informado"
+  ).slice(0, 10);
+
+  criarGraficoSubstituicoes("sub-grafico-motivos", {
+    type: "bar",
+    data: {
+      labels: porMotivo.map(item => item[0]),
+      datasets: [{
+        label: "Registros",
+        data: porMotivo.map(item => item[1]),
+        backgroundColor: "#244b78",
+        borderRadius: 5
+      }]
+    },
+    options: {
+      ...opcoesGraficoSubstituicoes(),
+      indexAxis: "y"
+    }
+  });
+
+  const realizadas = rows.filter(row => row._situacao === "realizada").length;
+  const pendentes = rows.filter(row => row._situacao === "pendente").length;
+  const atrasadas = rows.filter(row => row._situacao === "atrasada").length;
+
+  criarGraficoSubstituicoes("sub-grafico-situacao", {
+    type: "doughnut",
+    data: {
+      labels: ["Realizadas", "Pendentes", "Em atraso"],
+      datasets: [{
+        data: [realizadas, pendentes, atrasadas],
+        backgroundColor: ["#16835b", "#3678c8", "#c94c4c"],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom"
+        }
+      }
+    }
+  });
+}
+
+function opcoesGraficoSubstituicoes() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      intersect: false,
+      mode: "index"
+    },
+    plugins: {
+      legend: {
+        position: "bottom"
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          maxRotation: 45,
+          minRotation: 0
+        },
+        grid: {
+          display: false
+        }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0
+        }
+      }
+    }
+  };
+}
+
+// ==================================================
+// TABELA DE DETALHAMENTO
+// ==================================================
+
+function renderizarTabelaSubstituicoes(rows) {
+  const tbody = $("sub-tabela-corpo");
+  const contagem = $("sub-tabela-contagem");
+
+  if (!tbody) return;
+
+  tbody.replaceChildren();
+
+  if (contagem) {
+    contagem.textContent =
+      `${rows.length.toLocaleString("pt-BR")} registros`;
+  }
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 8;
+    td.textContent = "Nenhum registro encontrado para os filtros selecionados.";
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  const sorted = [...rows].sort((a, b) => {
+    const aDays = a._dias ?? -1;
+    const bDays = b._dias ?? -1;
+    return bDays - aDays;
+  });
+
+  // Limita a tabela para evitar renderização excessiva no navegador.
+  sorted.slice(0, 500).forEach(row => {
+    const tr = document.createElement("tr");
+
+    const prazo = row._realizada
+      ? "Realizada"
+      : row._atrasada
+        ? "Em atraso"
+        : "Pendente";
+
+    const cells = [
+      row.subsede,
+      row.jovem,
+      row.empresa,
+      row.motivo,
+      row.mes_fechamento,
+      row._dias,
+      prazo,
+      row.prioridade
+    ];
+
+    cells.forEach((value, index) => {
+      const td = document.createElement("td");
+
+      if (index === 5) {
+        td.textContent = value === null || value === undefined
+          ? "—"
+          : String(value);
+      } else {
+        td.textContent = valorTexto(value);
+      }
+
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  if (sorted.length > 500) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 8;
+    td.textContent =
+      `Exibindo 500 de ${sorted.length.toLocaleString("pt-BR")} registros. Use os filtros para refinar a consulta.`;
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
 }
