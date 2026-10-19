@@ -5,11 +5,14 @@
  * Requer Chart.js, Supabase JS v2 e config.js.
  */
 
+"use strict";
+
 const VIEW = "vw_vagas_aprendiz_bi";
 const PAGE_SIZE = 1000;
 
 let registros = [];
 let charts = {};
+let carregamentoEmAndamento = false;
 
 const $ = id => document.getElementById(id);
 
@@ -61,6 +64,14 @@ function escaparHTML(valor) {
   })[caractere]);
 }
 
+function mostrarMensagem(texto, tipo = "info") {
+  const mensagem = $("mensagem");
+  if (!mensagem) return;
+
+  mensagem.textContent = texto;
+  mensagem.className = `message ${tipo}`;
+}
+
 /* =====================================================
    CARREGAMENTO PAGINADO
 ===================================================== */
@@ -87,7 +98,7 @@ async function carregarDados() {
 
     if (error) {
       throw new Error(
-        "Erro ao consultar a view: " + error.message
+        "Erro ao consultar a view " + VIEW + ": " + error.message
       );
     }
 
@@ -411,13 +422,11 @@ function atualizarPainel() {
   atualizarGraficos(lista);
   atualizarTabela(lista);
 
-  if ($("mensagem")) {
-    $("mensagem").textContent =
-      `${registros.length.toLocaleString("pt-BR")} registros carregados; ` +
-      `${lista.length.toLocaleString("pt-BR")} após os filtros.`;
-
-    $("mensagem").className = "message success";
-  }
+  mostrarMensagem(
+    `${registros.length.toLocaleString("pt-BR")} registros carregados; ` +
+    `${lista.length.toLocaleString("pt-BR")} após os filtros.`,
+    "success"
+  );
 }
 
 /* =====================================================
@@ -442,5 +451,170 @@ function exportarCSV() {
     ["CNPJ", r => r.cnpj]
   ];
 
-  const escapar = valor =>
-    `"${String
+  const escaparCSV = valor =>
+    `"${String(valor ?? "").replace(/"/g, '""')}"`;
+
+  const conteudo = [
+    colunas.map(([titulo]) => escaparCSV(titulo)).join(";"),
+    ...lista.map(registro =>
+      colunas.map(([, obterValor]) =>
+        escaparCSV(obterValor(registro))
+      ).join(";")
+    )
+  ].join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + conteudo], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "controle-vagas-aprendiz.csv";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+/* =====================================================
+   EVENTOS DOS FILTROS
+===================================================== */
+
+function configurarEventos() {
+  [
+    "busca",
+    "filtroSubsede",
+    "filtroStatus",
+    "filtroCurso",
+    "filtroEmpresa",
+    "filtroSolicitante",
+    "dataInicial",
+    "dataFinal"
+  ].forEach(id => {
+    const elemento = $(id);
+    if (!elemento) return;
+
+    const evento =
+      elemento.tagName === "INPUT" &&
+      ["text", "search"].includes(elemento.type)
+        ? "input"
+        : "change";
+
+    elemento.addEventListener(evento, atualizarPainel);
+  });
+
+  [
+    "btnAtualizar",
+    "atualizarBtn",
+    "btnRecarregar"
+  ].forEach(id => {
+    const botao = $(id);
+
+    if (botao) {
+      botao.addEventListener("click", iniciarCarregamento);
+    }
+  });
+
+  [
+    "btnExportarCSV",
+    "exportarCSV",
+    "btnExportar"
+  ].forEach(id => {
+    const botao = $(id);
+
+    if (botao) {
+      botao.addEventListener("click", exportarCSV);
+    }
+  });
+}
+
+/* =====================================================
+   CARREGAMENTO INICIAL
+===================================================== */
+
+async function iniciarCarregamento() {
+  if (carregamentoEmAndamento) return;
+
+  carregamentoEmAndamento = true;
+  mostrarMensagem("Carregando informações...", "info");
+
+  try {
+    registros = await carregarDados();
+
+    preencherFiltro(
+      "filtroSubsede",
+      registros.map(r => r.subsede),
+      "Todas as subsedes"
+    );
+
+    preencherFiltro(
+      "filtroStatus",
+      registros.map(statusRegistro),
+      "Todos os status"
+    );
+
+    preencherFiltro(
+      "filtroCurso",
+      registros.map(cursoRegistro),
+      "Todos os cursos"
+    );
+
+    preencherFiltro(
+      "filtroEmpresa",
+      registros.map(empresaRegistro),
+      "Todas as empresas"
+    );
+
+    preencherFiltro(
+      "filtroSolicitante",
+      registros.map(solicitanteRegistro),
+      "Todos os solicitantes"
+    );
+
+    atualizarPainel();
+
+    if (registros.length === 0) {
+      mostrarMensagem(
+        "A consulta funcionou, mas a view não retornou registros. Verifique a view e as permissões no Supabase.",
+        "error"
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Erro ao carregar o Controle de Vagas Aprendiz:",
+      error
+    );
+
+    registros = [];
+    atualizarIndicadores([]);
+    atualizarGraficos([]);
+    atualizarTabela([]);
+
+    mostrarMensagem(
+      "Não foi possível carregar os dados: " +
+      (error.message || "erro desconhecido."),
+      "error"
+    );
+  } finally {
+    carregamentoEmAndamento = false;
+  }
+}
+
+function inicializarPainel() {
+  configurarEventos();
+  iniciarCarregamento();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    inicializarPainel,
+    { once: true }
+  );
+} else {
+  inicializarPainel();
+}
