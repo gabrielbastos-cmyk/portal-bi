@@ -1,4 +1,10 @@
 
+/**
+ * GERAR — CONTROLE DE VAGAS APRENDIZ
+ * Fonte: public.vw_vagas_aprendiz_bi
+ * Requer Chart.js, Supabase JS v2 e config.js.
+ */
+
 const VIEW = "vw_vagas_aprendiz_bi";
 const PAGE_SIZE = 1000;
 
@@ -7,8 +13,8 @@ let charts = {};
 
 const $ = id => document.getElementById(id);
 
-function supabaseClient() {
-  return window.sb || window.supabaseClient;
+function obterSupabase() {
+  return window.sb || window.supabaseClient || null;
 }
 
 function normalizar(valor) {
@@ -23,24 +29,38 @@ function statusRegistro(r) {
   return String(r.status_simplificado || r.status || "Sem status");
 }
 
+function empresaRegistro(r) {
+  return String(r.empresa || r.razao_social || "Não informada");
+}
+
+function solicitanteRegistro(r) {
+  return String(r.solicitado_por || "Não informado");
+}
+
 function cursoRegistro(r) {
   return String(r.curso || r.tipo_curso || "Não informado");
 }
 
 function formatarData(valor) {
   if (!valor) return "—";
+
   const data = new Date(valor);
+
   return Number.isNaN(data.getTime())
     ? String(valor)
     : data.toLocaleDateString("pt-BR");
 }
 
+/* =====================================================
+   CARREGAMENTO PAGINADO DOS DADOS
+===================================================== */
+
 async function carregarDados() {
-  const sb = supabaseClient();
+  const sb = obterSupabase();
 
   if (!sb || typeof sb.from !== "function") {
     throw new Error(
-      "Cliente Supabase não encontrado. Confira se config.js inicializa window.sb."
+      "Cliente Supabase não encontrado. Confira config.js."
     );
   }
 
@@ -54,8 +74,7 @@ async function carregarDados() {
 
     if (error) {
       throw new Error(
-        "Erro ao consultar a view: " + error.message +
-        ". Confira as permissões de leitura no Supabase."
+        "Erro ao consultar os dados: " + error.message
       );
     }
 
@@ -67,53 +86,97 @@ async function carregarDados() {
   return todos;
 }
 
+/* =====================================================
+   PREENCHIMENTO DOS FILTROS
+===================================================== */
+
 function preencherFiltro(id, valores, textoInicial) {
   const select = $(id);
   if (!select) return;
 
-  const valorAnterior = select.value;
-  const valoresUnicos = [...new Set(valores)]
-    .filter(v => v && v !== "Não informado")
-    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const anterior = select.value;
+
+  const unicos = [...new Set(
+    valores
+      .map(v => String(v ?? "").trim())
+      .filter(v => v && v !== "Não informado" && v !== "Não informada")
+  )].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   select.replaceChildren(new Option(textoInicial, ""));
 
-  valoresUnicos.forEach(valor => {
+  unicos.forEach(valor => {
     select.add(new Option(valor, valor));
   });
 
-  if (valoresUnicos.includes(valorAnterior)) {
-    select.value = valorAnterior;
+  if (unicos.includes(anterior)) {
+    select.value = anterior;
   }
 }
+
+/* =====================================================
+   FILTROS COMBINADOS
+===================================================== */
 
 function aplicarFiltros() {
   const busca = normalizar($("busca")?.value);
   const subsede = $("filtroSubsede")?.value || "";
   const status = $("filtroStatus")?.value || "";
   const curso = $("filtroCurso")?.value || "";
+  const empresa = $("filtroEmpresa")?.value || "";
+  const solicitante = $("filtroSolicitante")?.value || "";
   const inicial = $("dataInicial")?.value || "";
   const final = $("dataFinal")?.value || "";
 
   return registros.filter(r => {
-    const texto = normalizar([
-      r.id_vaga, r.id_registro, r.empresa, r.razao_social,
-      r.cidade_uf, r.subsede, r.curso, r.angariador,
-      r.status, r.status_simplificado, r.cnpj
+    const textoBusca = normalizar([
+      r.id_vaga,
+      r.id_registro,
+      r.empresa,
+      r.razao_social,
+      r.cidade_uf,
+      r.subsede,
+      r.curso,
+      r.angariador,
+      r.solicitado_por,
+      r.status,
+      r.status_simplificado,
+      r.cnpj
     ].join(" "));
 
-    if (busca && !texto.includes(busca)) return false;
-    if (subsede && r.subsede !== subsede) return false;
-    if (status && statusRegistro(r) !== status) return false;
-    if (curso && cursoRegistro(r) !== curso) return false;
+    if (busca && !textoBusca.includes(busca)) return false;
+
+    if (subsede && String(r.subsede || "") !== subsede) {
+      return false;
+    }
+
+    if (status && statusRegistro(r) !== status) {
+      return false;
+    }
+
+    if (curso && cursoRegistro(r) !== curso) {
+      return false;
+    }
+
+    if (empresa && empresaRegistro(r) !== empresa) {
+      return false;
+    }
+
+    if (solicitante && solicitanteRegistro(r) !== solicitante) {
+      return false;
+    }
 
     const data = String(r.solicitado_em || "").slice(0, 10);
+
     if (inicial && (!data || data < inicial)) return false;
     if (final && (!data || data > final)) return false;
 
     return true;
   });
 }
+
+/* =====================================================
+   AGRUPAMENTO PARA OS GRÁFICOS
+===================================================== */
 
 function contarPor(lista, obterValor) {
   const contagem = {};
@@ -123,36 +186,49 @@ function contarPor(lista, obterValor) {
     contagem[chave] = (contagem[chave] || 0) + 1;
   });
 
-  return Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+  return Object.entries(contagem)
+    .sort((a, b) => b[1] - a[1]);
 }
 
 function destruirGraficos() {
-  Object.values(charts).forEach(grafico => grafico.destroy());
+  Object.values(charts).forEach(grafico => {
+    if (grafico) grafico.destroy();
+  });
+
   charts = {};
 }
 
-function criarGrafico(id, tipo, labels, dados, titulo) {
+function criarGrafico(id, tipo, labels, valores, titulo) {
   const canvas = $(id);
+
   if (!canvas || typeof Chart === "undefined") return;
 
   charts[id] = new Chart(canvas, {
     type: tipo,
+
     data: {
       labels,
       datasets: [{
         label: titulo,
-        data: dados,
+        data: valores,
         borderWidth: 2,
         borderRadius: tipo === "bar" ? 5 : 0,
-        tension: 0.3
+        tension: 0.3,
+        fill: false
       }]
     },
+
     options: {
       responsive: true,
       maintainAspectRatio: false,
+
       plugins: {
-        legend: { display: tipo === "doughnut", position: "bottom" }
+        legend: {
+          display: tipo === "doughnut",
+          position: "bottom"
+        }
       },
+
       scales: tipo === "doughnut" ? {} : {
         y: {
           beginAtZero: true,
@@ -163,54 +239,134 @@ function criarGrafico(id, tipo, labels, dados, titulo) {
   });
 }
 
+/* =====================================================
+   GRÁFICOS
+===================================================== */
+
 function atualizarGraficos(lista) {
   destruirGraficos();
 
-  const status = contarPor(lista, statusRegistro).slice(0, 12);
+  // 1. Vagas por status
+  const porStatus = contarPor(
+    lista,
+    statusRegistro
+  ).slice(0, 12);
+
   criarGrafico(
-    "graficoStatus", "doughnut",
-    status.map(x => x[0]),
-    status.map(x => x[1]),
-    "Vagas"
+    "graficoStatus",
+    "doughnut",
+    porStatus.map(x => x[0]),
+    porStatus.map(x => x[1]),
+    "Vagas por status"
   );
 
-  const subsedes = contarPor(lista, r => r.subsede).slice(0, 13).reverse();
+  // 2. Vagas por subsede
+  const porSubsede = contarPor(
+    lista,
+    r => r.subsede || "Não informada"
+  ).slice(0, 13).reverse();
+
   criarGrafico(
-    "graficoSubsede", "bar",
-    subsedes.map(x => x[0]),
-    subsedes.map(x => x[1]),
+    "graficoSubsede",
+    "bar",
+    porSubsede.map(x => x[0]),
+    porSubsede.map(x => x[1]),
     "Vagas por subsede"
   );
 
+  // 3. Evolução mensal das solicitações
+  // Usa ano_solicitacao e mes_solicitacao;
+  // caso estejam vazios, utiliza solicitado_em.
   const meses = {};
 
   lista.forEach(r => {
-    if (!r.solicitado_em) return;
+    let ano = Number(r.ano_solicitacao);
+    let mes = Number(r.mes_solicitacao);
 
-    const data = new Date(r.solicitado_em);
-    if (Number.isNaN(data.getTime())) return;
+    if (!ano || !mes || mes < 1 || mes > 12) {
+      if (!r.solicitado_em) return;
+
+      const data = new Date(r.solicitado_em);
+
+      if (Number.isNaN(data.getTime())) return;
+
+      ano = data.getFullYear();
+      mes = data.getMonth() + 1;
+    }
 
     const chave =
-      data.getFullYear() + "-" +
-      String(data.getMonth() + 1).padStart(2, "0");
+      `${ano}-${String(mes).padStart(2, "0")}`;
 
     meses[chave] = (meses[chave] || 0) + 1;
   });
 
-  const mesesOrdenados = Object.entries(meses).sort(
-    (a, b) => a[0].localeCompare(b[0])
-  );
+  const mesesOrdenados = Object.entries(meses)
+    .sort((a, b) => a[0].localeCompare(b[0]));
 
   criarGrafico(
-    "graficoMensal", "line",
-    mesesOrdenados.map(([mes]) => {
-      const [ano, numeroMes] = mes.split("-");
-      return numeroMes + "/" + ano;
+    "graficoMensal",
+    "line",
+    mesesOrdenados.map(([chave]) => {
+      const [ano, mes] = chave.split("-");
+      return `${mes}/${ano}`;
     }),
-    mesesOrdenados.map(x => x[1]),
-    "Vagas solicitadas"
+    mesesOrdenados.map(([, total]) => total),
+    "Vagas solicitadas por mês"
   );
 }
+
+/* =====================================================
+   INDICADORES
+===================================================== */
+
+function atualizarIndicadores(lista) {
+  const abertas = lista.filter(r => {
+    const s = normalizar(statusRegistro(r));
+
+    return (
+      s.includes("ABERTA") ||
+      s.includes("ABERTO") ||
+      s.includes("AGUARDANDO") ||
+      s.includes("PENDENTE")
+    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
+  });
+
+  const andamento = lista.filter(r => {
+    const s = normalizar(statusRegistro(r));
+
+    return (
+      s.includes("ANDAMENTO") ||
+      s.includes("PROCESS") ||
+      s.includes("SELECAO") ||
+      s.includes("SELETIVO")
+    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
+  });
+
+  if ($("totalVagas")) {
+    $("totalVagas").textContent =
+      lista.length.toLocaleString("pt-BR");
+  }
+
+  if ($("vagasAbertas")) {
+    $("vagasAbertas").textContent =
+      abertas.length.toLocaleString("pt-BR");
+  }
+
+  if ($("vagasAndamento")) {
+    $("vagasAndamento").textContent =
+      andamento.length.toLocaleString("pt-BR");
+  }
+
+  if ($("totalUnidades")) {
+    $("totalUnidades").textContent =
+      new Set(lista.map(r => r.subsede).filter(Boolean)).size
+        .toLocaleString("pt-BR");
+  }
+}
+
+/* =====================================================
+   TABELA DETALHADA
+===================================================== */
 
 function atualizarTabela(lista) {
   const corpo = $("corpoTabela");
@@ -229,7 +385,7 @@ function atualizarTabela(lista) {
 
       [
         r.id_vaga ?? r.id_registro ?? "—",
-        r.empresa || r.razao_social || "—",
+        empresaRegistro(r),
         r.subsede || "—",
         cursoRegistro(r),
         statusRegistro(r),
@@ -243,51 +399,21 @@ function atualizarTabela(lista) {
 
   if ($("contadorTabela")) {
     $("contadorTabela").textContent =
-      lista.length.toLocaleString("pt-BR") + " registros" +
-      (lista.length > 500 ? " (exibindo os primeiros 500)" : "");
+      `${lista.length.toLocaleString("pt-BR")} registros` +
+      (lista.length > 500
+        ? " (exibindo os primeiros 500)"
+        : "");
   }
 }
+
+/* =====================================================
+   ATUALIZAÇÃO GERAL DO PAINEL
+===================================================== */
 
 function atualizarPainel() {
   const lista = aplicarFiltros();
 
-  const abertas = lista.filter(r => {
-    const s = normalizar(statusRegistro(r));
-    return (
-      s.includes("ABERTA") ||
-      s.includes("ABERTO") ||
-      s.includes("AGUARDANDO") ||
-      s.includes("PENDENTE")
-    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
-  });
-
-  const andamento = lista.filter(r => {
-    const s = normalizar(statusRegistro(r));
-    return (
-      s.includes("ANDAMENTO") ||
-      s.includes("PROCESS") ||
-      s.includes("SELECAO") ||
-      s.includes("SELETIVO")
-    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
-  });
-
-  if ($("totalVagas")) {
-    $("totalVagas").textContent = lista.length.toLocaleString("pt-BR");
-  }
-
-  if ($("vagasAbertas")) {
-    $("vagasAbertas").textContent = abertas.length.toLocaleString("pt-BR");
-  }
-
-  if ($("vagasAndamento")) {
-    $("vagasAndamento").textContent = andamento.length.toLocaleString("pt-BR");
-  }
-
-  if ($("totalUnidades")) {
-    $("totalUnidades").textContent =
-      new Set(lista.map(r => r.subsede).filter(Boolean)).size;
-  }
-
+  atualizarIndicadores(lista);
   atualizarGraficos(lista);
   atualizarTabela(lista);
 
@@ -295,23 +421,29 @@ function atualizarPainel() {
     $("mensagem").textContent =
       `${registros.length.toLocaleString("pt-BR")} registros carregados; ` +
       `${lista.length.toLocaleString("pt-BR")} após os filtros.`;
+
     $("mensagem").className = "message success";
   }
 }
+
+/* =====================================================
+   EXPORTAÇÃO CSV
+===================================================== */
 
 function exportarCSV() {
   const lista = aplicarFiltros();
 
   const colunas = [
     ["ID da vaga", r => r.id_vaga || r.id_registro],
-    ["Empresa", r => r.empresa || r.razao_social],
+    ["Empresa", empresaRegistro],
     ["Subsede", r => r.subsede],
     ["Cidade/UF", r => r.cidade_uf],
-    ["Curso", r => r.curso],
+    ["Curso", cursoRegistro],
     ["Status", statusRegistro],
+    ["Solicitado por", solicitanteRegistro],
+    ["Angariador", r => r.angariador],
     ["Data da solicitação", r => r.solicitado_em],
     ["Período", r => r.periodo],
-    ["Angariador", r => r.angariador],
     ["Carga horária", r => r.carga_horaria],
     ["CNPJ", r => r.cnpj]
   ];
@@ -321,7 +453,9 @@ function exportarCSV() {
 
   const conteudo = [
     colunas.map(c => escapar(c[0])).join(";"),
-    ...lista.map(r => colunas.map(c => escapar(c[1](r))).join(";"))
+    ...lista.map(r =>
+      colunas.map(c => escapar(c[1](r))).join(";")
+    )
   ].join("\r\n");
 
   const blob = new Blob(["\uFEFF" + conteudo], {
@@ -330,22 +464,30 @@ function exportarCSV() {
 
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
+
   link.href = url;
   link.download = "vagas-aprendiz.csv";
   link.click();
+
   URL.revokeObjectURL(url);
 }
 
+/* =====================================================
+   INICIALIZAÇÃO
+===================================================== */
+
 async function iniciarPainel() {
-  const mensagem = $("mensagem");
-  if (mensagem) mensagem.textContent = "Carregando dados do Supabase...";
+  if ($("mensagem")) {
+    $("mensagem").textContent =
+      "Carregando dados do Supabase...";
+  }
 
   try {
     registros = await carregarDados();
 
     preencherFiltro(
       "filtroSubsede",
-      registros.map(r => r.subsede).filter(Boolean),
+      registros.map(r => r.subsede),
       "Todas as subsedes"
     );
 
@@ -361,8 +503,28 @@ async function iniciarPainel() {
       "Todas as áreas"
     );
 
-    ["busca", "filtroSubsede", "filtroStatus", "filtroCurso",
-      "dataInicial", "dataFinal"].forEach(id => {
+    preencherFiltro(
+      "filtroEmpresa",
+      registros.map(empresaRegistro),
+      "Todas as empresas"
+    );
+
+    preencherFiltro(
+      "filtroSolicitante",
+      registros.map(solicitanteRegistro),
+      "Todos os solicitantes"
+    );
+
+    [
+      "busca",
+      "filtroSubsede",
+      "filtroStatus",
+      "filtroCurso",
+      "filtroEmpresa",
+      "filtroSolicitante",
+      "dataInicial",
+      "dataFinal"
+    ].forEach(id => {
       $(id)?.addEventListener(
         id === "busca" ? "input" : "change",
         atualizarPainel
@@ -370,20 +532,67 @@ async function iniciarPainel() {
     });
 
     $("btnLimpar")?.addEventListener("click", () => {
-      ["busca", "filtroSubsede", "filtroStatus", "filtroCurso",
-        "dataInicial", "dataFinal"].forEach(id => {
+      [
+        "busca",
+        "filtroSubsede",
+        "filtroStatus",
+        "filtroCurso",
+        "filtroEmpresa",
+        "filtroSolicitante",
+        "dataInicial",
+        "dataFinal"
+      ].forEach(id => {
         if ($(id)) $(id).value = "";
       });
+
       atualizarPainel();
     });
 
-    $("btnExportar")?.addEventListener("click", exportarCSV);
+    $("btnExportar")?.addEventListener(
+      "click",
+      exportarCSV
+    );
 
     $("btnAtualizar")?.addEventListener("click", async () => {
       $("btnAtualizar").disabled = true;
+
       try {
-        if ($("mensagem")) $("mensagem").textContent = "Atualizando dados...";
+        if ($("mensagem")) {
+          $("mensagem").textContent = "Atualizando dados...";
+        }
+
         registros = await carregarDados();
+
+        preencherFiltro(
+          "filtroSubsede",
+          registros.map(r => r.subsede),
+          "Todas as subsedes"
+        );
+
+        preencherFiltro(
+          "filtroStatus",
+          registros.map(statusRegistro),
+          "Todos os status"
+        );
+
+        preencherFiltro(
+          "filtroCurso",
+          registros.map(cursoRegistro),
+          "Todas as áreas"
+        );
+
+        preencherFiltro(
+          "filtroEmpresa",
+          registros.map(empresaRegistro),
+          "Todas as empresas"
+        );
+
+        preencherFiltro(
+          "filtroSolicitante",
+          registros.map(solicitanteRegistro),
+          "Todos os solicitantes"
+        );
+
         atualizarPainel();
       } catch (erro) {
         mostrarErro(erro);
@@ -393,22 +602,25 @@ async function iniciarPainel() {
     });
 
     atualizarPainel();
+
   } catch (erro) {
     mostrarErro(erro);
   }
 }
 
 function mostrarErro(erro) {
-  console.error("Erro no painel de Vagas Aprendiz:", erro);
+  console.error("Painel Vagas Aprendiz:", erro);
 
   if ($("mensagem")) {
-    $("mensagem").textContent = erro.message || "Não foi possível carregar os dados.";
+    $("mensagem").textContent =
+      erro.message || "Não foi possível carregar os dados.";
+
     $("mensagem").className = "message error";
   }
 
   if ($("corpoTabela")) {
     $("corpoTabela").innerHTML =
-      '<tr><td colspan="7">Não foi possível carregar os dados.</td></tr>';
+      '<tr><td colspan="7">Erro ao carregar os dados.</td></tr>';
   }
 }
 
