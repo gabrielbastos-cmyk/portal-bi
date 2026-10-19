@@ -65,11 +65,11 @@ function escaparHTML(valor) {
 }
 
 function mostrarMensagem(texto, tipo = "info") {
-  const mensagem = $("mensagem");
-  if (!mensagem) return;
+  const elemento = $("mensagem");
+  if (!elemento) return;
 
-  mensagem.textContent = texto;
-  mensagem.className = `message ${tipo}`;
+  elemento.textContent = texto;
+  elemento.className = `message ${tipo}`;
 }
 
 /* =====================================================
@@ -98,7 +98,7 @@ async function carregarDados() {
 
     if (error) {
       throw new Error(
-        "Erro ao consultar a view " + VIEW + ": " + error.message
+        `Erro ao consultar a view ${VIEW}: ${error.message}`
       );
     }
 
@@ -430,7 +430,7 @@ function atualizarPainel() {
 }
 
 /* =====================================================
-   EXPORTAÇÃO CSV
+   EXPORTAÇÃO CSV — CORRIGIDA
 ===================================================== */
 
 function exportarCSV() {
@@ -486,27 +486,23 @@ function exportarCSV() {
 
 function configurarEventos() {
   [
-    "busca",
-    "filtroSubsede",
-    "filtroStatus",
-    "filtroCurso",
-    "filtroEmpresa",
-    "filtroSolicitante",
-    "dataInicial",
-    "dataFinal"
-  ].forEach(id => {
+    ["busca", "input"],
+    ["filtroSubsede", "change"],
+    ["filtroStatus", "change"],
+    ["filtroCurso", "change"],
+    ["filtroEmpresa", "change"],
+    ["filtroSolicitante", "change"],
+    ["dataInicial", "change"],
+    ["dataFinal", "change"]
+  ].forEach(([id, evento]) => {
     const elemento = $(id);
-    if (!elemento) return;
 
-    const evento =
-      elemento.tagName === "INPUT" &&
-      ["text", "search"].includes(elemento.type)
-        ? "input"
-        : "change";
-
-    elemento.addEventListener(evento, atualizarPainel);
+    if (elemento) {
+      elemento.addEventListener(evento, atualizarPainel);
+    }
   });
 
+  // Compatibilidade com nomes alternativos dos botões.
   [
     "btnAtualizar",
     "atualizarBtn",
@@ -530,6 +526,28 @@ function configurarEventos() {
       botao.addEventListener("click", exportarCSV);
     }
   });
+
+  const botaoLimpar = $("btnLimpar");
+
+  if (botaoLimpar) {
+    botaoLimpar.addEventListener("click", () => {
+      [
+        "busca",
+        "filtroSubsede",
+        "filtroStatus",
+        "filtroCurso",
+        "filtroEmpresa",
+        "filtroSolicitante",
+        "dataInicial",
+        "dataFinal"
+      ].forEach(id => {
+        const elemento = $(id);
+        if (elemento) elemento.value = "";
+      });
+
+      atualizarPainel();
+    });
+  }
 }
 
 /* =====================================================
@@ -579,7 +597,7 @@ async function iniciarCarregamento() {
 
     if (registros.length === 0) {
       mostrarMensagem(
-        "A consulta funcionou, mas a view não retornou registros. Verifique a view e as permissões no Supabase.",
+        "A consulta terminou, mas a view não retornou registros. Verifique a view e as permissões do Supabase.",
         "error"
       );
     }
@@ -603,6 +621,10 @@ async function iniciarCarregamento() {
     carregamentoEmAndamento = false;
   }
 }
+
+/* =====================================================
+   INICIALIZAÇÃO
+===================================================== */
 
 function inicializarPainel() {
   configurarEventos();
