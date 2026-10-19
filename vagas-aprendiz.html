@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Vagas Aprendiz | Portal BI GERAR</title>
 
   <link rel="stylesheet" href="vagas-aprendiz.css">
@@ -17,23 +18,32 @@
 <body>
   <header class="topbar">
     <a class="back-link" href="index.html">← Voltar ao Portal BI</a>
+
     <div>
       <p class="eyebrow">GERAR · PORTAL BI</p>
       <h1>Controle de Vagas Aprendiz</h1>
       <p class="subtitle">Acompanhamento de vagas e processos seletivos</p>
     </div>
-    <button id="btnAtualizar" class="btn-primary">Atualizar dados</button>
+
+    <button id="btnAtualizar" class="btn-primary" type="button">
+      Atualizar dados
+    </button>
   </header>
 
   <main class="container">
-    <div id="mensagem" class="message" role="status">
+    <div id="mensagem" class="message" role="status" aria-live="polite">
       Carregando informações...
     </div>
 
+    <!-- FILTROS -->
     <section class="filters">
       <div class="field">
         <label for="busca">Pesquisar</label>
-        <input id="busca" type="search" placeholder="Unidade, vaga, cidade...">
+        <input
+          id="busca"
+          type="search"
+          placeholder="Vaga, empresa, cidade ou solicitante..."
+        >
       </div>
 
       <div class="field">
@@ -58,67 +68,107 @@
       </div>
 
       <div class="field">
-        <label for="dataInicial">Data inicial</label>
+        <label for="filtroEmpresa">Empresa</label>
+        <select id="filtroEmpresa">
+          <option value="">Todas as empresas</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="filtroSolicitante">Solicitado por</label>
+        <select id="filtroSolicitante">
+          <option value="">Todos os solicitantes</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="dataInicial">Data inicial da solicitação</label>
         <input id="dataInicial" type="date">
       </div>
 
       <div class="field">
-        <label for="dataFinal">Data final</label>
+        <label for="dataFinal">Data final da solicitação</label>
         <input id="dataFinal" type="date">
       </div>
 
-      <button id="btnLimpar" class="btn-secondary">Limpar filtros</button>
+      <button id="btnLimpar" class="btn-secondary" type="button">
+        Limpar filtros
+      </button>
     </section>
 
+    <!-- INDICADORES -->
     <section class="kpis">
       <article class="kpi">
         <span>Total de vagas</span>
         <strong id="totalVagas">0</strong>
       </article>
+
       <article class="kpi">
         <span>Vagas em aberto</span>
         <strong id="vagasAbertas">0</strong>
       </article>
+
       <article class="kpi">
         <span>Em andamento</span>
         <strong id="vagasAndamento">0</strong>
       </article>
+
       <article class="kpi">
-        <span>Unidades identificadas</span>
+        <span>Subsedes identificadas</span>
         <strong id="totalUnidades">0</strong>
       </article>
     </section>
 
+    <!-- GRÁFICOS -->
     <section class="charts">
       <article class="panel">
         <h2>Vagas por status</h2>
         <div class="chart-area">
-          <canvas id="graficoStatus"></canvas>
+          <canvas
+            id="graficoStatus"
+            role="img"
+            aria-label="Gráfico de distribuição de vagas por status"
+          ></canvas>
         </div>
       </article>
 
       <article class="panel">
         <h2>Vagas por subsede</h2>
         <div class="chart-area">
-          <canvas id="graficoSubsede"></canvas>
+          <canvas
+            id="graficoSubsede"
+            role="img"
+            aria-label="Gráfico de quantidade de vagas por subsede"
+          ></canvas>
         </div>
       </article>
 
       <article class="panel panel-wide">
-        <h2>Evolução das vagas por mês</h2>
+        <h2>Evolução mensal das solicitações</h2>
+        <p class="subtitle">
+          Quantidade de vagas solicitadas ao longo do tempo.
+        </p>
         <div class="chart-area chart-tall">
-          <canvas id="graficoMensal"></canvas>
+          <canvas
+            id="graficoMensal"
+            role="img"
+            aria-label="Gráfico da evolução mensal das vagas solicitadas"
+          ></canvas>
         </div>
       </article>
     </section>
 
+    <!-- TABELA -->
     <section class="panel table-panel">
       <div class="table-heading">
         <div>
           <h2>Detalhamento das vagas</h2>
           <p id="contadorTabela">0 registros</p>
         </div>
-        <button id="btnExportar" class="btn-secondary">Exportar CSV</button>
+
+        <button id="btnExportar" class="btn-secondary" type="button">
+          Exportar CSV
+        </button>
       </div>
 
       <div class="table-scroll">
@@ -126,22 +176,27 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Unidade</th>
+              <th>Empresa</th>
               <th>Subsede</th>
               <th>Vaga / Curso</th>
               <th>Status</th>
               <th>Data de solicitação</th>
-              <th>Data de início</th>
+              <th>Período</th>
             </tr>
           </thead>
+
           <tbody id="corpoTabela">
-            <tr><td colspan="7">Carregando...</td></tr>
+            <tr>
+              <td colspan="7">Carregando...</td>
+            </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <footer>GERAR · Painel de acompanhamento de Vagas Aprendiz</footer>
+    <footer>
+      GERAR · Painel de acompanhamento de Vagas Aprendiz
+    </footer>
   </main>
 </body>
 </html>
