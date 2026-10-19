@@ -1,4 +1,3 @@
-Acho que esse css e parte ta explicado então oq eu tinha mandado comleto antes era esse
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
@@ -21,6 +20,7 @@ Acho que esse css e parte ta explicado então oq eu tinha mandado comleto antes 
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 20px;
 }
 
 body {
@@ -34,7 +34,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -90,6 +91,7 @@ p {
   display: inline-block;
   width: 7px;
   height: 7px;
+  flex: 0 0 7px;
   border-radius: 50%;
   background: #48c99a;
   box-shadow: 0 0 0 3px rgba(72, 201, 154, .13);
@@ -122,6 +124,7 @@ p {
   place-items: center;
   width: 52px;
   height: 52px;
+  flex: 0 0 auto;
   border: 1px solid rgba(255,255,255,.32);
   border-radius: 14px;
   background: rgba(255,255,255,.12);
@@ -220,7 +223,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 43px;
   padding: 11px 12px;
@@ -231,12 +235,14 @@ select {
   outline: none;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: #a0aaba;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: #77a5df;
   box-shadow: 0 0 0 3px rgba(54,120,200,.1);
 }
@@ -244,6 +250,10 @@ select:focus {
 /* ==========================================
    ESTRUTURA DO PORTAL
 ========================================== */
+
+.app-shell {
+  min-height: 100vh;
+}
 
 .sidebar {
   position: fixed;
@@ -255,6 +265,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   z-index: 5;
+  overflow-y: auto;
 }
 
 .brand-lockup {
@@ -345,6 +356,7 @@ select:focus {
 .main-content {
   margin-left: 246px;
   max-width: 1700px;
+  min-width: 0;
   padding: 0 38px;
 }
 
@@ -375,11 +387,13 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .avatar {
   width: 33px;
   height: 33px;
+  flex: 0 0 33px;
   display: grid;
   place-items: center;
   border-radius: 10px;
@@ -532,6 +546,7 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
   min-height: 105px;
   padding: 20px;
   background: #fff;
@@ -589,6 +604,7 @@ select:focus {
 ========================================== */
 
 .dashboard-section {
+  min-width: 0;
   padding-bottom: 28px;
   scroll-margin-top: 24px;
 }
@@ -635,6 +651,7 @@ select:focus {
   align-items: center;
   gap: 10px;
   flex: 1;
+  min-width: 0;
   margin: 0;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -693,6 +710,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-width: 0;
   min-height: 206px;
   padding: 21px;
   border: 1px solid var(--border);
@@ -769,7 +787,7 @@ select:focus {
 }
 
 /* ==========================================
-   CONTROLE DE VAGAS APRENDIZ INTEGRADO
+   CONTROLE DE VAGAS APRENDIZ
 ========================================== */
 
 #vagas-aprendiz-section {
@@ -796,8 +814,298 @@ select:focus {
   display: block;
   width: 100%;
   height: 1800px;
+  min-height: 300px;
   border: 0;
   background: #fff;
+}
+
+/* ==========================================
+   BI DE SUBSTITUIÇÕES
+========================================== */
+
+#substituicoes-section {
+  min-width: 0;
+  padding-top: 12px;
+}
+
+#substituicoes-section .section-heading {
+  align-items: center;
+}
+
+#substituicoes-message {
+  margin: 0 0 14px;
+  overflow-wrap: anywhere;
+}
+
+.sub-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 15px;
+  border: 1px solid #d5e3f4;
+  border-radius: 9px;
+  background: #edf4fd;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background .2s, border-color .2s;
+}
+
+.sub-button:hover {
+  background: #dceafb;
+  border-color: #b9d0ed;
+}
+
+.sub-button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+/* Filtros */
+
+.substituicoes-filtros {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.substituicoes-filtros label {
+  min-width: 0;
+  margin: 0;
+  color: #536278;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.substituicoes-filtros select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+/* Indicadores KPI */
+
+.substituicoes-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.sub-kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 19px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.sub-kpi span {
+  color: #778397;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sub-kpi strong {
+  color: var(--navy);
+  font-size: clamp(24px, 2.2vw, 31px);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.sub-kpi:nth-child(2) strong {
+  color: #16835b;
+}
+
+.sub-kpi:nth-child(3) strong {
+  color: #b7791f;
+}
+
+.sub-kpi:nth-child(4) strong {
+  color: #c24141;
+}
+
+/* Área dos gráficos */
+
+.substituicoes-graficos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sub-grafico {
+  min-width: 0;
+  min-height: 320px;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.sub-grafico h3 {
+  margin: 0 0 16px;
+  color: #34445b;
+  font-size: 13px;
+}
+
+.sub-chart-container {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  min-width: 0;
+}
+
+.sub-chart-container canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.sub-chart-doughnut {
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* Tabela de detalhamento */
+
+.substituicoes-tabela {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.sub-tabela-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-tabela-heading h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.sub-tabela-heading .muted {
+  font-size: 11px;
+}
+
+.sub-tabela-contagem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #edf4fd;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sub-tabela-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.sub-tabela-scroll table {
+  width: 100%;
+  min-width: 950px;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 11px;
+}
+
+.sub-tabela-scroll thead {
+  background: #f5f8fc;
+}
+
+.sub-tabela-scroll th {
+  padding: 13px 14px;
+  color: #58677b;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-tabela-scroll td {
+  padding: 13px 14px;
+  color: #526176;
+  vertical-align: top;
+  border-bottom: 1px solid #edf0f5;
+  overflow-wrap: anywhere;
+}
+
+.sub-tabela-scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sub-tabela-scroll tbody tr:hover {
+  background: #f8fafd;
+}
+
+.sub-tabela-scroll td[colspan] {
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sub-tabela-scroll td:nth-child(1),
+.sub-tabela-scroll td:nth-child(5) {
+  white-space: nowrap;
+}
+
+/* Mensagens de feedback */
+
+#substituicoes-message:empty {
+  display: none;
+}
+
+#substituicoes-message.message-error,
+#substituicoes-message.message-success {
+  padding: 11px 13px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+#substituicoes-message.message-error {
+  color: #a52828;
+  background: #fff0f0;
+  border: 1px solid #f4d2d2;
+}
+
+#substituicoes-message.message-success {
+  color: #176b47;
+  background: #eefaf3;
+  border: 1px solid #ccebd9;
 }
 
 /* ==========================================
@@ -824,6 +1132,7 @@ select:focus {
 ========================================== */
 
 .admin-panel {
+  min-width: 0;
   margin: 20px 0 34px;
   padding: 25px;
   background: #fff;
@@ -866,6 +1175,7 @@ select:focus {
   place-items: center;
   width: 28px;
   height: 28px;
+  flex: 0 0 auto;
   border-radius: 8px;
   background: #eaf1fa;
   color: var(--navy);
@@ -890,6 +1200,11 @@ select:focus {
 
 .admin-card button:hover {
   background: var(--navy-soft);
+}
+
+.admin-card button:disabled {
+  cursor: wait;
+  opacity: .65;
 }
 
 .admin-card-wide {
@@ -994,11 +1309,16 @@ select:focus {
     padding: 16px;
     gap: 10px;
   }
+
+  .substituicoes-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 850px) {
   .sidebar {
     position: relative;
+    inset: auto;
     width: 100%;
     height: auto;
     min-height: 60px;
@@ -1074,6 +1394,22 @@ select:focus {
 
   #vagas-aprendiz-frame {
     height: 2000px;
+  }
+
+  .substituicoes-filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .substituicoes-graficos {
+    gap: 12px;
+  }
+
+  .sub-grafico {
+    padding: 15px;
+  }
+
+  .sub-chart-container {
+    height: 240px;
   }
 }
 
@@ -1267,5 +1603,87 @@ select:focus {
   .admin-panel,
   .admin-card {
     padding: 14px;
+  }
+
+  /* Substituições em telas pequenas */
+
+  .substituicoes-filtros {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .substituicoes-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .sub-kpi {
+    min-height: 95px;
+    padding: 13px;
+    gap: 9px;
+  }
+
+  .sub-kpi span {
+    font-size: 10px;
+  }
+
+  .sub-kpi strong {
+    font-size: 24px;
+  }
+
+  .substituicoes-graficos {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sub-grafico {
+    min-height: 290px;
+    padding: 15px;
+  }
+
+  .sub-chart-container {
+    height: 235px;
+  }
+
+  .sub-tabela-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+  }
+
+  .sub-tabela-scroll table {
+    min-width: 900px;
+  }
+
+  .sub-button {
+    width: 100%;
+  }
+}
+
+/* ==========================================
+   TELAS MUITO ESTREITAS
+========================================== */
+
+@media (max-width: 380px) {
+  .main-content {
+    padding: 0 10px;
+  }
+
+  .substituicoes-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .sub-kpi {
+    min-height: 78px;
+  }
+
+  .topbar-user .avatar {
+    display: none;
+  }
+
+  .welcome-banner {
+    padding: 18px;
   }
 }
