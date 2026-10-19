@@ -1,515 +1,419 @@
 
-/* =====================================================
-   GERAR - PORTAL BI
-   PAINEL DE VAGAS APRENDIZ
-   Fonte: vw_vagas_aprendiz_bi
-===================================================== */
+const VIEW = "vw_vagas_aprendiz_bi";
+const PAGE_SIZE = 1000;
 
-(() => {
-  "use strict";
+let registros = [];
+let charts = {};
 
-  const FONTE = "vw_vagas_aprendiz_bi";
+const $ = id => document.getElementById(id);
 
-  let dadosOriginais = [];
-  let dadosFiltrados = [];
-  let graficos = {};
+function supabaseClient() {
+  return window.sb || window.supabaseClient;
+}
 
-  const $ = (id) => document.getElementById(id);
+function normalizar(valor) {
+  return String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
 
-  function normalizar(valor) {
-    return String(valor ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
+function statusRegistro(r) {
+  return String(r.status_simplificado || r.status || "Sem status");
+}
+
+function cursoRegistro(r) {
+  return String(r.curso || r.tipo_curso || "Não informado");
+}
+
+function formatarData(valor) {
+  if (!valor) return "—";
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime())
+    ? String(valor)
+    : data.toLocaleDateString("pt-BR");
+}
+
+async function carregarDados() {
+  const sb = supabaseClient();
+
+  if (!sb || typeof sb.from !== "function") {
+    throw new Error(
+      "Cliente Supabase não encontrado. Confira se config.js inicializa window.sb."
+    );
   }
 
-  function primeiroValor(registro, alternativas) {
-    for (const chave of alternativas) {
-      const valor = registro[chave];
-      if (valor !== undefined && valor !== null && valor !== "") {
-        return valor;
-      }
-    }
+  const todos = [];
 
-    const chaves = Object.keys(registro);
-    for (const alternativa of alternativas) {
-      const encontrada = chaves.find(
-        (chave) => normalizar(chave) === normalizar(alternativa)
-      );
+  for (let inicio = 0; ; inicio += PAGE_SIZE) {
+    const { data, error } = await sb
+      .from(VIEW)
+      .select("*")
+      .range(inicio, inicio + PAGE_SIZE - 1);
 
-      if (encontrada && registro[encontrada] != null) {
-        return registro[encontrada];
-      }
-    }
-
-    return "";
-  }
-
-  function campo(registro, tipo) {
-    const aliases = {
-      id: ["id", "ID", "id_vaga", "codigo", "Código"],
-      unidade: [
-        "unidade", "Unidade", "nome_unidade", "empresa",
-        "empresa_unidade", "cliente", "razao_social"
-      ],
-      subsede: [
-        "subsede", "Subsede", "unidade_gerar",
-        "regional", "regional_responsavel"
-      ],
-      curso: [
-        "curso", "Curso", "area", "área", "cargo",
-        "nome_vaga", "vaga", "titulo_vaga", "funcao", "função"
-      ],
-      status: [
-        "status_simplificado", "Status Simplificado",
-        "status", "Status", "situacao", "situação"
-      ],
-      solicitacao: [
-        "data_solicitacao", "Data Solicitado", "data_solicitado",
-        "data_abertura", "data_criacao", "created_at"
-      ],
-      inicio: [
-        "data_inicio", "Data Início", "data_inicio_contrato",
-        "data_inicio_prevista"
-      ]
-    };
-
-    return primeiroValor(registro, aliases[tipo] || []);
-  }
-
-  function texto(valor) {
-    return String(valor ?? "").trim();
-  }
-
-  function dataValida(valor) {
-    if (!valor) return null;
-
-    const resultado = new Date(valor);
-    return Number.isNaN(resultado.getTime()) ? null : resultado;
-  }
-
-  function dataFormatada(valor) {
-    const data = dataValida(valor);
-    return data ? data.toLocaleDateString("pt-BR") : "—";
-  }
-
-  function dataISO(valor) {
-    const data = dataValida(valor);
-    if (!data) return "";
-
-    const ano = data.getFullYear();
-    const mes = String(data.getMonth() + 1).padStart(2, "0");
-    const dia = String(data.getDate()).padStart(2, "0");
-
-    return `${ano}-${mes}-${dia}`;
-  }
-
-  function mostrarMensagem(mensagem, tipo = "") {
-    const elemento = $("mensagem");
-    if (!elemento) return;
-
-    elemento.textContent = mensagem;
-    elemento.className = `message ${tipo}`.trim();
-  }
-
-  async function buscarTodosRegistros() {
-    if (!window.sb) {
+    if (error) {
       throw new Error(
-        "O cliente Supabase não foi inicializado. Verifique o config.js."
+        "Erro ao consultar a view: " + error.message +
+        ". Confira as permissões de leitura no Supabase."
       );
     }
 
-    const registros = [];
-    const tamanhoPagina = 1000;
+    todos.push(...(data || []));
 
-    for (let inicio = 0; ; inicio += tamanhoPagina) {
-      const fim = inicio + tamanhoPagina - 1;
-
-      const { data, error } = await window.sb
-        .from(FONTE)
-        .select("*")
-        .range(inicio, fim);
-
-      if (error) throw error;
-
-      registros.push(...(data || []));
-
-      if (!data || data.length < tamanhoPagina) break;
-    }
-
-    return registros;
+    if (!data || data.length < PAGE_SIZE) break;
   }
 
-  function preencherFiltro(id, valores, textoPadrao) {
-    const select = $(id);
-    if (!select) return;
+  return todos;
+}
 
-    const selecionado = select.value;
+function preencherFiltro(id, valores, textoInicial) {
+  const select = $(id);
+  if (!select) return;
 
-    select.innerHTML = "";
+  const valorAnterior = select.value;
+  const valoresUnicos = [...new Set(valores)]
+    .filter(v => v && v !== "Não informado")
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-    const opcaoInicial = document.createElement("option");
-    opcaoInicial.value = "";
-    opcaoInicial.textContent = textoPadrao;
-    select.appendChild(opcaoInicial);
+  select.replaceChildren(new Option(textoInicial, ""));
 
-    const unicos = [...new Set(
-      valores.map(texto).filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  valoresUnicos.forEach(valor => {
+    select.add(new Option(valor, valor));
+  });
 
-    unicos.forEach((valor) => {
-      const opcao = document.createElement("option");
-      opcao.value = valor;
-      opcao.textContent = valor;
-      select.appendChild(opcao);
+  if (valoresUnicos.includes(valorAnterior)) {
+    select.value = valorAnterior;
+  }
+}
+
+function aplicarFiltros() {
+  const busca = normalizar($("busca")?.value);
+  const subsede = $("filtroSubsede")?.value || "";
+  const status = $("filtroStatus")?.value || "";
+  const curso = $("filtroCurso")?.value || "";
+  const inicial = $("dataInicial")?.value || "";
+  const final = $("dataFinal")?.value || "";
+
+  return registros.filter(r => {
+    const texto = normalizar([
+      r.id_vaga, r.id_registro, r.empresa, r.razao_social,
+      r.cidade_uf, r.subsede, r.curso, r.angariador,
+      r.status, r.status_simplificado, r.cnpj
+    ].join(" "));
+
+    if (busca && !texto.includes(busca)) return false;
+    if (subsede && r.subsede !== subsede) return false;
+    if (status && statusRegistro(r) !== status) return false;
+    if (curso && cursoRegistro(r) !== curso) return false;
+
+    const data = String(r.solicitado_em || "").slice(0, 10);
+    if (inicial && (!data || data < inicial)) return false;
+    if (final && (!data || data > final)) return false;
+
+    return true;
+  });
+}
+
+function contarPor(lista, obterValor) {
+  const contagem = {};
+
+  lista.forEach(r => {
+    const chave = obterValor(r) || "Não informado";
+    contagem[chave] = (contagem[chave] || 0) + 1;
+  });
+
+  return Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+}
+
+function destruirGraficos() {
+  Object.values(charts).forEach(grafico => grafico.destroy());
+  charts = {};
+}
+
+function criarGrafico(id, tipo, labels, dados, titulo) {
+  const canvas = $(id);
+  if (!canvas || typeof Chart === "undefined") return;
+
+  charts[id] = new Chart(canvas, {
+    type: tipo,
+    data: {
+      labels,
+      datasets: [{
+        label: titulo,
+        data: dados,
+        borderWidth: 2,
+        borderRadius: tipo === "bar" ? 5 : 0,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: tipo === "doughnut", position: "bottom" }
+      },
+      scales: tipo === "doughnut" ? {} : {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 }
+        }
+      }
+    }
+  });
+}
+
+function atualizarGraficos(lista) {
+  destruirGraficos();
+
+  const status = contarPor(lista, statusRegistro).slice(0, 12);
+  criarGrafico(
+    "graficoStatus", "doughnut",
+    status.map(x => x[0]),
+    status.map(x => x[1]),
+    "Vagas"
+  );
+
+  const subsedes = contarPor(lista, r => r.subsede).slice(0, 13).reverse();
+  criarGrafico(
+    "graficoSubsede", "bar",
+    subsedes.map(x => x[0]),
+    subsedes.map(x => x[1]),
+    "Vagas por subsede"
+  );
+
+  const meses = {};
+
+  lista.forEach(r => {
+    if (!r.solicitado_em) return;
+
+    const data = new Date(r.solicitado_em);
+    if (Number.isNaN(data.getTime())) return;
+
+    const chave =
+      data.getFullYear() + "-" +
+      String(data.getMonth() + 1).padStart(2, "0");
+
+    meses[chave] = (meses[chave] || 0) + 1;
+  });
+
+  const mesesOrdenados = Object.entries(meses).sort(
+    (a, b) => a[0].localeCompare(b[0])
+  );
+
+  criarGrafico(
+    "graficoMensal", "line",
+    mesesOrdenados.map(([mes]) => {
+      const [ano, numeroMes] = mes.split("-");
+      return numeroMes + "/" + ano;
+    }),
+    mesesOrdenados.map(x => x[1]),
+    "Vagas solicitadas"
+  );
+}
+
+function atualizarTabela(lista) {
+  const corpo = $("corpoTabela");
+  if (!corpo) return;
+
+  corpo.replaceChildren();
+
+  if (!lista.length) {
+    const linha = corpo.insertRow();
+    const celula = linha.insertCell();
+    celula.colSpan = 7;
+    celula.textContent = "Nenhum registro encontrado.";
+  } else {
+    lista.slice(0, 500).forEach(r => {
+      const linha = corpo.insertRow();
+
+      [
+        r.id_vaga ?? r.id_registro ?? "—",
+        r.empresa || r.razao_social || "—",
+        r.subsede || "—",
+        cursoRegistro(r),
+        statusRegistro(r),
+        formatarData(r.solicitado_em),
+        r.periodo || "—"
+      ].forEach(valor => {
+        linha.insertCell().textContent = String(valor);
+      });
     });
-
-    if (unicos.includes(selecionado)) {
-      select.value = selecionado;
-    }
   }
 
-  function prepararFiltros() {
+  if ($("contadorTabela")) {
+    $("contadorTabela").textContent =
+      lista.length.toLocaleString("pt-BR") + " registros" +
+      (lista.length > 500 ? " (exibindo os primeiros 500)" : "");
+  }
+}
+
+function atualizarPainel() {
+  const lista = aplicarFiltros();
+
+  const abertas = lista.filter(r => {
+    const s = normalizar(statusRegistro(r));
+    return (
+      s.includes("ABERTA") ||
+      s.includes("ABERTO") ||
+      s.includes("AGUARDANDO") ||
+      s.includes("PENDENTE")
+    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
+  });
+
+  const andamento = lista.filter(r => {
+    const s = normalizar(statusRegistro(r));
+    return (
+      s.includes("ANDAMENTO") ||
+      s.includes("PROCESS") ||
+      s.includes("SELECAO") ||
+      s.includes("SELETIVO")
+    ) && !s.includes("FECHAD") && !s.includes("CANCEL");
+  });
+
+  if ($("totalVagas")) {
+    $("totalVagas").textContent = lista.length.toLocaleString("pt-BR");
+  }
+
+  if ($("vagasAbertas")) {
+    $("vagasAbertas").textContent = abertas.length.toLocaleString("pt-BR");
+  }
+
+  if ($("vagasAndamento")) {
+    $("vagasAndamento").textContent = andamento.length.toLocaleString("pt-BR");
+  }
+
+  if ($("totalUnidades")) {
+    $("totalUnidades").textContent =
+      new Set(lista.map(r => r.subsede).filter(Boolean)).size;
+  }
+
+  atualizarGraficos(lista);
+  atualizarTabela(lista);
+
+  if ($("mensagem")) {
+    $("mensagem").textContent =
+      `${registros.length.toLocaleString("pt-BR")} registros carregados; ` +
+      `${lista.length.toLocaleString("pt-BR")} após os filtros.`;
+    $("mensagem").className = "message success";
+  }
+}
+
+function exportarCSV() {
+  const lista = aplicarFiltros();
+
+  const colunas = [
+    ["ID da vaga", r => r.id_vaga || r.id_registro],
+    ["Empresa", r => r.empresa || r.razao_social],
+    ["Subsede", r => r.subsede],
+    ["Cidade/UF", r => r.cidade_uf],
+    ["Curso", r => r.curso],
+    ["Status", statusRegistro],
+    ["Data da solicitação", r => r.solicitado_em],
+    ["Período", r => r.periodo],
+    ["Angariador", r => r.angariador],
+    ["Carga horária", r => r.carga_horaria],
+    ["CNPJ", r => r.cnpj]
+  ];
+
+  const escapar = valor =>
+    '"' + String(valor ?? "").replace(/"/g, '""') + '"';
+
+  const conteudo = [
+    colunas.map(c => escapar(c[0])).join(";"),
+    ...lista.map(r => colunas.map(c => escapar(c[1](r))).join(";"))
+  ].join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + conteudo], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vagas-aprendiz.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function iniciarPainel() {
+  const mensagem = $("mensagem");
+  if (mensagem) mensagem.textContent = "Carregando dados do Supabase...";
+
+  try {
+    registros = await carregarDados();
+
     preencherFiltro(
       "filtroSubsede",
-      dadosOriginais.map((r) => campo(r, "subsede")),
+      registros.map(r => r.subsede).filter(Boolean),
       "Todas as subsedes"
     );
 
     preencherFiltro(
       "filtroStatus",
-      dadosOriginais.map((r) => campo(r, "status")),
+      registros.map(statusRegistro),
       "Todos os status"
     );
 
     preencherFiltro(
       "filtroCurso",
-      dadosOriginais.map((r) => campo(r, "curso")),
+      registros.map(cursoRegistro),
       "Todas as áreas"
     );
-  }
 
-  function aplicarFiltros() {
-    const busca = normalizar($("busca")?.value);
-    const subsede = $("filtroSubsede")?.value || "";
-    const status = $("filtroStatus")?.value || "";
-    const curso = $("filtroCurso")?.value || "";
-    const inicial = $("dataInicial")?.value || "";
-    const final = $("dataFinal")?.value || "";
+    ["busca", "filtroSubsede", "filtroStatus", "filtroCurso",
+      "dataInicial", "dataFinal"].forEach(id => {
+      $(id)?.addEventListener(
+        id === "busca" ? "input" : "change",
+        atualizarPainel
+      );
+    });
 
-    dadosFiltrados = dadosOriginais.filter((r) => {
-      const data = dataISO(campo(r, "solicitacao"));
+    $("btnLimpar")?.addEventListener("click", () => {
+      ["busca", "filtroSubsede", "filtroStatus", "filtroCurso",
+        "dataInicial", "dataFinal"].forEach(id => {
+        if ($(id)) $(id).value = "";
+      });
+      atualizarPainel();
+    });
 
-      const textoPesquisa = normalizar([
-        campo(r, "id"),
-        campo(r, "unidade"),
-        campo(r, "subsede"),
-        campo(r, "curso"),
-        campo(r, "status"),
-        JSON.stringify(r)
-      ].join(" "));
+    $("btnExportar")?.addEventListener("click", exportarCSV);
 
-      if (busca && !textoPesquisa.includes(busca)) return false;
-      if (subsede && texto(rSubsede(r)) !== subsede) return false;
-      if (status && texto(campo(r, "status")) !== status) return false;
-      if (curso && texto(campo(r, "curso")) !== curso) return false;
-
-      if (inicial && (!data || data < inicial)) return false;
-      if (final && (!data || data > final)) return false;
-
-      return true;
+    $("btnAtualizar")?.addEventListener("click", async () => {
+      $("btnAtualizar").disabled = true;
+      try {
+        if ($("mensagem")) $("mensagem").textContent = "Atualizando dados...";
+        registros = await carregarDados();
+        atualizarPainel();
+      } catch (erro) {
+        mostrarErro(erro);
+      } finally {
+        $("btnAtualizar").disabled = false;
+      }
     });
 
     atualizarPainel();
+  } catch (erro) {
+    mostrarErro(erro);
+  }
+}
+
+function mostrarErro(erro) {
+  console.error("Erro no painel de Vagas Aprendiz:", erro);
+
+  if ($("mensagem")) {
+    $("mensagem").textContent = erro.message || "Não foi possível carregar os dados.";
+    $("mensagem").className = "message error";
   }
 
-  function rSubsede(registro) {
-    return campo(registro, "subsede");
+  if ($("corpoTabela")) {
+    $("corpoTabela").innerHTML =
+      '<tr><td colspan="7">Não foi possível carregar os dados.</td></tr>';
   }
+}
 
-  function contarUnicos(registros, tipo) {
-    return new Set(
-      registros.map((r) => texto(campo(r, tipo))).filter(Boolean)
-    ).size;
-  }
-
-  function atualizarKPIs() {
-    const total = dadosFiltrados.length;
-
-    const abertas = dadosFiltrados.filter((r) => {
-      const status = normalizar(campo(r, "status"));
-      return status.includes("aberta") ||
-        status.includes("aberto") ||
-        status.includes("aguardando") ||
-        status.includes("pendente");
-    }).length;
-
-    const andamento = dadosFiltrados.filter((r) => {
-      const status = normalizar(campo(r, "status"));
-      return status.includes("andamento") ||
-        status.includes("selecao") ||
-        status.includes("recrutamento") ||
-        status.includes("processo seletivo");
-    }).length;
-
-    $("totalVagas").textContent = total.toLocaleString("pt-BR");
-    $("vagasAbertas").textContent = abertas.toLocaleString("pt-BR");
-    $("vagasAndamento").textContent = andamento.toLocaleString("pt-BR");
-    $("totalUnidades").textContent =
-      contarUnicos(dadosFiltrados, "unidade").toLocaleString("pt-BR");
-  }
-
-  function agrupar(registros, obterChave) {
-    const contagem = {};
-
-    registros.forEach((registro) => {
-      const chave = texto(obterChave(registro)) || "Não informado";
-      contagem[chave] = (contagem[chave] || 0) + 1;
-    });
-
-    return Object.entries(contagem).sort((a, b) => b[1] - a[1]);
-  }
-
-  function desenharGrafico(id, tipo, labels, valores, opcoes = {}) {
-    const canvas = $(id);
-    if (!canvas || !window.Chart) return;
-
-    if (graficos[id]) graficos[id].destroy();
-
-    graficos[id] = new Chart(canvas, {
-      type: tipo,
-      data: {
-        labels,
-        datasets: [{
-          label: opcoes.label || "Quantidade de vagas",
-          data: valores,
-          borderWidth: 2,
-          borderRadius: tipo === "bar" ? 5 : 0,
-          tension: 0.3,
-          fill: false
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: opcoes.horizontal ? "y" : "x",
-        plugins: {
-          legend: {
-            display: tipo === "doughnut"
-          }
-        },
-        scales: tipo === "doughnut" ? {} : {
-          y: {
-            beginAtZero: true,
-            ticks: { precision: 0 }
-          }
-        }
-      }
-    });
-  }
-
-  function atualizarGraficos() {
-    const porStatus = agrupar(dadosFiltrados, (r) =>
-      campo(r, "status") || "Não informado"
-    );
-
-    desenharGrafico(
-      "graficoStatus",
-      "doughnut",
-      porStatus.map((item) => item[0]),
-      porStatus.map((item) => item[1])
-    );
-
-    const porSubsede = agrupar(dadosFiltrados, (r) =>
-      campo(r, "subsede") || "Não informado"
-    ).slice(0, 12);
-
-    desenharGrafico(
-      "graficoSubsede",
-      "bar",
-      porSubsede.map((item) => item[0]),
-      porSubsede.map((item) => item[1]),
-      { horizontal: true }
-    );
-
-    const porMes = {};
-
-    dadosFiltrados.forEach((r) => {
-      const data = dataValida(campo(r, "solicitacao"));
-      if (!data) return;
-
-      const chave = `${data.getFullYear()}-${String(
-        data.getMonth() + 1
-      ).padStart(2, "0")}`;
-
-      porMes[chave] = (porMes[chave] || 0) + 1;
-    });
-
-    const meses = Object.keys(porMes).sort();
-
-    desenharGrafico(
-      "graficoMensal",
-      "line",
-      meses.map((mes) => {
-        const [ano, numeroMes] = mes.split("-");
-        return new Date(Number(ano), Number(numeroMes) - 1, 1)
-          .toLocaleDateString("pt-BR", {
-            month: "short",
-            year: "numeric"
-          });
-      }),
-      meses.map((mes) => porMes[mes]),
-      { label: "Vagas solicitadas" }
-    );
-  }
-
-  function criarCelula(linha, valor) {
-    const td = document.createElement("td");
-    td.textContent = texto(valor) || "—";
-    linha.appendChild(td);
-    return td;
-  }
-
-  function renderizarTabela() {
-    const corpo = $("corpoTabela");
-    corpo.innerHTML = "";
-
-    $("contadorTabela").textContent =
-      `${dadosFiltrados.length.toLocaleString("pt-BR")} registros`;
-
-    if (!dadosFiltrados.length) {
-      const linha = document.createElement("tr");
-      const celula = document.createElement("td");
-      celula.colSpan = 7;
-      celula.textContent = "Nenhuma vaga encontrada com os filtros selecionados.";
-      linha.appendChild(celula);
-      corpo.appendChild(linha);
-      return;
-    }
-
-    dadosFiltrados.forEach((r) => {
-      const linha = document.createElement("tr");
-
-      criarCelula(linha, campo(r, "id"));
-      criarCelula(linha, campo(r, "unidade"));
-      criarCelula(linha, campo(r, "subsede"));
-      criarCelula(linha, campo(r, "curso"));
-      criarCelula(linha, campo(r, "status"));
-      criarCelula(linha, dataFormatada(campo(r, "solicitacao")));
-      criarCelula(linha, dataFormatada(campo(r, "inicio")));
-
-      corpo.appendChild(linha);
-    });
-  }
-
-  function atualizarPainel() {
-    atualizarKPIs();
-    atualizarGraficos();
-    renderizarTabela();
-  }
-
-  async function carregarDados() {
-    const botao = $("btnAtualizar");
-    if (botao) botao.disabled = true;
-
-    mostrarMensagem("Carregando dados do Supabase...");
-
-    try {
-      dadosOriginais = await buscarTodosRegistros();
-      prepararFiltros();
-      aplicarFiltros();
-
-      mostrarMensagem(
-        `Dados carregados com sucesso: ${dadosOriginais.length.toLocaleString("pt-BR")} registros.`,
-        "success"
-      );
-    } catch (erro) {
-      console.error("Erro ao carregar Vagas Aprendiz:", erro);
-
-      mostrarMensagem(
-        `Não foi possível carregar os dados. Verifique a view "${FONTE}", as permissões do Supabase e o config.js. Detalhe: ${erro.message || erro}`,
-        "error"
-      );
-    } finally {
-      if (botao) botao.disabled = false;
-    }
-  }
-
-  function exportarCSV() {
-    if (!dadosFiltrados.length) {
-      mostrarMensagem("Não há registros para exportar.", "error");
-      return;
-    }
-
-    const colunas = [
-      ["ID", (r) => campo(r, "id")],
-      ["Unidade", (r) => campo(r, "unidade")],
-      ["Subsede", (r) => campo(r, "subsede")],
-      ["Vaga ou curso", (r) => campo(r, "curso")],
-      ["Status", (r) => campo(r, "status")],
-      ["Data de solicitação", (r) => dataFormatada(campo(r, "solicitacao"))],
-      ["Data de início", (r) => dataFormatada(campo(r, "inicio"))]
-    ];
-
-    const escapar = (valor) =>
-      `"${String(valor ?? "").replace(/"/g, '""')}"`;
-
-    const linhas = [
-      colunas.map(([titulo]) => escapar(titulo)).join(";"),
-      ...dadosFiltrados.map((registro) =>
-        colunas.map(([, obter]) => escapar(obter(registro))).join(";")
-      )
-    ];
-
-    const arquivo = new Blob(
-      ["\uFEFF" + linhas.join("\r\n")],
-      { type: "text/csv;charset=utf-8;" }
-    );
-
-    const url = URL.createObjectURL(arquivo);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "vagas-aprendiz.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function limparFiltros() {
-    [
-      "busca",
-      "filtroSubsede",
-      "filtroStatus",
-      "filtroCurso",
-      "dataInicial",
-      "dataFinal"
-    ].forEach((id) => {
-      const elemento = $(id);
-      if (elemento) elemento.value = "";
-    });
-
-    aplicarFiltros();
-  }
-
-  function iniciar() {
-    $("btnAtualizar")?.addEventListener("click", carregarDados);
-    $("btnLimpar")?.addEventListener("click", limparFiltros);
-    $("btnExportar")?.addEventListener("click", exportarCSV);
-
-    [
-      "busca",
-      "filtroSubsede",
-      "filtroStatus",
-      "filtroCurso",
-      "dataInicial",
-      "dataFinal"
-    ].forEach((id) => {
-      $(id)?.addEventListener("input", aplicarFiltros);
-      $(id)?.addEventListener("change", aplicarFiltros);
-    });
-
-    carregarDados();
-  }
-
-  document.addEventListener("DOMContentLoaded", iniciar);
-})();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", iniciarPainel);
+} else {
+  iniciarPainel();
+}
