@@ -5,14 +5,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Portal BI — acesso aos dashboards e indicadores.">
+  <meta name="theme-color" content="#102c4c">
   <title>Portal BI | GERAR</title>
 
-  <link rel="stylesheet" href="style.css">
+  <!-- CSS principal com atualização de cache -->
+  <link rel="stylesheet" href="./style.css?v=20261019">
 
+  <!-- Bibliotecas e configurações existentes -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
+  <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js" defer></script>
+  <script src="./script.js" defer></script>
 
   <style>
     .vagas-embed-container {
@@ -117,7 +120,6 @@
         <span class="nav-icon">▥</span> Controle de Vagas Aprendiz
       </a>
 
-      <!-- NOVO MENU: SUBSTITUIÇÕES -->
       <a
         class="nav-link"
         href="#substituicoes-section"
@@ -274,7 +276,7 @@
           </div>
 
           <a
-            href="vagas-aprendiz.html"
+            href="./vagas-aprendiz.html"
             target="_blank"
             rel="noopener noreferrer"
             class="access-pill"
@@ -286,7 +288,7 @@
         <div class="vagas-embed-container">
           <iframe
             id="vagas-aprendiz-frame"
-            src="vagas-aprendiz.html"
+            src="./vagas-aprendiz.html"
             title="Painel de Controle de Vagas Aprendiz"
             loading="lazy"
             width="100%"
@@ -296,7 +298,7 @@
         </div>
       </section>
 
-      <!-- NOVO BI DE SUBSTITUIÇÕES -->
+      <!-- BI DE SUBSTITUIÇÕES -->
       <section id="substituicoes-section" class="dashboard-section" hidden>
         <div class="section-heading">
           <div>
