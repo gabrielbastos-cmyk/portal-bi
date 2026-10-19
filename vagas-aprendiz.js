@@ -3,17 +3,26 @@
  * GERAR — CONTROLE DE VAGAS APRENDIZ
  * Fonte: public.vw_vagas_aprendiz_bi
  * Requer Chart.js, Supabase JS v2 e config.js.
+ *
+ * ATUALIZAÇÕES:
+ * - Tabela com paginação de 20 registros.
+ * - Botões para avançar e voltar entre páginas.
+ * - Contador da página e total de registros filtrados.
+ * - Valores visíveis diretamente nos três gráficos.
+ * - Exportação CSV mantém todos os registros filtrados.
+ * - Preserva filtros, indicadores e conexão com Supabase.
  */
 
 "use strict";
 
 const VIEW = "vw_vagas_aprendiz_bi";
 const PAGE_SIZE = 1000;
-const MAX_REGISTROS_TABELA = 500;
+const REGISTROS_POR_PAGINA = 20;
 
 let registros = [];
 let charts = {};
 let carregamentoEmAndamento = false;
+let paginaAtual = 1;
 
 const $ = id => document.getElementById(id);
 
@@ -56,10 +65,7 @@ function dataSolicitacaoRegistro(r) {
 function formatarData(valor) {
   if (!valor) return "—";
 
-  // Trata datas ISO sem horário como datas locais,
-  // evitando que sejam exibidas no dia anterior.
   const texto = String(valor);
-
   const somenteData = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
   if (somenteData) {
@@ -100,7 +106,6 @@ function dataISO(valor) {
   if (!valor) return "";
 
   const texto = String(valor);
-
   const somenteData = texto.match(/^(\d{4}-\d{2}-\d{2})/);
 
   if (somenteData) {
@@ -129,8 +134,12 @@ function dataISO(valor) {
   return `${valores.year}-${valores.month}-${valores.day}`;
 }
 
+function formatarNumero(valor) {
+  return Number(valor || 0).toLocaleString("pt-BR");
+}
+
 /* =====================================================
-   CARREGAMENTO PAGINADO
+   CARREGAMENTO PAGINADO DO SUPABASE
 ===================================================== */
 
 async function carregarDados() {
@@ -278,7 +287,7 @@ function aplicarFiltros() {
 }
 
 /* =====================================================
-   AGRUPAMENTO PARA OS GRÁFICOS
+   AGRUPAMENTO DOS GRÁFICOS
 ===================================================== */
 
 function contarPor(lista, obterValor) {
@@ -309,6 +318,105 @@ function destruirGraficos() {
   charts = {};
 }
 
+/* =====================================================
+   PLUGIN: NÚMEROS VISÍVEIS NOS GRÁFICOS
+   Não precisa instalar biblioteca adicional.
+===================================================== */
+
+const pluginRotulosValores = {
+  id: "rotulosValoresGerar",
+
+  afterDatasetsDraw(chart) {
+    const ctx = chart.ctx;
+    const tipo = chart.config.type;
+
+    ctx.save();
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+
+      if (meta.hidden || !meta.data) return;
+
+      meta.data.forEach((elemento, index) => {
+        const valor = dataset.data[index];
+
+        if (
+          valor === null ||
+          valor === undefined ||
+          !Number.isFinite(Number(valor))
+        ) {
+          return;
+        }
+
+        const texto = formatarNumero(valor);
+
+        ctx.save();
+
+        ctx.font = "600 11px Arial, sans-serif";
+        ctx.textBaseline = "middle";
+
+        if (tipo === "doughnut" || tipo === "pie") {
+          /*
+           * Posiciona o número no centro de cada fatia.
+           */
+          const propriedades = elemento.getProps(
+            [
+              "x",
+              "y",
+              "startAngle",
+              "endAngle",
+              "innerRadius",
+              "outerRadius"
+            ],
+            true
+          );
+
+          const angulo =
+            (propriedades.startAngle + propriedades.endAngle) / 2;
+
+          const raio =
+            (propriedades.innerRadius + propriedades.outerRadius) / 2;
+
+          const x = propriedades.x + Math.cos(angulo) * raio;
+          const y = propriedades.y + Math.sin(angulo) * raio;
+
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#FFFFFF";
+          ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+          ctx.shadowBlur = 2;
+
+          ctx.fillText(texto, x, y);
+        } else {
+          /*
+           * Posiciona os números acima das barras
+           * e dos pontos da linha mensal.
+           */
+          const posicao = elemento.tooltipPosition();
+
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#263238";
+          ctx.shadowColor = "rgba(255, 255, 255, 0.85)";
+          ctx.shadowBlur = 2;
+
+          ctx.fillText(
+            texto,
+            posicao.x,
+            posicao.y - 10
+          );
+        }
+
+        ctx.restore();
+      });
+    });
+
+    ctx.restore();
+  }
+};
+
+/* =====================================================
+   CRIAÇÃO DOS GRÁFICOS
+===================================================== */
+
 function criarGrafico(id, tipo, labels, valores, titulo) {
   const canvas = $(id);
 
@@ -328,18 +436,45 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
         borderWidth: 2,
         borderRadius: tipo === "bar" ? 5 : 0,
         tension: 0.3,
-        fill: false
+        fill: false,
+
+        /*
+         * Mantém os gráficos legíveis.
+         * As cores podem seguir o padrão do Chart.js
+         * configurado no projeto.
+         */
+        pointRadius: tipo === "line" ? 3 : 0,
+        pointHoverRadius: tipo === "line" ? 4 : 0
       }]
     },
+
+    plugins: [pluginRotulosValores],
 
     options: {
       responsive: true,
       maintainAspectRatio: false,
 
+      /*
+       * Os números já ficam visíveis.
+       * A interação por tooltip continua disponível.
+       */
       plugins: {
         legend: {
           display: tipo === "doughnut",
           position: "bottom"
+        },
+
+        tooltip: {
+          enabled: true
+        }
+      },
+
+      layout: {
+        padding: {
+          top: 16,
+          right: 8,
+          bottom: 4,
+          left: 4
         }
       },
 
@@ -357,7 +492,7 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
 }
 
 /* =====================================================
-   GRÁFICOS
+   ATUALIZAÇÃO DOS GRÁFICOS
 ===================================================== */
 
 function atualizarGraficos(lista) {
@@ -398,8 +533,6 @@ function atualizarGraficos(lista) {
     let ano;
     let mes;
 
-    // Prioriza a data de solicitação para garantir
-    // que a evolução represente a data real do pedido.
     if (data) {
       ano = Number(data.slice(0, 4));
       mes = Number(data.slice(5, 7));
@@ -476,31 +609,119 @@ function atualizarIndicadores(lista) {
 
   if ($("totalVagas")) {
     $("totalVagas").textContent =
-      lista.length.toLocaleString("pt-BR");
+      formatarNumero(lista.length);
   }
 
   if ($("vagasAbertas")) {
     $("vagasAbertas").textContent =
-      abertas.length.toLocaleString("pt-BR");
+      formatarNumero(abertas.length);
   }
 
   if ($("vagasAndamento")) {
     $("vagasAndamento").textContent =
-      andamento.length.toLocaleString("pt-BR");
+      formatarNumero(andamento.length);
   }
 
   if ($("totalUnidades")) {
     $("totalUnidades").textContent =
-      new Set(
-        lista
-          .map(r => String(r.subsede || "").trim())
-          .filter(Boolean)
-      ).size.toLocaleString("pt-BR");
+      formatarNumero(
+        new Set(
+          lista
+            .map(r => String(r.subsede || "").trim())
+            .filter(Boolean)
+        ).size
+      );
   }
 }
 
 /* =====================================================
-   TABELA DETALHADA
+   PAGINAÇÃO DA TABELA
+===================================================== */
+
+function obterControlesPaginacao() {
+  let controles = $("paginacaoTabela");
+
+  if (controles) return controles;
+
+  const corpo = $("corpoTabela");
+  const tabela = corpo?.closest("table");
+  const areaTabela = tabela?.closest(".table-scroll");
+
+  if (!areaTabela) return null;
+
+  controles = document.createElement("div");
+  controles.id = "paginacaoTabela";
+
+  controles.style.display = "flex";
+  controles.style.alignItems = "center";
+  controles.style.justifyContent = "space-between";
+  controles.style.flexWrap = "wrap";
+  controles.style.gap = "10px";
+  controles.style.padding = "12px 0 2px";
+  controles.style.marginTop = "8px";
+
+  const informacao = document.createElement("span");
+  informacao.id = "informacaoPaginacao";
+
+  informacao.style.fontSize = "13px";
+  informacao.style.color = "#64748b";
+
+  const botoes = document.createElement("div");
+
+  botoes.style.display = "flex";
+  botoes.style.alignItems = "center";
+  botoes.style.gap = "8px";
+
+  const anterior = document.createElement("button");
+  anterior.id = "paginaAnterior";
+  anterior.type = "button";
+  anterior.textContent = "← Anterior";
+
+  const proximo = document.createElement("button");
+  proximo.id = "paginaProxima";
+  proximo.type = "button";
+  proximo.textContent = "Próxima →";
+
+  [anterior, proximo].forEach(botao => {
+    botao.style.padding = "8px 12px";
+    botao.style.border = "1px solid #d1d5db";
+    botao.style.borderRadius = "6px";
+    botao.style.background = "#ffffff";
+    botao.style.color = "#263238";
+    botao.style.fontSize = "13px";
+    botao.style.cursor = "pointer";
+  });
+
+  anterior.addEventListener("click", () => {
+    if (paginaAtual > 1) {
+      paginaAtual--;
+      atualizarTabela(aplicarFiltros());
+    }
+  });
+
+  proximo.addEventListener("click", () => {
+    const lista = aplicarFiltros();
+    const totalPaginas = Math.max(
+      1,
+      Math.ceil(lista.length / REGISTROS_POR_PAGINA)
+    );
+
+    if (paginaAtual < totalPaginas) {
+      paginaAtual++;
+      atualizarTabela(lista);
+    }
+  });
+
+  botoes.append(anterior, proximo);
+  controles.append(informacao, botoes);
+
+  areaTabela.insertAdjacentElement("afterend", controles);
+
+  return controles;
+}
+
+/* =====================================================
+   RENDERIZAÇÃO DA TABELA
 ===================================================== */
 
 function atualizarTabela(lista) {
@@ -508,7 +729,27 @@ function atualizarTabela(lista) {
 
   if (!corpo) return;
 
-  if (!lista.length) {
+  const total = lista.length;
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(total / REGISTROS_POR_PAGINA)
+  );
+
+  /*
+   * Garante que a página atual exista após a aplicação
+   * dos filtros ou a atualização dos dados.
+   */
+  paginaAtual = Math.min(
+    Math.max(1, paginaAtual),
+    totalPaginas
+  );
+
+  const inicio = (paginaAtual - 1) * REGISTROS_POR_PAGINA;
+  const fim = Math.min(inicio + REGISTROS_POR_PAGINA, total);
+
+  const pagina = lista.slice(inicio, fim);
+
+  if (!pagina.length) {
     corpo.replaceChildren();
 
     const linha = document.createElement("tr");
@@ -516,34 +757,68 @@ function atualizarTabela(lista) {
 
     celula.colSpan = 7;
     celula.textContent = "Nenhuma vaga encontrada.";
+    celula.style.textAlign = "center";
+    celula.style.padding = "20px";
 
     linha.appendChild(celula);
     corpo.appendChild(linha);
   } else {
-    corpo.innerHTML = lista
-      .slice(0, MAX_REGISTROS_TABELA)
-      .map(r => `
-        <tr>
-          <td>${escaparHTML(r.id_vaga ?? r.id_registro ?? r.id ?? "—")}</td>
-          <td>${escaparHTML(empresaRegistro(r))}</td>
-          <td>${escaparHTML(r.subsede || "—")}</td>
-          <td>${escaparHTML(cursoRegistro(r))}</td>
-          <td>${escaparHTML(statusRegistro(r))}</td>
-          <td>${escaparHTML(formatarData(dataSolicitacaoRegistro(r)))}</td>
-          <td>${escaparHTML(r.periodo || "—")}</td>
-        </tr>
-      `)
-      .join("");
+    corpo.innerHTML = pagina.map(r => `
+      <tr>
+        <td>${escaparHTML(r.id_vaga ?? r.id_registro ?? r.id ?? "—")}</td>
+        <td>${escaparHTML(empresaRegistro(r))}</td>
+        <td>${escaparHTML(r.subsede || "—")}</td>
+        <td>${escaparHTML(cursoRegistro(r))}</td>
+        <td>${escaparHTML(statusRegistro(r))}</td>
+        <td>${escaparHTML(formatarData(dataSolicitacaoRegistro(r)))}</td>
+        <td>${escaparHTML(r.periodo || "—")}</td>
+      </tr>
+    `).join("");
   }
 
+  /*
+   * Contador do cabeçalho da tabela.
+   */
   if ($("contadorTabela")) {
-    $("contadorTabela").textContent =
-      `${lista.length.toLocaleString("pt-BR")} registros` +
-      (
-        lista.length > MAX_REGISTROS_TABELA
-          ? ` (exibindo os primeiros ${MAX_REGISTROS_TABELA})`
-          : ""
-      );
+    if (total === 0) {
+      $("contadorTabela").textContent = "0 registros";
+    } else {
+      $("contadorTabela").textContent =
+        `Exibindo ${formatarNumero(inicio + 1)}–${formatarNumero(fim)} de ${formatarNumero(total)} registros`;
+    }
+  }
+
+  /*
+   * Controles de navegação criados automaticamente.
+   */
+  const controles = obterControlesPaginacao();
+
+  if (controles) {
+    const informacao = $("informacaoPaginacao");
+    const anterior = $("paginaAnterior");
+    const proximo = $("paginaProxima");
+
+    if (informacao) {
+      informacao.textContent =
+        total === 0
+          ? "Nenhum registro"
+          : `Página ${formatarNumero(paginaAtual)} de ${formatarNumero(totalPaginas)}`;
+    }
+
+    if (anterior) {
+      anterior.disabled = paginaAtual <= 1 || total === 0;
+      anterior.style.opacity = anterior.disabled ? "0.45" : "1";
+      anterior.style.cursor = anterior.disabled ? "not-allowed" : "pointer";
+    }
+
+    if (proximo) {
+      proximo.disabled = paginaAtual >= totalPaginas || total === 0;
+      proximo.style.opacity = proximo.disabled ? "0.45" : "1";
+      proximo.style.cursor = proximo.disabled ? "not-allowed" : "pointer";
+    }
+
+    controles.style.display =
+      total > REGISTROS_POR_PAGINA ? "flex" : "none";
   }
 }
 
@@ -552,6 +827,12 @@ function atualizarTabela(lista) {
 ===================================================== */
 
 function atualizarPainel() {
+  /*
+   * Ao alterar filtros, volta para a primeira página
+   * para evitar mostrar uma página vazia por engano.
+   */
+  paginaAtual = 1;
+
   const lista = aplicarFiltros();
 
   atualizarIndicadores(lista);
@@ -559,14 +840,16 @@ function atualizarPainel() {
   atualizarTabela(lista);
 
   mostrarMensagem(
-    `${registros.length.toLocaleString("pt-BR")} registros carregados; ` +
-    `${lista.length.toLocaleString("pt-BR")} após os filtros.`,
+    `${formatarNumero(registros.length)} registros carregados; ` +
+    `${formatarNumero(lista.length)} após os filtros.`,
     "success"
   );
 }
 
 /* =====================================================
    EXPORTAÇÃO CSV
+   Exporta TODOS os registros filtrados, não apenas
+   os 20 que aparecem na página atual.
 ===================================================== */
 
 function exportarCSV() {
@@ -618,12 +901,11 @@ function exportarCSV() {
   link.click();
   link.remove();
 
-  // Libera o recurso depois de o navegador iniciar o download.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /* =====================================================
-   EVENTOS DOS FILTROS
+   EVENTOS DOS FILTROS E BOTÕES
 ===================================================== */
 
 function configurarEventos() {
@@ -718,6 +1000,7 @@ async function iniciarCarregamento() {
     const novosRegistros = await carregarDados();
 
     registros = novosRegistros;
+    paginaAtual = 1;
 
     preencherFiltro(
       "filtroSubsede",
@@ -762,6 +1045,9 @@ async function iniciarCarregamento() {
       "Erro ao carregar o Controle de Vagas Aprendiz:",
       error
     );
+
+    registros = [];
+    paginaAtual = 1;
 
     atualizarIndicadores([]);
     atualizarGraficos([]);
