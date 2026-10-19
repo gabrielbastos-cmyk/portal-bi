@@ -10,6 +10,10 @@ let currentProfile = null;
 let allDashboards = [];
 let adminUsers = [];
 
+// ==================================================
+// MENSAGENS E FUNÇÕES AUXILIARES
+// ==================================================
+
 function showMessage(id, message, type = "error") {
   const element = $(id);
   if (!element) return;
@@ -21,6 +25,7 @@ function showMessage(id, message, type = "error") {
 
 function clearMessage(id) {
   const element = $(id);
+
   if (element) {
     element.textContent = "";
     element.className = "";
@@ -92,6 +97,7 @@ if (!sb) {
 async function iniciarPortal() {
   try {
     const { data, error } = await sb.auth.getSession();
+
     if (error) throw error;
 
     if (data.session) {
@@ -114,71 +120,98 @@ async function iniciarPortal() {
       currentUser = null;
       currentProfile = null;
       allDashboards = [];
+      adminUsers = [];
       mostrarLogin();
     }
   });
 }
 
 function mostrarLogin() {
-  $("login-section").hidden = false;
-  $("portal-section").hidden = true;
-  $("admin-section").hidden = true;
-  $("admin-nav-link").hidden = true;
-  $("user-email").textContent = "";
+  const loginSection = $("login-section");
+  const portalSection = $("portal-section");
+  const adminSection = $("admin-section");
+  const adminNavLink = $("admin-nav-link");
+  const userEmail = $("user-email");
+
+  if (loginSection) loginSection.hidden = false;
+  if (portalSection) portalSection.hidden = true;
+  if (adminSection) adminSection.hidden = true;
+  if (adminNavLink) adminNavLink.hidden = true;
+  if (userEmail) userEmail.textContent = "";
 }
 
 function mostrarPortal() {
-  $("login-section").hidden = true;
-  $("portal-section").hidden = false;
-  $("user-email").textContent = currentUser?.email || "";
+  const loginSection = $("login-section");
+  const portalSection = $("portal-section");
+  const userEmail = $("user-email");
+
+  if (loginSection) loginSection.hidden = true;
+  if (portalSection) portalSection.hidden = false;
+
+  if (userEmail) {
+    userEmail.textContent = currentUser?.email || "";
+  }
 }
 
 // ==================================================
 // LOGIN
 // ==================================================
 
-$("login-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  clearMessage("login-message");
+const loginForm = $("login-form");
 
-  const button = event.submitter;
-  setLoading(button, true, "Entrando...");
+if (loginForm) {
+  loginForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    clearMessage("login-message");
 
-  try {
-    const email = $("email").value.trim();
-    const password = $("password").value;
+    const button = event.submitter;
+    setLoading(button, true, "Entrando...");
 
-    const { error } = await sb.auth.signInWithPassword({
-      email,
-      password
-    });
+    try {
+      const email = $("email")?.value.trim();
+      const password = $("password")?.value;
 
-    if (error) throw error;
+      if (!email || !password) {
+        throw new Error("Informe seu e-mail e sua senha.");
+      }
 
-    await atualizarPortal();
-  } catch (error) {
-    console.error("Erro no login:", error);
-    showMessage("login-message", friendlyError(error));
-  } finally {
-    setLoading(button, false);
-  }
-});
+      const { error } = await sb.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) throw error;
+
+      await atualizarPortal();
+    } catch (error) {
+      console.error("Erro no login:", error);
+      showMessage("login-message", friendlyError(error));
+    } finally {
+      setLoading(button, false);
+    }
+  });
+}
 
 // ==================================================
 // SAIR
 // ==================================================
 
-$("logout-btn").addEventListener("click", async () => {
-  try {
-    const { error } = await sb.auth.signOut();
-    if (error) throw error;
+const logoutButton = $("logout-btn");
 
-    mostrarLogin();
-  } catch (error) {
-    console.error("Erro ao sair:", error);
-    showMessage("dashboard-message", friendlyError(error));
-  }
-});
+if (logoutButton) {
+  logoutButton.addEventListener("click", async () => {
+    try {
+      const { error } = await sb.auth.signOut();
+
+      if (error) throw error;
+
+      mostrarLogin();
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      showMessage("dashboard-message", friendlyError(error));
+    }
+  });
+}
 
 // ==================================================
 // ATUALIZAR PORTAL E PERFIL
@@ -215,12 +248,16 @@ async function atualizarPortal() {
     }
 
     currentProfile = profile;
+
     mostrarPortal();
 
     const isAdmin = profile.role === "admin";
 
-    $("admin-section").hidden = !isAdmin;
-    $("admin-nav-link").hidden = !isAdmin;
+    const adminSection = $("admin-section");
+    const adminNavLink = $("admin-nav-link");
+
+    if (adminSection) adminSection.hidden = !isAdmin;
+    if (adminNavLink) adminNavLink.hidden = !isAdmin;
 
     await carregarDashboards();
 
@@ -242,6 +279,12 @@ async function carregarDashboards() {
   clearMessage("dashboard-message");
 
   const grid = $("dashboard-grid");
+
+  if (!grid) {
+    console.error("Elemento dashboard-grid não encontrado.");
+    return;
+  }
+
   grid.replaceChildren();
 
   const { data, error } = await sb
@@ -259,7 +302,9 @@ async function carregarDashboards() {
       "Nenhum dashboard foi liberado para sua conta.",
       "success"
     );
+
     atualizarResumo();
+    atualizarListaAdministrativa();
     return;
   }
 
@@ -268,7 +313,7 @@ async function carregarDashboards() {
     card.className = "dashboard-card";
 
     const title = document.createElement("h3");
-    title.textContent = dashboard.name;
+    title.textContent = dashboard.name || "Dashboard sem nome";
 
     const description = document.createElement("p");
     description.textContent = dashboard.description || "";
@@ -283,10 +328,12 @@ async function carregarDashboards() {
 
     if (isSafeDashboardUrl(dashboard.url)) {
       const link = document.createElement("a");
+
       link.href = dashboard.url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = "Abrir dashboard";
+
       card.appendChild(link);
     } else {
       const warning = document.createElement("p");
@@ -299,6 +346,7 @@ async function carregarDashboards() {
 
   atualizarResumo();
   aplicarFiltrosDashboards();
+  renderizarDashboardsAdministrativos();
 }
 
 // ==================================================
@@ -306,19 +354,36 @@ async function carregarDashboards() {
 // ==================================================
 
 function atualizarResumo() {
-  $("summary-total").textContent = String(allDashboards.length);
+  const summaryTotal = $("summary-total");
+  const summaryCategories = $("summary-categories");
+
+  if (summaryTotal) {
+    summaryTotal.textContent = String(allDashboards.length);
+  }
 
   const categories = new Set(
     allDashboards.map(d => normalize(d.category || "outros"))
   );
 
-  $("summary-categories").textContent = String(categories.size);
+  if (summaryCategories) {
+    summaryCategories.textContent = String(categories.size);
+  }
 }
 
 function aplicarFiltrosDashboards() {
-  const term = normalize($("dashboard-search").value);
-  const selectedCategory = normalize($("category-filter").value);
-  const cards = [...$("dashboard-grid").querySelectorAll(".dashboard-card")];
+  const grid = $("dashboard-grid");
+
+  if (!grid) return;
+
+  const searchInput = $("dashboard-search");
+  const categoryFilter = $("category-filter");
+
+  const term = normalize(searchInput?.value || "");
+  const selectedCategory = normalize(categoryFilter?.value || "");
+
+  const cards = [
+    ...grid.querySelectorAll(".dashboard-card")
+  ];
 
   let visible = 0;
 
@@ -328,27 +393,34 @@ function aplicarFiltrosDashboards() {
     );
 
     const matchesSearch = normalize(card.innerText).includes(term);
+
     const matchesCategory =
       !selectedCategory || category === selectedCategory;
 
     const show = matchesSearch && matchesCategory;
+
     card.hidden = !show;
 
     if (show) visible++;
   });
 
-  $("filter-empty").hidden = visible > 0 || cards.length === 0;
+  const filterEmpty = $("filter-empty");
+
+  if (filterEmpty) {
+    filterEmpty.hidden = visible > 0 || cards.length === 0;
+  }
 }
 
-$("dashboard-search").addEventListener(
-  "input",
-  aplicarFiltrosDashboards
-);
+const searchInput = $("dashboard-search");
+const categoryFilter = $("category-filter");
 
-$("category-filter").addEventListener(
-  "change",
-  aplicarFiltrosDashboards
-);
+if (searchInput) {
+  searchInput.addEventListener("input", aplicarFiltrosDashboards);
+}
+
+if (categoryFilter) {
+  categoryFilter.addEventListener("change", aplicarFiltrosDashboards);
+}
 
 // ==================================================
 // CHAMAR EDGE FUNCTION portal-admin
@@ -364,6 +436,7 @@ async function adminCall(action, payload = {}) {
 
   if (error) {
     console.error("Erro na função portal-admin:", error);
+
     throw new Error(
       "Não foi possível executar a operação administrativa. Confira a publicação da função e o perfil da sua conta."
     );
@@ -396,6 +469,9 @@ async function carregarAdministracao() {
 
 function preencherListaUsuarios() {
   const select = $("permission-user");
+
+  if (!select) return;
+
   const previousValue = select.value;
 
   select.replaceChildren();
@@ -403,13 +479,16 @@ function preencherListaUsuarios() {
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.textContent = "Selecione um usuário";
+
   select.appendChild(placeholder);
 
   adminUsers.forEach(user => {
     const option = document.createElement("option");
+
     option.value = user.id;
     option.textContent =
       `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
+
     select.appendChild(option);
   });
 
@@ -419,6 +498,11 @@ function preencherListaUsuarios() {
 
   if (select.value) {
     carregarPermissoesUsuario();
+  } else {
+    clearMessage("permission-message");
+
+    const container = $("permission-dashboard-list");
+    if (container) container.replaceChildren();
   }
 }
 
@@ -426,56 +510,77 @@ function preencherListaUsuarios() {
 // CRIAR USUÁRIO
 // ==================================================
 
-$("user-create-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  clearMessage("user-create-message");
+const userCreateForm = $("user-create-form");
 
-  const button = event.submitter;
-  setLoading(button, true, "Criando usuário...");
+if (userCreateForm) {
+  userCreateForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    clearMessage("user-create-message");
 
-  try {
-    await adminCall("create_user", {
-      email: $("new-user-email").value.trim(),
-      password: $("new-user-password").value,
-      role: $("new-user-role").value
-    });
+    const button = event.submitter;
 
-    $("user-create-form").reset();
+    setLoading(button, true, "Criando usuário...");
 
-    showMessage(
-      "user-create-message",
-      "Usuário criado com sucesso!",
-      "success"
-    );
+    try {
+      const email = $("new-user-email")?.value.trim();
+      const password = $("new-user-password")?.value;
+      const role = $("new-user-role")?.value;
 
-    await carregarAdministracao();
-  } catch (error) {
-    console.error("Erro ao criar usuário:", error);
-    showMessage("user-create-message", friendlyError(error));
-  } finally {
-    setLoading(button, false);
-  }
-});
+      if (!email || !password || !role) {
+        throw new Error("Preencha todos os campos do usuário.");
+      }
+
+      await adminCall("create_user", {
+        email,
+        password,
+        role
+      });
+
+      userCreateForm.reset();
+
+      showMessage(
+        "user-create-message",
+        "Usuário criado com sucesso!",
+        "success"
+      );
+
+      await carregarAdministracao();
+    } catch (error) {
+      console.error("Erro ao criar usuário:", error);
+      showMessage("user-create-message", friendlyError(error));
+    } finally {
+      setLoading(button, false);
+    }
+  });
+}
 
 // ==================================================
 // PERMISSÕES
 // ==================================================
 
-$("permission-user").addEventListener(
-  "change",
-  carregarPermissoesUsuario
-);
+const permissionUserSelect = $("permission-user");
+
+if (permissionUserSelect) {
+  permissionUserSelect.addEventListener(
+    "change",
+    carregarPermissoesUsuario
+  );
+}
 
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
 
-  const userId = $("permission-user").value;
+  const userId = $("permission-user")?.value;
   const container = $("permission-dashboard-list");
+
+  if (!container) return;
+
   container.replaceChildren();
 
   if (!userId) return;
 
   const selectedUser = adminUsers.find(user => user.id === userId);
+
   if (!selectedUser) return;
 
   if (selectedUser.role === "admin") {
@@ -484,6 +589,7 @@ async function carregarPermissoesUsuario() {
       "Administradores possuem acesso a todos os dashboards.",
       "success"
     );
+
     return;
   }
 
@@ -499,14 +605,29 @@ async function carregarPermissoesUsuario() {
       (data || []).map(item => item.dashboard_id)
     );
 
+    // Carrega a lista completa de dashboards para configurar permissões.
     if (!allDashboards.length) {
-      const { data: dashboards, error: dashboardsError } = await sb
+      const {
+        data: dashboards,
+        error: dashboardsError
+      } = await sb
         .from("dashboards")
-        .select("id, name")
+        .select("id, name, description, category, url")
         .order("name");
 
       if (dashboardsError) throw dashboardsError;
+
       allDashboards = dashboards || [];
+    }
+
+    // CORREÇÃO: informa quando não há dashboards cadastrados.
+    if (!allDashboards.length) {
+      showMessage(
+        "permission-message",
+        "Cadastre pelo menos um dashboard antes de configurar acessos."
+      );
+
+      return;
     }
 
     allDashboards.forEach(dashboard => {
@@ -519,7 +640,7 @@ async function carregarPermissoesUsuario() {
       checkbox.checked = permittedIds.has(dashboard.id);
 
       const text = document.createElement("span");
-      text.textContent = dashboard.name;
+      text.textContent = dashboard.name || "Dashboard sem nome";
 
       label.append(checkbox, text);
       container.appendChild(label);
@@ -530,65 +651,82 @@ async function carregarPermissoesUsuario() {
   }
 }
 
-$("save-permissions-btn").addEventListener("click", async () => {
-  clearMessage("permission-message");
+const savePermissionsButton = $("save-permissions-btn");
 
-  const userId = $("permission-user").value;
+if (savePermissionsButton) {
+  savePermissionsButton.addEventListener("click", async () => {
+    clearMessage("permission-message");
 
-  if (!userId) {
-    showMessage("permission-message", "Selecione um usuário primeiro.");
-    return;
-  }
+    const userId = $("permission-user")?.value;
 
-  const selectedUser = adminUsers.find(user => user.id === userId);
+    if (!userId) {
+      showMessage(
+        "permission-message",
+        "Selecione um usuário primeiro."
+      );
 
-  if (!selectedUser) {
-    showMessage("permission-message", "Usuário inválido.");
-    return;
-  }
+      return;
+    }
 
-  if (selectedUser.role === "admin") {
-    showMessage(
-      "permission-message",
-      "Administradores já possuem acesso a todos os dashboards."
-    );
-    return;
-  }
+    const selectedUser = adminUsers.find(user => user.id === userId);
 
-  const button = $("save-permissions-btn");
-  setLoading(button, true, "Salvando...");
+    if (!selectedUser) {
+      showMessage("permission-message", "Usuário inválido.");
+      return;
+    }
 
-  try {
-    const dashboardIds = Array.from(
-      $("permission-dashboard-list").querySelectorAll(
-        'input[type="checkbox"]:checked'
-      )
-    ).map(checkbox => checkbox.value);
+    if (selectedUser.role === "admin") {
+      showMessage(
+        "permission-message",
+        "Administradores já possuem acesso a todos os dashboards."
+      );
 
-    await adminCall("set_permissions", {
-      user_id: userId,
-      dashboard_ids: dashboardIds
-    });
+      return;
+    }
 
-    showMessage(
-      "permission-message",
-      "Permissões salvas com sucesso!",
-      "success"
-    );
-  } catch (error) {
-    console.error("Erro ao salvar permissões:", error);
-    showMessage("permission-message", friendlyError(error));
-  } finally {
-    setLoading(button, false);
-  }
-});
+    const button = $("save-permissions-btn");
+
+    setLoading(button, true, "Salvando...");
+
+    try {
+      const dashboardIds = Array.from(
+        $("permission-dashboard-list").querySelectorAll(
+          'input[type="checkbox"]:checked'
+        )
+      ).map(checkbox => checkbox.value);
+
+      await adminCall("set_permissions", {
+        user_id: userId,
+        dashboard_ids: dashboardIds
+      });
+
+      showMessage(
+        "permission-message",
+        "Permissões salvas com sucesso!",
+        "success"
+      );
+    } catch (error) {
+      console.error("Erro ao salvar permissões:", error);
+      showMessage("permission-message", friendlyError(error));
+    } finally {
+      setLoading(button, false);
+    }
+  });
+}
 
 // ==================================================
-// LISTA ADMINISTRATIVA
+// LISTA ADMINISTRATIVA DE DASHBOARDS
 // ==================================================
+
+function atualizarListaAdministrativa() {
+  renderizarDashboardsAdministrativos();
+}
 
 function renderizarDashboardsAdministrativos() {
   const container = $("admin-dashboard-list");
+
+  if (!container) return;
+
   container.replaceChildren();
 
   allDashboards.forEach(dashboard => {
@@ -596,7 +734,7 @@ function renderizarDashboardsAdministrativos() {
     item.className = "admin-dashboard-item";
 
     const title = document.createElement("strong");
-    title.textContent = dashboard.name;
+    title.textContent = dashboard.name || "Dashboard sem nome";
 
     const description = document.createElement("p");
     description.textContent =
@@ -605,6 +743,7 @@ function renderizarDashboardsAdministrativos() {
     const editButton = document.createElement("button");
     editButton.type = "button";
     editButton.textContent = "Editar";
+
     editButton.addEventListener("click", () => {
       preencherFormularioDashboard(dashboard);
     });
@@ -616,6 +755,7 @@ function renderizarDashboardsAdministrativos() {
   if (!allDashboards.length) {
     const empty = document.createElement("p");
     empty.textContent = "Nenhum dashboard cadastrado.";
+
     container.appendChild(empty);
   }
 }
@@ -637,53 +777,61 @@ function preencherFormularioDashboard(dashboard) {
 // CADASTRAR OU ATUALIZAR DASHBOARD
 // ==================================================
 
-$("dashboard-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  clearMessage("dashboard-form-message");
+const dashboardForm = $("dashboard-form");
 
-  const button = event.submitter;
-  setLoading(button, true, "Salvando...");
+if (dashboardForm) {
+  dashboardForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    clearMessage("dashboard-form-message");
 
-  try {
-    const dashboard = {
-      id: $("dashboard-id").value.trim(),
-      name: $("dashboard-name").value.trim(),
-      description: $("dashboard-description").value.trim(),
-      category: $("dashboard-category").value,
-      url: $("dashboard-url").value.trim()
-    };
+    const button = event.submitter;
 
-    if (
-      !dashboard.id ||
-      !dashboard.name ||
-      !dashboard.description ||
-      !isSafeDashboardUrl(dashboard.url)
-    ) {
-      throw new Error(
-        "Preencha todos os campos e informe uma URL válida."
+    setLoading(button, true, "Salvando...");
+
+    try {
+      const dashboard = {
+        id: $("dashboard-id").value.trim(),
+        name: $("dashboard-name").value.trim(),
+        description: $("dashboard-description").value.trim(),
+        category: $("dashboard-category").value,
+        url: $("dashboard-url").value.trim()
+      };
+
+      if (
+        !dashboard.id ||
+        !dashboard.name ||
+        !dashboard.description ||
+        !isSafeDashboardUrl(dashboard.url)
+      ) {
+        throw new Error(
+          "Preencha todos os campos e informe uma URL válida."
+        );
+      }
+
+      const { error } = await sb
+        .from("dashboards")
+        .upsert(dashboard, { onConflict: "id" });
+
+      if (error) throw error;
+
+      showMessage(
+        "dashboard-form-message",
+        "Dashboard salvo com sucesso!",
+        "success"
       );
+
+      dashboardForm.reset();
+
+      await carregarDashboards();
+
+      if (currentProfile?.role === "admin") {
+        await carregarAdministracao();
+      }
+    } catch (error) {
+      console.error("Erro ao salvar dashboard:", error);
+      showMessage("dashboard-form-message", friendlyError(error));
+    } finally {
+      setLoading(button, false);
     }
-
-    const { error } = await sb
-      .from("dashboards")
-      .upsert(dashboard, { onConflict: "id" });
-
-    if (error) throw error;
-
-    showMessage(
-      "dashboard-form-message",
-      "Dashboard salvo com sucesso!",
-      "success"
-    );
-
-    $("dashboard-form").reset();
-
-    await carregarDashboards();
-    await carregarAdministracao();
-  } catch (error) {
-    console.error("Erro ao salvar dashboard:", error);
-    showMessage("dashboard-form-message", friendlyError(error));
-  } finally {
-    setLoading(button, false);
-  }
-});
+  });
+}
