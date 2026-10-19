@@ -21,7 +21,6 @@
 </head>
 
 <body>
-  <!-- CABEÇALHO -->
   <header class="topbar">
     <div class="header-title">
       <p class="eyebrow">GERAR / INDICADORES OPERACIONAIS</p>
@@ -52,7 +51,6 @@
   </header>
 
   <main class="container">
-    <!-- MENSAGEM DE STATUS -->
     <div
       id="mensagem"
       class="message"
@@ -194,7 +192,7 @@
       </article>
     </section>
 
-    <!-- TABELA DE VAGAS -->
+    <!-- TABELA -->
     <section class="panel table-panel">
       <div class="table-heading">
         <div>
@@ -234,10 +232,78 @@
       </div>
     </section>
 
-    <!-- RODAPÉ -->
     <footer>
       GERAR · Painel de acompanhamento de Vagas Aprendiz
     </footer>
   </main>
+
+  <!-- COMUNICA A ALTURA DO PAINEL AO PORTAL -->
+  <script>
+    (() => {
+      "use strict";
+
+      // Quando aberto fora do iframe, não precisa enviar altura.
+      if (window.parent === window) return;
+
+      let atualizacaoAgendada = false;
+      let ultimaAlturaEnviada = 0;
+
+      function calcularAltura() {
+        const body = document.body;
+        const html = document.documentElement;
+
+        return Math.ceil(Math.max(
+          body.scrollHeight,
+          body.offsetHeight,
+          html.scrollHeight,
+          html.offsetHeight
+        ));
+      }
+
+      function enviarAltura() {
+        atualizacaoAgendada = false;
+
+        const altura = calcularAltura();
+
+        if (!Number.isFinite(altura) || altura < 300) return;
+
+        // Evita mensagens repetidas quando a altura não mudou.
+        if (altura === ultimaAlturaEnviada) return;
+
+        ultimaAlturaEnviada = altura;
+
+        window.parent.postMessage(
+          {
+            type: "vagas-aprendiz-height",
+            height: altura
+          },
+          window.location.origin
+        );
+      }
+
+      function solicitarAtualizacao() {
+        if (atualizacaoAgendada) return;
+
+        atualizacaoAgendada = true;
+        requestAnimationFrame(enviarAltura);
+      }
+
+      window.addEventListener("load", solicitarAtualizacao);
+      window.addEventListener("resize", solicitarAtualizacao);
+
+      if ("ResizeObserver" in window) {
+        const observador = new ResizeObserver(solicitarAtualizacao);
+
+        observador.observe(document.documentElement);
+        observador.observe(document.body);
+      }
+
+      // Recalcula depois da inicialização e da renderização dos gráficos.
+      solicitarAtualizacao();
+      setTimeout(solicitarAtualizacao, 300);
+      setTimeout(solicitarAtualizacao, 1000);
+      setTimeout(solicitarAtualizacao, 2000);
+    })();
+  </script>
 </body>
 </html>
