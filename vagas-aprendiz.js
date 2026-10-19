@@ -1,4 +1,4 @@
-```javascript
+
 /**
  * GERAR — CONTROLE DE VAGAS APRENDIZ
  * Fonte: public.vw_vagas_aprendiz_bi
