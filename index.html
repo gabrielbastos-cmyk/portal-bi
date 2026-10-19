@@ -11,10 +11,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="script.js" defer></script>
 
   <style>
-    /* Incorporação do painel de Vagas Aprendiz */
     .vagas-embed-container {
       width: 100%;
       min-width: 0;
@@ -94,7 +94,6 @@
 
   <!-- PORTAL BI -->
   <div id="portal-section" class="app-shell" hidden>
-    <!-- MENU LATERAL -->
     <aside class="sidebar">
       <a class="brand-lockup" href="#inicio" aria-label="Portal BI início">
         <span class="brand-mark small">BI</span>
@@ -118,6 +117,16 @@
         <span class="nav-icon">▥</span> Controle de Vagas Aprendiz
       </a>
 
+      <!-- NOVO MENU: SUBSTITUIÇÕES -->
+      <a
+        class="nav-link"
+        href="#substituicoes-section"
+        id="substituicoes-nav-link"
+        hidden
+      >
+        <span class="nav-icon">↻</span> BI de Substituições
+      </a>
+
       <a
         class="nav-link"
         href="#admin-section"
@@ -134,7 +143,6 @@
       </div>
     </aside>
 
-    <!-- CONTEÚDO PRINCIPAL -->
     <main class="main-content" id="inicio">
       <header class="topbar">
         <div class="breadcrumbs">
@@ -168,16 +176,14 @@
         <div class="welcome-art" aria-hidden="true">
           <div class="art-ring ring-one"></div>
           <div class="art-ring ring-two"></div>
-
           <div class="art-bars">
             <i></i><i></i><i></i><i></i><i></i>
           </div>
-
           <div class="art-line"></div>
         </div>
       </section>
 
-      <!-- RESUMO DOS DASHBOARDS -->
+      <!-- RESUMO -->
       <section class="summary-grid" aria-label="Resumo dos dashboards">
         <article class="summary-card">
           <span class="summary-icon navy">▦</span>
@@ -256,10 +262,7 @@
       </section>
 
       <!-- CONTROLE DE VAGAS APRENDIZ -->
-      <section
-        id="vagas-aprendiz-section"
-        class="dashboard-section"
-      >
+      <section id="vagas-aprendiz-section" class="dashboard-section">
         <div class="section-heading">
           <div>
             <p class="section-kicker">INDICADORES OPERACIONAIS</p>
@@ -293,6 +296,139 @@
         </div>
       </section>
 
+      <!-- NOVO BI DE SUBSTITUIÇÕES -->
+      <section id="substituicoes-section" class="dashboard-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">INDICADORES OPERACIONAIS</p>
+            <h2>BI de Substituições</h2>
+            <p class="muted">
+              Acompanhe substituições realizadas, pendências, atrasos e resultados por subsede.
+            </p>
+          </div>
+
+          <button id="substituicoes-atualizar" type="button" class="sub-button">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <p id="substituicoes-message" role="status" aria-live="polite"></p>
+
+        <!-- FILTROS -->
+        <div class="substituicoes-filtros">
+          <label for="sub-filtro-subsede">
+            Subsede
+            <select id="sub-filtro-subsede">
+              <option value="">Todas as subsedes</option>
+            </select>
+          </label>
+
+          <label for="sub-filtro-ano">
+            Ano do fechamento
+            <select id="sub-filtro-ano">
+              <option value="">Todos os anos</option>
+            </select>
+          </label>
+
+          <label for="sub-filtro-situacao">
+            Situação
+            <select id="sub-filtro-situacao">
+              <option value="">Todas as situações</option>
+              <option value="realizada">Realizada</option>
+              <option value="pendente">Pendente</option>
+              <option value="atrasada">Em atraso</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- INDICADORES -->
+        <div class="substituicoes-kpis">
+          <article class="sub-kpi">
+            <span>Total de registros</span>
+            <strong id="sub-total">0</strong>
+          </article>
+
+          <article class="sub-kpi">
+            <span>Substituições realizadas</span>
+            <strong id="sub-realizadas">0</strong>
+          </article>
+
+          <article class="sub-kpi">
+            <span>Pendentes</span>
+            <strong id="sub-pendentes">0</strong>
+          </article>
+
+          <article class="sub-kpi">
+            <span>Em atraso</span>
+            <strong id="sub-atrasadas">0</strong>
+          </article>
+        </div>
+
+        <!-- GRÁFICOS -->
+        <div class="substituicoes-graficos">
+          <article class="sub-grafico">
+            <h3>Evolução mensal</h3>
+            <div class="sub-chart-container">
+              <canvas id="sub-grafico-mensal"></canvas>
+            </div>
+          </article>
+
+          <article class="sub-grafico">
+            <h3>Registros por subsede</h3>
+            <div class="sub-chart-container">
+              <canvas id="sub-grafico-subsede"></canvas>
+            </div>
+          </article>
+
+          <article class="sub-grafico">
+            <h3>Principais motivos</h3>
+            <div class="sub-chart-container">
+              <canvas id="sub-grafico-motivos"></canvas>
+            </div>
+          </article>
+
+          <article class="sub-grafico">
+            <h3>Situação das substituições</h3>
+            <div class="sub-chart-container sub-chart-doughnut">
+              <canvas id="sub-grafico-situacao"></canvas>
+            </div>
+          </article>
+        </div>
+
+        <!-- TABELA -->
+        <article class="substituicoes-tabela">
+          <div class="sub-tabela-heading">
+            <div>
+              <h3>Detalhamento das substituições</h3>
+              <p class="muted">Os resultados respeitam os filtros selecionados.</p>
+            </div>
+            <span id="sub-tabela-contagem" class="sub-tabela-contagem">0 registros</span>
+          </div>
+
+          <div class="sub-tabela-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subsede</th>
+                  <th>Jovem</th>
+                  <th>Empresa</th>
+                  <th>Motivo</th>
+                  <th>Fechamento</th>
+                  <th>Dias pendentes</th>
+                  <th>Prazo</th>
+                  <th>Prioridade</th>
+                </tr>
+              </thead>
+              <tbody id="sub-tabela-corpo">
+                <tr>
+                  <td colspan="8">Carregue os dados para visualizar os registros.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <!-- ADMINISTRAÇÃO -->
       <section id="admin-section" class="admin-panel" hidden>
         <div class="section-heading">
@@ -308,7 +444,6 @@
         </div>
 
         <div class="admin-grid">
-          <!-- CADASTRAR USUÁRIO -->
           <section class="admin-card">
             <h3>
               <span class="admin-card-icon">＋</span>
@@ -342,16 +477,10 @@
               </select>
 
               <button type="submit">Criar usuário</button>
-
-              <p
-                id="user-create-message"
-                role="status"
-                aria-live="polite"
-              ></p>
+              <p id="user-create-message" role="status" aria-live="polite"></p>
             </form>
           </section>
 
-          <!-- PERMISSÕES -->
           <section class="admin-card">
             <h3>
               <span class="admin-card-icon">✓</span>
@@ -359,7 +488,6 @@
             </h3>
 
             <label for="permission-user">Selecione um usuário</label>
-
             <select id="permission-user">
               <option value="">Selecione um usuário</option>
             </select>
@@ -370,24 +498,17 @@
               Salvar permissões
             </button>
 
-            <p
-              id="permission-message"
-              role="status"
-              aria-live="polite"
-            ></p>
+            <p id="permission-message" role="status" aria-live="polite"></p>
           </section>
 
-          <!-- DASHBOARDS CADASTRADOS -->
           <section class="admin-card admin-card-wide">
             <h3>
               <span class="admin-card-icon">▤</span>
               Dashboards cadastrados
             </h3>
-
             <div id="admin-dashboard-list"></div>
           </section>
 
-          <!-- CADASTRAR OU ATUALIZAR DASHBOARD -->
           <section class="admin-card admin-card-wide">
             <h3>
               <span class="admin-card-icon">＋</span>
@@ -422,45 +543,31 @@
 
               <div class="form-wide">
                 <label for="dashboard-url">URL do dashboard</label>
-                <input
-                  id="dashboard-url"
-                  type="url"
-                  required
-                >
+                <input id="dashboard-url" type="url" required>
               </div>
 
               <div class="form-wide">
                 <button type="submit">Salvar dashboard</button>
-
-                <p
-                  id="dashboard-form-message"
-                  role="status"
-                  aria-live="polite"
-                ></p>
+                <p id="dashboard-form-message" role="status" aria-live="polite"></p>
               </div>
             </form>
           </section>
         </div>
       </section>
 
-      <!-- RODAPÉ -->
       <footer class="page-footer">
-        <span>
-          Portal BI <span class="footer-separator">·</span> GERAR
-        </span>
-
+        <span>Portal BI <span class="footer-separator">·</span> GERAR</span>
         <span>Informação para melhores decisões.</span>
       </footer>
     </main>
   </div>
 
-  <!-- AJUSTE AUTOMÁTICO DA ALTURA DO PAINEL -->
+  <!-- AJUSTE AUTOMÁTICO DA ALTURA DO PAINEL DE VAGAS -->
   <script>
     (() => {
       "use strict";
 
       const iframe = document.getElementById("vagas-aprendiz-frame");
-
       if (!iframe) return;
 
       window.addEventListener("message", (event) => {
@@ -468,13 +575,10 @@
         if (event.source !== iframe.contentWindow) return;
 
         const data = event.data;
-
         if (!data || data.type !== "vagas-aprendiz-height") return;
 
         const altura = Number(data.height);
-
-        if (!Number.isFinite(altura)) return;
-        if (altura < 300 || altura > 20000) return;
+        if (!Number.isFinite(altura) || altura < 300 || altura > 20000) return;
 
         iframe.style.height = `${Math.ceil(altura)}px`;
       });
