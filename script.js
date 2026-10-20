@@ -1,4 +1,3 @@
-
 "use strict";
 
 const sb = window.sb;
@@ -185,6 +184,7 @@ async function iniciarPortal() {
       eadPaginaAtual = 1;
 
       destruirGraficosSubstituicoes();
+      destruirMapaEaD();
       mostrarLogin();
     }
   });
@@ -1224,12 +1224,12 @@ function obterRegistrosEaDFiltrados() {
 let eadMapa = null;
 let eadMapaMarcadoresMunicipios = null;
 let eadMapaMarcadoresAtendimento = null;
+let eadMapaCamadaSelecao = null;
+let eadMapaLinhaConexao = null;
 let eadMapaCarregamento = null;
 let eadMapaPreparado = false;
-let eadMapaAjustouEnquadramento = false;
+let eadMapaUltimaSelecao = "";
 
-// Coordenadas aproximadas de municípios/pontos de atendimento.
-// Marcadores não representam endereços exatos.
 const EAD_MAPA_PONTOS = [
   ["SUBSEDE","Curitiba","PR","Curitiba",-25.432956,-49.271848],
   ["POLO","São José dos Pinhais","PR","Curitiba",-25.537702,-49.200082],
@@ -1294,40 +1294,65 @@ function eadMapaPrepararElemento() {
   painel.className = "ead-mapa-painel";
   painel.style.cssText = [
     "margin:20px 0",
-    "padding:16px",
-    "border:1px solid #dce4ec",
-    "border-radius:12px",
-    "background:#fff"
+    "padding:20px",
+    "border:1px solid #d8e5f3",
+    "border-radius:16px",
+    "background:#ffffff",
+    "box-shadow:0 8px 24px rgba(20,65,110,.07)"
   ].join(";");
 
   const titulo = document.createElement("h3");
   titulo.textContent = "Mapa geográfico — EaD";
-  titulo.style.cssText = "margin:0 0 8px;font-size:18px;color:#24364b";
+  titulo.style.cssText = "margin:0 0 6px;font-size:20px;font-weight:700;color:#174a7e";
 
   const descricao = document.createElement("p");
-  descricao.textContent = "Azul: municípios da análise. Verde: subsedes. Laranja: polos. Selecione um marcador para ver os detalhes.";
-  descricao.style.cssText = "margin:0 0 12px;color:#586779;font-size:13px;line-height:1.5";
+  descricao.id = "ead-mapa-descricao";
+  descricao.textContent = "Visualize os municípios da análise e os pontos de atendimento.";
+  descricao.style.cssText = "margin:0 0 14px;color:#60758b;font-size:13px;line-height:1.6";
 
   const legenda = document.createElement("div");
-  legenda.style.cssText = "display:flex;gap:14px;flex-wrap:wrap;margin:0 0 12px;font-size:13px";
+  legenda.style.cssText = "display:flex;gap:16px;flex-wrap:wrap;margin:0 0 14px;font-size:12px;color:#334e68";
   legenda.innerHTML = [
-    '<span><span style="color:#2474c7">●</span> Município analisado</span>',
-    '<span><span style="color:#16835b">●</span> Subsede</span>',
-    '<span><span style="color:#e58a22">●</span> Polo</span>'
+    '<span><span style="color:#2474c7;font-size:16px">●</span> Município analisado</span>',
+    '<span><span style="color:#16835b;font-size:16px">●</span> Subsede</span>',
+    '<span><span style="color:#e58a22;font-size:16px">●</span> Polo</span>',
+    '<span><span style="color:#174a7e;font-size:16px">●</span> Município selecionado</span>'
   ].join("");
+
+  const conteudo = document.createElement("div");
+  conteudo.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr);gap:14px";
 
   const mapa = document.createElement("div");
   mapa.id = "ead-mapa-canvas";
   mapa.setAttribute("role", "application");
   mapa.setAttribute("aria-label", "Mapa interativo da análise geográfica EaD");
-  mapa.style.cssText = "width:100%;height:480px;min-height:320px;border-radius:8px;background:#eef2f6;z-index:1";
+  mapa.style.cssText = "width:100%;height:480px;min-height:320px;border:1px solid #dce7f2;border-radius:12px;background:#eef5fb;z-index:1;overflow:hidden";
+
+  const detalhes = document.createElement("aside");
+  detalhes.id = "ead-mapa-detalhes";
+  detalhes.style.cssText = [
+    "padding:16px",
+    "border:1px solid #dce7f2",
+    "border-radius:12px",
+    "background:#f7fbff",
+    "color:#243b53",
+    "min-height:80px"
+  ].join(";");
+
+  detalhes.innerHTML = `
+    <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Detalhes do município</h4>
+    <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
+      Digite o nome de um município no filtro acima para localizá-lo no mapa.
+    </p>
+  `;
 
   const aviso = document.createElement("p");
   aviso.id = "ead-mapa-aviso";
   aviso.textContent = "Carregando mapa...";
-  aviso.style.cssText = "font-size:12px;color:#667085;margin:10px 0 0;line-height:1.5";
+  aviso.style.cssText = "font-size:12px;color:#60758b;margin:10px 0 0;line-height:1.5";
 
-  painel.append(titulo, descricao, legenda, mapa, aviso);
+  conteudo.append(mapa, detalhes);
+  painel.append(titulo, descricao, legenda, conteudo, aviso);
 
   const tabela = section.querySelector(".ead-tabela");
   if (tabela) section.insertBefore(painel, tabela);
@@ -1337,10 +1362,68 @@ function eadMapaPrepararElemento() {
     const style = document.createElement("style");
     style.id = "ead-mapa-estilos";
     style.textContent = `
-      #ead-mapa-canvas .leaflet-popup-content { line-height:1.5; }
-      #ead-mapa-canvas .ead-popup-titulo { font-weight:700; font-size:14px; margin-bottom:5px; }
-      #ead-mapa-canvas .ead-popup-linha { margin:2px 0; }
-      #ead-mapa-canvas .ead-mapa-legenda { font-size:12px; }
+      #ead-mapa-painel .leaflet-container {
+        font-family: Arial, sans-serif;
+      }
+      #ead-mapa-canvas .leaflet-popup-content {
+        line-height: 1.5;
+        color: #243b53;
+      }
+      #ead-mapa-canvas .ead-popup-titulo {
+        font-weight: 700;
+        font-size: 14px;
+        color: #174a7e;
+        margin-bottom: 7px;
+      }
+      #ead-mapa-canvas .ead-popup-linha {
+        margin: 3px 0;
+      }
+      #ead-mapa-detalhes .ead-detalhe-grade {
+        display: grid;
+        grid-template-columns: repeat(auto-fit,minmax(145px,1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      #ead-mapa-detalhes .ead-detalhe-item {
+        background: #fff;
+        border: 1px solid #e0eaf4;
+        border-radius: 9px;
+        padding: 10px;
+        min-width: 0;
+      }
+      #ead-mapa-detalhes .ead-detalhe-label {
+        display: block;
+        font-size: 11px;
+        color: #60758b;
+        margin-bottom: 5px;
+      }
+      #ead-mapa-detalhes .ead-detalhe-valor {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        color: #174a7e;
+        overflow-wrap: anywhere;
+      }
+      #ead-mapa-painel .ead-mapa-botao {
+        border: 1px solid #c6dbef;
+        border-radius: 8px;
+        background: #fff;
+        color: #174a7e;
+        padding: 8px 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #ead-mapa-painel .ead-mapa-botao:hover {
+        background: #eaf4ff;
+      }
+      @media (max-width: 600px) {
+        #ead-mapa-canvas {
+          height: 380px !important;
+        }
+        #ead-mapa-painel {
+          padding: 12px !important;
+        }
+      }
     `;
     document.head.appendChild(style);
     eadMapaPreparado = true;
@@ -1404,13 +1487,26 @@ function eadMapaCarregarLeaflet() {
   return eadMapaCarregamento;
 }
 
-function eadMapaIcone(cor) {
+function eadMapaIcone(cor, selecionado = false) {
+  const tamanho = selecionado ? 22 : 14;
+  const borda = selecionado ? 4 : 2;
+
   return window.L.divIcon({
     className: "ead-mapa-icone",
-    html: `<div style="width:14px;height:14px;border:2px solid #fff;border-radius:50%;background:${cor};box-shadow:0 1px 5px #0006"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    popupAnchor: [0, -8]
+    html: `
+      <div style="
+        width:${tamanho}px;
+        height:${tamanho}px;
+        border:${borda}px solid #ffffff;
+        border-radius:50%;
+        background:${cor};
+        box-shadow:0 2px 9px rgba(15,45,75,.4);
+        ${selecionado ? "outline:3px solid rgba(36,116,199,.22);" : ""}
+      "></div>
+    `,
+    iconSize: [tamanho + borda * 2, tamanho + borda * 2],
+    iconAnchor: [(tamanho + borda * 2) / 2, (tamanho + borda * 2) / 2],
+    popupAnchor: [0, -(tamanho + borda * 2) / 2]
   });
 }
 
@@ -1474,7 +1570,7 @@ function eadMapaAdicionarPontosAtendimento() {
       `<div class="ead-popup-titulo">${escaparHTML(municipio)} - ${escaparHTML(uf)}</div>` +
       `<div class="ead-popup-linha"><strong>Tipo:</strong> ${escaparHTML(tipo)}</div>` +
       `<div class="ead-popup-linha"><strong>Subsede responsável:</strong> ${escaparHTML(subsede)}</div>` +
-      `<div style="font-size:11px;color:#667085;margin-top:6px">Coordenada aproximada do município.</div>`
+      `<div style="font-size:11px;color:#667085;margin-top:6px">Coordenada aproximada do município; não representa necessariamente o endereço físico.</div>`
     );
 
     marcador.addTo(eadMapaMarcadoresAtendimento);
@@ -1489,6 +1585,229 @@ function eadMapaCoordenadasValidas(r) {
     lat >= -90 && lat <= 90 &&
     lng >= -180 && lng <= 180 &&
     !(lat === 0 && lng === 0);
+}
+
+function eadMapaEncontrarPonto(r) {
+  const nomePonto = normalize(r.ponto_mais_proximo);
+  const ufPonto = normalize(r.uf_ponto);
+  const subsede = normalize(r.subsede_responsavel);
+  const tipoPonto = normalize(r.tipo_ponto);
+
+  if (!nomePonto) return null;
+
+  const candidatos = EAD_MAPA_PONTOS.filter(p => {
+    const nome = normalize(p[1]);
+    const uf = normalize(p[2]);
+    const subsedePonto = normalize(p[3]);
+    const tipo = normalize(p[0]);
+
+    const nomeCompativel =
+      nome === nomePonto ||
+      nome.includes(nomePonto) ||
+      nomePonto.includes(nome);
+
+    const ufCompativel = !ufPonto || uf === ufPonto;
+    const tipoCompativel = !tipoPonto || tipo.includes(tipoPonto) || tipoPonto.includes(tipo);
+    const subsedeCompativel = !subsede || subsedePonto === subsede ||
+      subsedePonto.includes(subsede) || subsede.includes(subsedePonto);
+
+    return nomeCompativel && ufCompativel && tipoCompativel && subsedeCompativel;
+  });
+
+  if (candidatos.length) {
+    return candidatos[0];
+  }
+
+  // Segunda tentativa: usa o nome do ponto e a UF, sem exigir tipo/subsede.
+  const alternativas = EAD_MAPA_PONTOS.filter(p =>
+    normalize(p[1]) === nomePonto &&
+    (!ufPonto || normalize(p[2]) === ufPonto)
+  );
+
+  return alternativas.length === 1 ? alternativas[0] : null;
+}
+
+function eadMapaRenderizarDetalhes(r, ponto = null) {
+  const container = $("ead-mapa-detalhes");
+  if (!container) return;
+
+  if (!r) {
+    container.innerHTML = `
+      <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Visão geral</h4>
+      <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
+        O mapa está exibindo os municípios e os pontos de atendimento. Use o filtro de município para destacar um município específico.
+      </p>
+    `;
+    return;
+  }
+
+  const distancia = numeroSeguro(r.distancia_km);
+  const potencial = numeroSeguro(r.potencial_cota);
+
+  const distanciaTexto = distancia === null
+    ? "Não informada"
+    : `${distancia.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
+
+  const potencialTexto = potencial === null
+    ? valorTexto(r.potencial_cota)
+    : potencial.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+  const itens = [
+    ["Município", `${valorTexto(r.municipio)} - ${valorTexto(r.uf)}`],
+    ["Potencial de cota", potencialTexto],
+    ["Ponto mais próximo", valorTexto(r.ponto_mais_proximo)],
+    ["UF do ponto", valorTexto(r.uf_ponto)],
+    ["Tipo de ponto", valorTexto(r.tipo_ponto)],
+    ["Subsede responsável", valorTexto(r.subsede_responsavel)],
+    ["Distância registrada", distanciaTexto],
+    ["Classificação de distância", valorTexto(r.classificacao_distancia)],
+    ["Classificação de potencial", valorTexto(r.classificacao_potencial)],
+    ["Status do cálculo", valorTexto(r.status_calculo)]
+  ];
+
+  const avisoPonto = ponto
+    ? `Ponto localizado no mapa: ${ponto[1]} - ${ponto[2]}.`
+    : "Não foi possível localizar uma coordenada correspondente ao ponto informado. A conexão não foi desenhada para evitar indicar um local incorreto.";
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <h4 style="margin:0 0 5px;color:#174a7e;font-size:16px">
+          ${escaparHTML(valorTexto(r.municipio))} - ${escaparHTML(valorTexto(r.uf))}
+        </h4>
+        <p style="margin:0;color:#60758b;font-size:12px">Detalhes do registro selecionado</p>
+      </div>
+      <button type="button" id="ead-mapa-limpar-selecao" class="ead-mapa-botao">
+        Ver mapa geral
+      </button>
+    </div>
+    <div class="ead-detalhe-grade">
+      ${itens.map(([label, value]) => `
+        <div class="ead-detalhe-item">
+          <span class="ead-detalhe-label">${escaparHTML(label)}</span>
+          <span class="ead-detalhe-valor">${escaparHTML(value)}</span>
+        </div>
+      `).join("")}
+    </div>
+    <p style="font-size:12px;line-height:1.5;color:#60758b;margin:12px 0 0">
+      ${escaparHTML(avisoPonto)}
+      A distância apresentada é a registrada na base e não representa necessariamente uma distância rodoviária.
+    </p>
+  `;
+
+  const limpar = $("ead-mapa-limpar-selecao");
+  if (limpar) {
+    limpar.addEventListener("click", () => {
+      if ($("ead-filtro-municipio")) $("ead-filtro-municipio").value = "";
+      eadPaginaAtual = 1;
+      renderizarAnaliseEaD();
+    });
+  }
+}
+
+function eadMapaLimparSelecao() {
+  if (eadMapaCamadaSelecao) eadMapaCamadaSelecao.clearLayers();
+  if (eadMapaLinhaConexao) {
+    eadMapa.removeLayer(eadMapaLinhaConexao);
+    eadMapaLinhaConexao = null;
+  }
+}
+
+function eadMapaSelecionarMunicipio(r, ajustarEnquadramento = true) {
+  if (!eadMapa || !eadMapaCamadaSelecao) return;
+
+  eadMapaLimparSelecao();
+
+  if (!r || !eadMapaCoordenadasValidas(r)) {
+    eadMapaRenderizarDetalhes(r, null);
+    return;
+  }
+
+  const lat = numeroSeguro(r.latitude_municipio);
+  const lng = numeroSeguro(r.longitude_municipio);
+  const coordenadaMunicipio = [lat, lng];
+  const ponto = eadMapaEncontrarPonto(r);
+
+  const marcadorMunicipio = window.L.marker(coordenadaMunicipio, {
+    icon: eadMapaIcone("#174a7e", true),
+    zIndexOffset: 1000,
+    title: `Selecionado: ${r.municipio} - ${r.uf}`
+  });
+
+  marcadorMunicipio.bindPopup(eadMapaPopupMunicipio(r));
+  marcadorMunicipio.addTo(eadMapaCamadaSelecao);
+
+  const coordenadasEnquadramento = [coordenadaMunicipio];
+
+  if (ponto) {
+    const coordenadaPonto = [ponto[4], ponto[5]];
+    const corPonto = ponto[0] === "SUBSEDE" ? "#16835b" : "#e58a22";
+
+    const marcadorPonto = window.L.marker(coordenadaPonto, {
+      icon: eadMapaIcone(corPonto, true),
+      zIndexOffset: 900,
+      title: `${ponto[0]} mais próximo: ${ponto[1]} - ${ponto[2]}`
+    });
+
+    marcadorPonto.bindPopup(`
+      <div class="ead-popup-titulo">${escaparHTML(ponto[1])} - ${escaparHTML(ponto[2])}</div>
+      <div class="ead-popup-linha"><strong>Tipo:</strong> ${escaparHTML(ponto[0])}</div>
+      <div class="ead-popup-linha"><strong>Subsede:</strong> ${escaparHTML(ponto[3])}</div>
+      <div style="margin-top:6px;font-size:11px;color:#60758b">
+        Coordenada aproximada do município do ponto de atendimento.
+      </div>
+    `);
+
+    marcadorPonto.addTo(eadMapaCamadaSelecao);
+
+    eadMapaLinhaConexao = window.L.polyline(
+      [coordenadaMunicipio, coordenadaPonto],
+      {
+        color: "#174a7e",
+        weight: 3,
+        opacity: 0.9,
+        dashArray: "8 7",
+        lineCap: "round"
+      }
+    ).addTo(eadMapa);
+
+    coordenadasEnquadramento.push(coordenadaPonto);
+  }
+
+  eadMapaRenderizarDetalhes(r, ponto);
+
+  if (ajustarEnquadramento) {
+    const bounds = window.L.latLngBounds(coordenadasEnquadramento);
+    eadMapa.fitBounds(bounds.pad(ponto ? 0.45 : 0.15), {
+      maxZoom: ponto ? 9 : 10,
+      animate: true
+    });
+
+    if (coordenadasEnquadramento.length === 1) {
+      eadMapa.setView(coordenadaMunicipio, 8, { animate: true });
+    }
+  }
+
+  marcadorMunicipio.openPopup();
+}
+
+function eadMapaObterSelecao(registros) {
+  const texto = normalize($("ead-filtro-municipio")?.value || "");
+  if (!texto) return null;
+
+  // Só considera selecionado quando o texto corresponde ao nome completo
+  // de um município presente nos resultados filtrados.
+  const exatos = registros.filter(r => normalize(r.municipio) === texto);
+
+  if (exatos.length === 1) return exatos[0];
+
+  // Se houver apenas um resultado e o texto identificar claramente o município,
+  // permite selecioná-lo sem exigir que o usuário digite o nome completo.
+  if (registros.length === 1 && normalize(registros[0].municipio).includes(texto)) {
+    return registros[0];
+  }
+
+  return null;
 }
 
 async function atualizarMapaEaD(registros) {
@@ -1515,6 +1834,7 @@ async function atualizarMapaEaD(registros) {
 
       eadMapaMarcadoresMunicipios = window.L.featureGroup().addTo(eadMapa);
       eadMapaMarcadoresAtendimento = window.L.featureGroup().addTo(eadMapa);
+      eadMapaCamadaSelecao = window.L.featureGroup().addTo(eadMapa);
 
       eadMapaAdicionarPontosAtendimento();
 
@@ -1537,44 +1857,91 @@ async function atualizarMapaEaD(registros) {
       });
 
       marcador.bindPopup(eadMapaPopupMunicipio(r));
+
+      marcador.on("click", () => {
+        if ($("ead-filtro-municipio")) {
+          $("ead-filtro-municipio").value = r.municipio || "";
+        }
+
+        eadPaginaAtual = 1;
+        renderizarAnaliseEaD();
+      });
+
       marcador.addTo(eadMapaMarcadoresMunicipios);
       validos++;
     });
 
-    const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
-    const todosPontos = eadMapaMarcadoresAtendimento.getLayers().length;
+    const selecao = eadMapaObterSelecao(registros);
 
-    if (!eadMapaAjustouEnquadramento) {
-      const todosMarcadores = window.L.featureGroup([
-        ...eadMapaMarcadoresAtendimento.getLayers(),
-        ...eadMapaMarcadoresMunicipios.getLayers()
-      ]);
+    if (selecao) {
+      eadMapaSelecionarMunicipio(selecao, true);
 
-      if (todosMarcadores.getLayers().length) {
-        eadMapa.fitBounds(todosMarcadores.getBounds().pad(0.08), {
-          maxZoom: 7
-        });
+      if (aviso) {
+        aviso.textContent =
+          `Município selecionado: ${selecao.municipio} - ${selecao.uf}. ` +
+          "O mapa destaca o município e o ponto mais próximo quando há correspondência nas coordenadas cadastradas.";
+      }
+    } else {
+      eadMapaLimparSelecao();
+      eadMapaRenderizarDetalhes(null);
+
+      const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
+      const todosPontos = eadMapaMarcadoresAtendimento.getLayers().length;
+
+      if (pontosVisiveis > 0) {
+        const bounds = eadMapaMarcadoresMunicipios.getBounds();
+
+        if (bounds.isValid()) {
+          eadMapa.fitBounds(bounds.pad(0.08), {
+            maxZoom: 7,
+            animate: true
+          });
+        }
+      } else if (todosPontos > 0) {
+        const bounds = eadMapaMarcadoresAtendimento.getBounds();
+        if (bounds.isValid()) {
+          eadMapa.fitBounds(bounds.pad(0.08), {
+            maxZoom: 7,
+            animate: true
+          });
+        }
+      } else {
+        eadMapa.setView([-25.5, -50.5], 6);
       }
 
-      eadMapaAjustouEnquadramento = true;
-    } else if (pontosVisiveis > 0) {
-      // Mantém o enquadramento atual ao trocar filtros para evitar saltos no mapa.
+      if (aviso) {
+        aviso.textContent =
+          `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas nos filtros atuais. ` +
+          `${todosPontos} pontos de atendimento aproximados no mapa. ` +
+          "Digite o nome completo de um município para destacá-lo.";
+      }
     }
 
     setTimeout(() => eadMapa?.invalidateSize(), 100);
-
-    if (aviso) {
-      aviso.textContent =
-        `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas exibidos. ` +
-        `${todosPontos} pontos de atendimento aproximados no mapa. ` +
-        "O mapa usa coordenadas da base e não calcula rotas rodoviárias.";
-    }
   } catch (error) {
     console.error("Erro ao carregar mapa EaD:", error);
     if (aviso) {
       aviso.textContent = "Não foi possível carregar o mapa. Confira a conexão e tente atualizar a página.";
     }
   }
+}
+
+function destruirMapaEaD() {
+  if (eadMapa) {
+    eadMapa.remove();
+  }
+
+  eadMapa = null;
+  eadMapaMarcadoresMunicipios = null;
+  eadMapaMarcadoresAtendimento = null;
+  eadMapaCamadaSelecao = null;
+  eadMapaLinhaConexao = null;
+  eadMapaCarregamento = null;
+  eadMapaPreparado = false;
+  eadMapaUltimaSelecao = "";
+
+  const painel = $("ead-mapa-painel");
+  if (painel) painel.remove();
 }
 
 // ==================================================
@@ -1611,7 +1978,6 @@ function renderizarAnaliseEaD() {
     if ($(id)) $(id).textContent = valor.toLocaleString("pt-BR");
   });
 
-  // A tabela e o mapa usam os mesmos registros filtrados.
   renderizarTabelaEaD(registros);
   atualizarMapaEaD(registros);
 }
@@ -1684,6 +2050,22 @@ function renderizarTabelaEaD(registros) {
     });
 
     tr.title = `Última atualização: ${atualizado}`;
+
+    // Clicar na linha seleciona o município no mapa e sincroniza o filtro.
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => {
+      const filtroMunicipio = $("ead-filtro-municipio");
+      if (filtroMunicipio) filtroMunicipio.value = r.municipio || "";
+
+      eadPaginaAtual = 1;
+      renderizarAnaliseEaD();
+
+      const painelMapa = $("ead-mapa-painel");
+      if (painelMapa) {
+        painelMapa.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
     tbody.appendChild(tr);
   });
 
