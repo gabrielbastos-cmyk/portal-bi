@@ -13,6 +13,16 @@ const SUB_PAGE_SIZE = 20;
 const EAD_TABLE = "ead_analise_geografica";
 const EAD_PAGE_SIZE = 20;
 
+// NOVO: cursos e protocolos EaD
+const EAD_CURSOS_TABLE = "ead_cursos_protocolos";
+const EAD_CURSOS_PAGE_SIZE = 20;
+const EAD_CURSOS_FIELDS = [
+  "id", "protocolo", "data_protocolo", "data_aprovacao",
+  "data_validade", "status", "municipio", "uf", "curso",
+  "portaria", "cbo", "faixa_etaria", "subsede", "polos",
+  "criado_em", "atualizado_em"
+];
+
 const SUB_FIELDS = [
   "id", "subsede", "cidade", "angariador", "jovem", "empresa", "motivo",
   "situacao_substituicao", "status_da_substituicao", "jovem_foi_substituido",
@@ -41,6 +51,12 @@ let subPaginaAtual = 1;
 let eadRegistros = [];
 let eadInicializado = false;
 let eadPaginaAtual = 1;
+
+// NOVO: estado independente dos protocolos
+let eadCursosRegistros = [];
+let eadCursosInicializado = false;
+let eadCursosPaginaAtual = 1;
+let eadCursosCarregando = false;
 
 // ==================================================
 // FUNÇÕES GERAIS
@@ -182,6 +198,12 @@ async function iniciarPortal() {
       eadRegistros = [];
       eadInicializado = false;
       eadPaginaAtual = 1;
+
+      // NOVO: limpar o estado dos protocolos no logout
+      eadCursosRegistros = [];
+      eadCursosInicializado = false;
+      eadCursosPaginaAtual = 1;
+      eadCursosCarregando = false;
 
       destruirGraficosSubstituicoes();
       destruirMapaEaD();
@@ -1109,7 +1131,16 @@ function configurarAcessoEaD() {
   if (allowed && !eadInicializado) {
     eadInicializado = true;
     prepararInterfaceEaD();
-    carregarAnaliseEaD().catch(error => mostrarMensagemEaD(friendlyError(error), "error"));
+
+    carregarAnaliseEaD()
+      .catch(error => mostrarMensagemEaD(friendlyError(error), "error"))
+      .finally(() => {
+        // O módulo de protocolos é independente da análise geográfica.
+        prepararInterfaceCursosEaD();
+        carregarCursosProtocolosEaD().catch(error => {
+          mostrarMensagemCursosEaD(friendlyError(error), "error");
+        });
+      });
   }
 }
 
@@ -1292,14 +1323,7 @@ function eadMapaPrepararElemento() {
   painel = document.createElement("section");
   painel.id = "ead-mapa-painel";
   painel.className = "ead-mapa-painel";
-  painel.style.cssText = [
-    "margin:20px 0",
-    "padding:20px",
-    "border:1px solid #d8e5f3",
-    "border-radius:16px",
-    "background:#ffffff",
-    "box-shadow:0 8px 24px rgba(20,65,110,.07)"
-  ].join(";");
+  painel.style.cssText = "margin:20px 0;padding:20px;border:1px solid #d8e5f3;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(20,65,110,.07)";
 
   const titulo = document.createElement("h3");
   titulo.textContent = "Mapa geográfico — EaD";
@@ -1330,21 +1354,12 @@ function eadMapaPrepararElemento() {
 
   const detalhes = document.createElement("aside");
   detalhes.id = "ead-mapa-detalhes";
-  detalhes.style.cssText = [
-    "padding:16px",
-    "border:1px solid #dce7f2",
-    "border-radius:12px",
-    "background:#f7fbff",
-    "color:#243b53",
-    "min-height:80px"
-  ].join(";");
-
+  detalhes.style.cssText = "padding:16px;border:1px solid #dce7f2;border-radius:12px;background:#f7fbff;color:#243b53;min-height:80px";
   detalhes.innerHTML = `
     <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Detalhes do município</h4>
     <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
       Digite o nome de um município no filtro acima para localizá-lo no mapa.
-    </p>
-  `;
+    </p>`;
 
   const aviso = document.createElement("p");
   aviso.id = "ead-mapa-aviso";
@@ -1362,68 +1377,17 @@ function eadMapaPrepararElemento() {
     const style = document.createElement("style");
     style.id = "ead-mapa-estilos";
     style.textContent = `
-      #ead-mapa-painel .leaflet-container {
-        font-family: Arial, sans-serif;
-      }
-      #ead-mapa-canvas .leaflet-popup-content {
-        line-height: 1.5;
-        color: #243b53;
-      }
-      #ead-mapa-canvas .ead-popup-titulo {
-        font-weight: 700;
-        font-size: 14px;
-        color: #174a7e;
-        margin-bottom: 7px;
-      }
-      #ead-mapa-canvas .ead-popup-linha {
-        margin: 3px 0;
-      }
-      #ead-mapa-detalhes .ead-detalhe-grade {
-        display: grid;
-        grid-template-columns: repeat(auto-fit,minmax(145px,1fr));
-        gap: 10px;
-        margin-top: 12px;
-      }
-      #ead-mapa-detalhes .ead-detalhe-item {
-        background: #fff;
-        border: 1px solid #e0eaf4;
-        border-radius: 9px;
-        padding: 10px;
-        min-width: 0;
-      }
-      #ead-mapa-detalhes .ead-detalhe-label {
-        display: block;
-        font-size: 11px;
-        color: #60758b;
-        margin-bottom: 5px;
-      }
-      #ead-mapa-detalhes .ead-detalhe-valor {
-        display: block;
-        font-size: 13px;
-        font-weight: 700;
-        color: #174a7e;
-        overflow-wrap: anywhere;
-      }
-      #ead-mapa-painel .ead-mapa-botao {
-        border: 1px solid #c6dbef;
-        border-radius: 8px;
-        background: #fff;
-        color: #174a7e;
-        padding: 8px 12px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      #ead-mapa-painel .ead-mapa-botao:hover {
-        background: #eaf4ff;
-      }
-      @media (max-width: 600px) {
-        #ead-mapa-canvas {
-          height: 380px !important;
-        }
-        #ead-mapa-painel {
-          padding: 12px !important;
-        }
-      }
+      #ead-mapa-painel .leaflet-container{font-family:Arial,sans-serif}
+      #ead-mapa-canvas .leaflet-popup-content{line-height:1.5;color:#243b53}
+      #ead-mapa-canvas .ead-popup-titulo{font-weight:700;font-size:14px;color:#174a7e;margin-bottom:7px}
+      #ead-mapa-canvas .ead-popup-linha{margin:3px 0}
+      #ead-mapa-detalhes .ead-detalhe-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-top:12px}
+      #ead-mapa-detalhes .ead-detalhe-item{background:#fff;border:1px solid #e0eaf4;border-radius:9px;padding:10px;min-width:0}
+      #ead-mapa-detalhes .ead-detalhe-label{display:block;font-size:11px;color:#60758b;margin-bottom:5px}
+      #ead-mapa-detalhes .ead-detalhe-valor{display:block;font-size:13px;font-weight:700;color:#174a7e;overflow-wrap:anywhere}
+      #ead-mapa-painel .ead-mapa-botao{border:1px solid #c6dbef;border-radius:8px;background:#fff;color:#174a7e;padding:8px 12px;font-weight:600;cursor:pointer}
+      #ead-mapa-painel .ead-mapa-botao:hover{background:#eaf4ff}
+      @media(max-width:600px){#ead-mapa-canvas{height:380px!important}#ead-mapa-painel{padding:12px!important}}
     `;
     document.head.appendChild(style);
     eadMapaPreparado = true;
@@ -1470,17 +1434,13 @@ function eadMapaCarregarLeaflet() {
     script.id = jsId;
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
     script.async = true;
-
-    script.onload = () => {
-      if (window.L) resolve(window.L);
-      else reject(new Error("A biblioteca Leaflet não foi inicializada."));
-    };
-
+    script.onload = () => window.L
+      ? resolve(window.L)
+      : reject(new Error("A biblioteca Leaflet não foi inicializada."));
     script.onerror = () => {
       eadMapaCarregamento = null;
       reject(new Error("Não foi possível carregar o mapa. Verifique sua conexão."));
     };
-
     document.head.appendChild(script);
   });
 
@@ -1493,17 +1453,7 @@ function eadMapaIcone(cor, selecionado = false) {
 
   return window.L.divIcon({
     className: "ead-mapa-icone",
-    html: `
-      <div style="
-        width:${tamanho}px;
-        height:${tamanho}px;
-        border:${borda}px solid #ffffff;
-        border-radius:50%;
-        background:${cor};
-        box-shadow:0 2px 9px rgba(15,45,75,.4);
-        ${selecionado ? "outline:3px solid rgba(36,116,199,.22);" : ""}
-      "></div>
-    `,
+    html: `<div style="width:${tamanho}px;height:${tamanho}px;border:${borda}px solid #fff;border-radius:50%;background:${cor};box-shadow:0 2px 9px rgba(15,45,75,.4);${selecionado ? "outline:3px solid rgba(36,116,199,.22);" : ""}"></div>`,
     iconSize: [tamanho + borda * 2, tamanho + borda * 2],
     iconAnchor: [(tamanho + borda * 2) / 2, (tamanho + borda * 2) / 2],
     popupAnchor: [0, -(tamanho + borda * 2) / 2]
@@ -1601,11 +1551,8 @@ function eadMapaEncontrarPonto(r) {
     const subsedePonto = normalize(p[3]);
     const tipo = normalize(p[0]);
 
-    const nomeCompativel =
-      nome === nomePonto ||
-      nome.includes(nomePonto) ||
-      nomePonto.includes(nome);
-
+    const nomeCompativel = nome === nomePonto ||
+      nome.includes(nomePonto) || nomePonto.includes(nome);
     const ufCompativel = !ufPonto || uf === ufPonto;
     const tipoCompativel = !tipoPonto || tipo.includes(tipoPonto) || tipoPonto.includes(tipo);
     const subsedeCompativel = !subsede || subsedePonto === subsede ||
@@ -1614,11 +1561,8 @@ function eadMapaEncontrarPonto(r) {
     return nomeCompativel && ufCompativel && tipoCompativel && subsedeCompativel;
   });
 
-  if (candidatos.length) {
-    return candidatos[0];
-  }
+  if (candidatos.length) return candidatos[0];
 
-  // Segunda tentativa: usa o nome do ponto e a UF, sem exigir tipo/subsede.
   const alternativas = EAD_MAPA_PONTOS.filter(p =>
     normalize(p[1]) === nomePonto &&
     (!ufPonto || normalize(p[2]) === ufPonto)
@@ -1636,18 +1580,15 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
       <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Visão geral</h4>
       <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
         O mapa está exibindo os municípios e os pontos de atendimento. Use o filtro de município para destacar um município específico.
-      </p>
-    `;
+      </p>`;
     return;
   }
 
   const distancia = numeroSeguro(r.distancia_km);
   const potencial = numeroSeguro(r.potencial_cota);
-
   const distanciaTexto = distancia === null
     ? "Não informada"
     : `${distancia.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
-
   const potencialTexto = potencial === null
     ? valorTexto(r.potencial_cota)
     : potencial.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -1677,23 +1618,19 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
         </h4>
         <p style="margin:0;color:#60758b;font-size:12px">Detalhes do registro selecionado</p>
       </div>
-      <button type="button" id="ead-mapa-limpar-selecao" class="ead-mapa-botao">
-        Ver mapa geral
-      </button>
+      <button type="button" id="ead-mapa-limpar-selecao" class="ead-mapa-botao">Ver mapa geral</button>
     </div>
     <div class="ead-detalhe-grade">
       ${itens.map(([label, value]) => `
         <div class="ead-detalhe-item">
           <span class="ead-detalhe-label">${escaparHTML(label)}</span>
           <span class="ead-detalhe-valor">${escaparHTML(value)}</span>
-        </div>
-      `).join("")}
+        </div>`).join("")}
     </div>
     <p style="font-size:12px;line-height:1.5;color:#60758b;margin:12px 0 0">
       ${escaparHTML(avisoPonto)}
       A distância apresentada é a registrada na base e não representa necessariamente uma distância rodoviária.
-    </p>
-  `;
+    </p>`;
 
   const limpar = $("ead-mapa-limpar-selecao");
   if (limpar) {
@@ -1755,20 +1692,12 @@ function eadMapaSelecionarMunicipio(r, ajustarEnquadramento = true) {
       <div class="ead-popup-linha"><strong>Subsede:</strong> ${escaparHTML(ponto[3])}</div>
       <div style="margin-top:6px;font-size:11px;color:#60758b">
         Coordenada aproximada do município do ponto de atendimento.
-      </div>
-    `);
-
+      </div>`);
     marcadorPonto.addTo(eadMapaCamadaSelecao);
 
     eadMapaLinhaConexao = window.L.polyline(
       [coordenadaMunicipio, coordenadaPonto],
-      {
-        color: "#174a7e",
-        weight: 3,
-        opacity: 0.9,
-        dashArray: "8 7",
-        lineCap: "round"
-      }
+      { color: "#174a7e", weight: 3, opacity: 0.9, dashArray: "8 7", lineCap: "round" }
     ).addTo(eadMapa);
 
     coordenadasEnquadramento.push(coordenadaPonto);
@@ -1795,14 +1724,9 @@ function eadMapaObterSelecao(registros) {
   const texto = normalize($("ead-filtro-municipio")?.value || "");
   if (!texto) return null;
 
-  // Só considera selecionado quando o texto corresponde ao nome completo
-  // de um município presente nos resultados filtrados.
   const exatos = registros.filter(r => normalize(r.municipio) === texto);
-
   if (exatos.length === 1) return exatos[0];
 
-  // Se houver apenas um resultado e o texto identificar claramente o município,
-  // permite selecioná-lo sem exigir que o usuário digite o nome completo.
   if (registros.length === 1 && normalize(registros[0].municipio).includes(texto)) {
     return registros[0];
   }
@@ -1823,9 +1747,7 @@ async function atualizarMapaEaD(registros) {
     if (!container) return;
 
     if (!eadMapa) {
-      eadMapa = window.L.map(container, {
-        scrollWheelZoom: false
-      }).setView([-25.5, -50.5], 6);
+      eadMapa = window.L.map(container, { scrollWheelZoom: false }).setView([-25.5, -50.5], 6);
 
       window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 18,
@@ -1835,14 +1757,12 @@ async function atualizarMapaEaD(registros) {
       eadMapaMarcadoresMunicipios = window.L.featureGroup().addTo(eadMapa);
       eadMapaMarcadoresAtendimento = window.L.featureGroup().addTo(eadMapa);
       eadMapaCamadaSelecao = window.L.featureGroup().addTo(eadMapa);
-
       eadMapaAdicionarPontosAtendimento();
 
       setTimeout(() => eadMapa?.invalidateSize(), 150);
     }
 
     eadMapaMarcadoresMunicipios.clearLayers();
-
     let validos = 0;
 
     registros.forEach(r => {
@@ -1850,19 +1770,14 @@ async function atualizarMapaEaD(registros) {
 
       const lat = numeroSeguro(r.latitude_municipio);
       const lng = numeroSeguro(r.longitude_municipio);
-
       const marcador = window.L.marker([lat, lng], {
         icon: eadMapaIcone("#2474c7"),
         title: `${r.municipio || "Município"} - ${r.uf || ""}`
       });
 
       marcador.bindPopup(eadMapaPopupMunicipio(r));
-
       marcador.on("click", () => {
-        if ($("ead-filtro-municipio")) {
-          $("ead-filtro-municipio").value = r.municipio || "";
-        }
-
+        if ($("ead-filtro-municipio")) $("ead-filtro-municipio").value = r.municipio || "";
         eadPaginaAtual = 1;
         renderizarAnaliseEaD();
       });
@@ -1875,7 +1790,6 @@ async function atualizarMapaEaD(registros) {
 
     if (selecao) {
       eadMapaSelecionarMunicipio(selecao, true);
-
       if (aviso) {
         aviso.textContent =
           `Município selecionado: ${selecao.municipio} - ${selecao.uf}. ` +
@@ -1890,21 +1804,10 @@ async function atualizarMapaEaD(registros) {
 
       if (pontosVisiveis > 0) {
         const bounds = eadMapaMarcadoresMunicipios.getBounds();
-
-        if (bounds.isValid()) {
-          eadMapa.fitBounds(bounds.pad(0.08), {
-            maxZoom: 7,
-            animate: true
-          });
-        }
+        if (bounds.isValid()) eadMapa.fitBounds(bounds.pad(0.08), { maxZoom: 7, animate: true });
       } else if (todosPontos > 0) {
         const bounds = eadMapaMarcadoresAtendimento.getBounds();
-        if (bounds.isValid()) {
-          eadMapa.fitBounds(bounds.pad(0.08), {
-            maxZoom: 7,
-            animate: true
-          });
-        }
+        if (bounds.isValid()) eadMapa.fitBounds(bounds.pad(0.08), { maxZoom: 7, animate: true });
       } else {
         eadMapa.setView([-25.5, -50.5], 6);
       }
@@ -1920,16 +1823,12 @@ async function atualizarMapaEaD(registros) {
     setTimeout(() => eadMapa?.invalidateSize(), 100);
   } catch (error) {
     console.error("Erro ao carregar mapa EaD:", error);
-    if (aviso) {
-      aviso.textContent = "Não foi possível carregar o mapa. Confira a conexão e tente atualizar a página.";
-    }
+    if (aviso) aviso.textContent = "Não foi possível carregar o mapa. Confira a conexão e tente atualizar a página.";
   }
 }
 
 function destruirMapaEaD() {
-  if (eadMapa) {
-    eadMapa.remove();
-  }
+  if (eadMapa) eadMapa.remove();
 
   eadMapa = null;
   eadMapaMarcadoresMunicipios = null;
@@ -2017,7 +1916,6 @@ function renderizarTabelaEaD(registros) {
 
   ordenados.slice(inicio, fim).forEach(r => {
     const tr = document.createElement("tr");
-
     const distancia = numeroSeguro(r.distancia_km);
     const potencial = numeroSeguro(r.potencial_cota);
 
@@ -2032,17 +1930,9 @@ function renderizarTabelaEaD(registros) {
     const atualizado = r.atualizado_em ? formatarDataEaD(r.atualizado_em) : "—";
 
     [
-      r.municipio,
-      r.uf,
-      potencialFormatado,
-      r.ponto_mais_proximo,
-      r.uf_ponto,
-      r.tipo_ponto,
-      r.subsede_responsavel,
-      distanciaFormatada,
-      r.classificacao_distancia,
-      r.classificacao_potencial,
-      r.status_calculo
+      r.municipio, r.uf, potencialFormatado, r.ponto_mais_proximo,
+      r.uf_ponto, r.tipo_ponto, r.subsede_responsavel, distanciaFormatada,
+      r.classificacao_distancia, r.classificacao_potencial, r.status_calculo
     ].forEach(valor => {
       const td = document.createElement("td");
       td.textContent = valorTexto(valor);
@@ -2050,20 +1940,16 @@ function renderizarTabelaEaD(registros) {
     });
 
     tr.title = `Última atualização: ${atualizado}`;
-
-    // Clicar na linha seleciona o município no mapa e sincroniza o filtro.
     tr.style.cursor = "pointer";
+
     tr.addEventListener("click", () => {
       const filtroMunicipio = $("ead-filtro-municipio");
       if (filtroMunicipio) filtroMunicipio.value = r.municipio || "";
-
       eadPaginaAtual = 1;
       renderizarAnaliseEaD();
 
       const painelMapa = $("ead-mapa-painel");
-      if (painelMapa) {
-        painelMapa.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      if (painelMapa) painelMapa.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
     tbody.appendChild(tr);
@@ -2091,4 +1977,559 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 
   if (anterior) anterior.disabled = eadPaginaAtual <= 1;
   if (proxima) proxima.disabled = eadPaginaAtual >= totalPaginas || total === 0;
+}
+
+// ==================================================
+// NOVO MÓDULO — CURSOS E PROTOCOLOS EaD
+// ==================================================
+
+function mostrarMensagemCursosEaD(message, type = "success") {
+  const el = $("ead-cursos-message");
+  if (!el) return;
+  el.textContent = message;
+  el.className = type === "error" ? "message-error" : "message-success";
+}
+
+function chaveMunicipioUF(municipio, uf) {
+  return `${normalize(municipio)}|${normalize(uf)}`;
+}
+
+function dataValidaCursosEaD(value) {
+  if (!value) return null;
+
+  // Evita interpretar uma data sem horário como o dia anterior por fuso horário.
+  const texto = String(value).trim();
+  const match = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (match) {
+    const ano = Number(match[1]);
+    const mes = Number(match[2]) - 1;
+    const dia = Number(match[3]);
+    const data = new Date(ano, mes, dia);
+    return Number.isNaN(data.getTime()) ? null : data;
+  }
+
+  const data = new Date(value);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function formatarDataCursosEaD(value) {
+  const data = dataValidaCursosEaD(value);
+  return data ? data.toLocaleDateString("pt-BR") : "—";
+}
+
+function normalizarStatusCursoEaD(registro) {
+  const status = normalize(registro.status);
+  const validade = dataValidaCursosEaD(registro.data_validade);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  if (
+    status.includes("vencido") ||
+    status.includes("expirado") ||
+    (validade && validade < hoje)
+  ) {
+    return "Vencido";
+  }
+
+  if (status.includes("reprov")) return "Reprovado";
+  if (status.includes("pendente")) return "Pendente";
+  if (status.includes("analise") || status.includes("em análise")) return "Em análise";
+  if (status.includes("aprov") || status.includes("valid") || status === "ativo") return "Aprovado";
+
+  return valorTexto(registro.status, "Não informado");
+}
+
+function protocoloEstaAprovadoEaD(registro) {
+  return normalize(normalizarStatusCursoEaD(registro)) === "aprovado";
+}
+
+function protocoloEstaVencidoEaD(registro) {
+  return normalize(normalizarStatusCursoEaD(registro)) === "vencido";
+}
+
+function prepararInterfaceCursosEaD() {
+  const section = $("ead-section");
+  if (!section) return;
+
+  let painel = $("ead-cursos-painel");
+
+  if (!painel) {
+    painel = document.createElement("section");
+    painel.id = "ead-cursos-painel";
+    painel.className = "ead-cursos-painel";
+    painel.style.cssText = [
+      "margin:24px 0",
+      "padding:20px",
+      "border:1px solid #d8e5f3",
+      "border-radius:16px",
+      "background:#fff",
+      "box-shadow:0 8px 24px rgba(20,65,110,.07)"
+    ].join(";");
+
+    // Insere o módulo depois da tabela geográfica, sem substituir o mapa.
+    const tabela = section.querySelector(".ead-tabela");
+    if (tabela?.parentElement) {
+      tabela.parentElement.insertAdjacentElement("afterend", painel);
+    } else {
+      section.appendChild(painel);
+    }
+  }
+
+  if (!$("ead-cursos-conteudo")) {
+    painel.replaceChildren();
+
+    const titulo = document.createElement("h3");
+    titulo.textContent = "Cursos e Protocolos EaD";
+    titulo.style.cssText = "margin:0 0 6px;color:#174a7e;font-size:21px";
+
+    const descricao = document.createElement("p");
+    descricao.textContent = "Consulte os protocolos cadastrados, suas validades e os dados geográficos relacionados ao município.";
+    descricao.style.cssText = "margin:0 0 18px;color:#60758b;font-size:13px;line-height:1.6";
+
+    const atualizar = document.createElement("button");
+    atualizar.type = "button";
+    atualizar.id = "ead-cursos-atualizar";
+    atualizar.textContent = "Atualizar protocolos";
+    atualizar.style.cssText = "border:0;border-radius:8px;background:#174a7e;color:#fff;padding:10px 14px;font-weight:600;cursor:pointer;margin-bottom:16px";
+
+    const mensagem = document.createElement("p");
+    mensagem.id = "ead-cursos-message";
+    mensagem.setAttribute("role", "status");
+    mensagem.style.cssText = "font-size:13px;margin:8px 0 14px;color:#60758b";
+
+    const indicadores = document.createElement("div");
+    indicadores.id = "ead-cursos-indicadores";
+    indicadores.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px";
+
+    const cards = [
+      ["ead-cursos-total", "Total de protocolos"],
+      ["ead-cursos-aprovados", "Aprovados / válidos"],
+      ["ead-cursos-vencidos", "Protocolos vencidos"],
+      ["ead-cursos-municipios", "Municípios cadastrados"]
+    ];
+
+    cards.forEach(([id, label]) => {
+      const card = document.createElement("article");
+      card.style.cssText = "border:1px solid #e0eaf4;border-radius:12px;padding:15px;background:#f7fbff";
+
+      const nome = document.createElement("p");
+      nome.textContent = label;
+      nome.style.cssText = "font-size:12px;color:#60758b;margin:0 0 8px";
+
+      const valor = document.createElement("strong");
+      valor.id = id;
+      valor.textContent = "0";
+      valor.style.cssText = "font-size:25px;color:#174a7e";
+
+      card.append(nome, valor);
+      indicadores.appendChild(card);
+    });
+
+    const filtros = document.createElement("div");
+    filtros.id = "ead-cursos-filtros";
+    filtros.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px";
+
+    const definicoes = [
+      ["ead-cursos-filtro-subsede", "Subsede", "Todas as subsedes", "select"],
+      ["ead-cursos-filtro-polo", "Polo", "Todos os polos", "select"],
+      ["ead-cursos-filtro-municipio", "Município", "Todos os municípios", "select"],
+      ["ead-cursos-filtro-curso", "Curso", "Todos os cursos", "select"],
+      ["ead-cursos-filtro-status", "Status", "Todos os status", "select"]
+    ];
+
+    definicoes.forEach(([id, label, placeholder, tipo]) => {
+      const grupo = document.createElement("label");
+      grupo.style.cssText = "display:flex;flex-direction:column;gap:6px;font-size:12px;color:#52677d;font-weight:600";
+
+      const texto = document.createElement("span");
+      texto.textContent = label;
+
+      const select = document.createElement("select");
+      select.id = id;
+      select.setAttribute("aria-label", label);
+      select.style.cssText = "width:100%;min-width:0;padding:10px;border:1px solid #d5e1ee;border-radius:8px;background:#fff;color:#243b53;font:inherit";
+
+      const opcao = document.createElement("option");
+      opcao.value = "";
+      opcao.textContent = placeholder;
+      select.appendChild(opcao);
+
+      grupo.append(texto, select);
+      filtros.appendChild(grupo);
+    });
+
+    const tabelaWrapper = document.createElement("div");
+    tabelaWrapper.style.cssText = "width:100%;overflow-x:auto;border:1px solid #e0eaf4;border-radius:10px";
+
+    const tabela = document.createElement("table");
+    tabela.id = "ead-cursos-tabela";
+    tabela.style.cssText = "width:100%;min-width:1450px;border-collapse:collapse;font-size:12px";
+
+    const cabecalho = document.createElement("thead");
+    const trCabecalho = document.createElement("tr");
+    trCabecalho.style.cssText = "background:#edf4fb;color:#174a7e;text-align:left";
+
+    [
+      "Protocolo", "Município / UF", "Curso", "Status",
+      "Data do protocolo", "Aprovação", "Validade", "Portaria",
+      "CBO", "Faixa etária", "Subsede", "Polos",
+      "Potencial de cota", "Distância", "Classificação da distância",
+      "Subsede responsável"
+    ].forEach(texto => {
+      const th = document.createElement("th");
+      th.textContent = texto;
+      th.style.cssText = "padding:12px 10px;border-bottom:1px solid #d5e1ee;white-space:nowrap";
+      trCabecalho.appendChild(th);
+    });
+
+    cabecalho.appendChild(trCabecalho);
+
+    const tbody = document.createElement("tbody");
+    tbody.id = "ead-cursos-tabela-corpo";
+
+    tabela.append(cabecalho, tbody);
+    tabelaWrapper.appendChild(tabela);
+
+    const paginacao = document.createElement("div");
+    paginacao.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px";
+
+    const info = document.createElement("span");
+    info.id = "ead-cursos-paginacao-info";
+    info.textContent = "Nenhum protocolo para exibir.";
+    info.style.cssText = "font-size:12px;color:#60758b";
+
+    const botoes = document.createElement("div");
+    botoes.style.cssText = "display:flex;gap:8px";
+
+    const anterior = document.createElement("button");
+    anterior.id = "ead-cursos-pagina-anterior";
+    anterior.type = "button";
+    anterior.textContent = "Anterior";
+    anterior.disabled = true;
+
+    const proxima = document.createElement("button");
+    proxima.id = "ead-cursos-pagina-proxima";
+    proxima.type = "button";
+    proxima.textContent = "Próxima";
+    proxima.disabled = true;
+
+    [anterior, proxima].forEach(botao => {
+      botao.style.cssText = "border:1px solid #c6dbef;border-radius:8px;background:#fff;color:#174a7e;padding:8px 12px;cursor:pointer";
+    });
+
+    botoes.append(anterior, proxima);
+    paginacao.append(info, botoes);
+
+    const conteudo = document.createElement("div");
+    conteudo.id = "ead-cursos-conteudo";
+    conteudo.append(mensagem, indicadores, filtros, tabelaWrapper, paginacao);
+
+    painel.append(titulo, descricao, atualizar, conteudo);
+  }
+
+  // Os eventos são registrados apenas uma vez por elemento.
+  const botaoAtualizar = $("ead-cursos-atualizar");
+  if (botaoAtualizar && !botaoAtualizar.dataset.eventoConfigurado) {
+    botaoAtualizar.dataset.eventoConfigurado = "true";
+    botaoAtualizar.addEventListener("click", async () => {
+      setLoading(botaoAtualizar, true, "Atualizando...");
+      try {
+        await carregarCursosProtocolosEaD();
+      } catch (error) {
+        mostrarMensagemCursosEaD(friendlyError(error), "error");
+      } finally {
+        setLoading(botaoAtualizar, false);
+      }
+    });
+  }
+
+  [
+    "ead-cursos-filtro-subsede",
+    "ead-cursos-filtro-polo",
+    "ead-cursos-filtro-municipio",
+    "ead-cursos-filtro-curso",
+    "ead-cursos-filtro-status"
+  ].forEach(id => {
+    const elemento = $(id);
+    if (elemento && !elemento.dataset.eventoConfigurado) {
+      elemento.dataset.eventoConfigurado = "true";
+      elemento.addEventListener("change", () => {
+        eadCursosPaginaAtual = 1;
+        renderizarCursosProtocolosEaD();
+      });
+    }
+  });
+
+  const anterior = $("ead-cursos-pagina-anterior");
+  if (anterior && !anterior.dataset.eventoConfigurado) {
+    anterior.dataset.eventoConfigurado = "true";
+    anterior.addEventListener("click", () => {
+      if (eadCursosPaginaAtual > 1) {
+        eadCursosPaginaAtual--;
+        renderizarCursosProtocolosEaD();
+      }
+    });
+  }
+
+  const proxima = $("ead-cursos-pagina-proxima");
+  if (proxima && !proxima.dataset.eventoConfigurado) {
+    proxima.dataset.eventoConfigurado = "true";
+    proxima.addEventListener("click", () => {
+      const totalPaginas = Math.max(
+        1,
+        Math.ceil(obterCursosProtocolosFiltradosEaD().length / EAD_CURSOS_PAGE_SIZE)
+      );
+
+      if (eadCursosPaginaAtual < totalPaginas) {
+        eadCursosPaginaAtual++;
+        renderizarCursosProtocolosEaD();
+      }
+    });
+  }
+}
+
+async function carregarCursosProtocolosEaD() {
+  if (!sb || !currentUser || !currentProfile || eadCursosCarregando) return;
+
+  eadCursosCarregando = true;
+  mostrarMensagemCursosEaD("Carregando cursos e protocolos EaD...");
+
+  try {
+    const registros = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await sb
+        .from(EAD_CURSOS_TABLE)
+        .select(EAD_CURSOS_FIELDS.join(","))
+        .order("municipio")
+        .range(offset, offset + pageSize - 1);
+
+      if (error) throw error;
+
+      const pagina = data || [];
+      registros.push(...pagina);
+
+      if (pagina.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    eadCursosRegistros = registros;
+    eadCursosPaginaAtual = 1;
+    preencherFiltrosCursosEaD();
+    renderizarCursosProtocolosEaD();
+
+    mostrarMensagemCursosEaD(
+      `${eadCursosRegistros.length.toLocaleString("pt-BR")} protocolos carregados.`
+    );
+  } catch (error) {
+    // O erro deste módulo não deve interromper o mapa nem a análise geográfica.
+    console.error("Erro ao carregar cursos e protocolos EaD:", error);
+    mostrarMensagemCursosEaD(
+      `Não foi possível carregar os protocolos: ${friendlyError(error)}`,
+      "error"
+    );
+  } finally {
+    eadCursosCarregando = false;
+  }
+}
+
+function preencherFiltrosCursosEaD() {
+  preencherSelectDinamico({
+    id: "ead-cursos-filtro-subsede",
+    values: eadCursosRegistros.map(r => r.subsede),
+    placeholder: "Todas as subsedes"
+  });
+
+  const polos = eadCursosRegistros.flatMap(r =>
+    String(r.polos ?? "")
+      .split(/[;,|\n]/)
+      .map(p => p.trim())
+      .filter(Boolean)
+  );
+
+  preencherSelectDinamico({
+    id: "ead-cursos-filtro-polo",
+    values: polos,
+    placeholder: "Todos os polos"
+  });
+
+  preencherSelectDinamico({
+    id: "ead-cursos-filtro-municipio",
+    values: eadCursosRegistros.map(r => r.municipio),
+    placeholder: "Todos os municípios"
+  });
+
+  preencherSelectDinamico({
+    id: "ead-cursos-filtro-curso",
+    values: eadCursosRegistros.map(r => r.curso),
+    placeholder: "Todos os cursos"
+  });
+
+  preencherSelectDinamico({
+    id: "ead-cursos-filtro-status",
+    values: eadCursosRegistros.map(normalizarStatusCursoEaD),
+    placeholder: "Todos os status"
+  });
+}
+
+function obterRegistrosCursosProtocolosFiltradosEaD() {
+  return obterCursosProtocolosFiltradosEaD();
+}
+
+function obterCursosProtocolosFiltradosEaD() {
+  const subsede = normalize($("ead-cursos-filtro-subsede")?.value || "");
+  const polo = normalize($("ead-cursos-filtro-polo")?.value || "");
+  const municipio = normalize($("ead-cursos-filtro-municipio")?.value || "");
+  const curso = normalize($("ead-cursos-filtro-curso")?.value || "");
+  const status = normalize($("ead-cursos-filtro-status")?.value || "");
+
+  return eadCursosRegistros.filter(r => {
+    const polosRegistro = normalize(r.polos || "");
+    const statusRegistro = normalize(normalizarStatusCursoEaD(r));
+
+    return (!subsede || normalize(r.subsede) === subsede) &&
+      (!polo || polosRegistro.split(/[;,|\n]/).some(p => normalize(p) === polo)) &&
+      (!municipio || normalize(r.municipio) === municipio) &&
+      (!curso || normalize(r.curso) === curso) &&
+      (!status || statusRegistro === status);
+  });
+}
+
+function criarCelulaCursoEaD(valor, titulo = "") {
+  const td = document.createElement("td");
+  td.textContent = valorTexto(valor);
+  td.style.cssText = "padding:10px;border-bottom:1px solid #e7eef5;vertical-align:top";
+  if (titulo) td.title = titulo;
+  return td;
+}
+
+function renderizarCursosProtocolosEaD() {
+  const tbody = $("ead-cursos-tabela-corpo");
+  if (!tbody) return;
+
+  const registros = obterCursosProtocolosFiltradosEaD();
+  const total = registros.length;
+  const totalPaginas = Math.max(1, Math.ceil(total / EAD_CURSOS_PAGE_SIZE));
+
+  if (eadCursosPaginaAtual > totalPaginas) eadCursosPaginaAtual = totalPaginas;
+  if (eadCursosPaginaAtual < 1) eadCursosPaginaAtual = 1;
+
+  // Relaciona por município + UF, evitando cruzar municípios homônimos.
+  const mapaGeografico = new Map();
+
+  eadRegistros.forEach(r => {
+    const chave = chaveMunicipioUF(r.municipio, r.uf);
+    if (chave !== "|") mapaGeografico.set(chave, r);
+  });
+
+  const aprovados = eadCursosRegistros.filter(protocoloEstaAprovadoEaD).length;
+  const vencidos = eadCursosRegistros.filter(protocoloEstaVencidoEaD).length;
+  const municipios = new Set(
+    eadCursosRegistros
+      .map(r => chaveMunicipioUF(r.municipio, r.uf))
+      .filter(chave => chave !== "|")
+  ).size;
+
+  const indicadores = {
+    "ead-cursos-total": eadCursosRegistros.length,
+    "ead-cursos-aprovados": aprovados,
+    "ead-cursos-vencidos": vencidos,
+    "ead-cursos-municipios": municipios
+  };
+
+  Object.entries(indicadores).forEach(([id, valor]) => {
+    if ($(id)) $(id).textContent = Number(valor).toLocaleString("pt-BR");
+  });
+
+  tbody.replaceChildren();
+
+  if (!total) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 16;
+    td.textContent = "Nenhum protocolo encontrado para os filtros selecionados.";
+    td.style.cssText = "padding:18px;text-align:center;color:#60758b";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    atualizarPaginacaoCursosEaD(0, 0, 0, 1);
+    return;
+  }
+
+  const inicio = (eadCursosPaginaAtual - 1) * EAD_CURSOS_PAGE_SIZE;
+  const fim = Math.min(inicio + EAD_CURSOS_PAGE_SIZE, total);
+
+  registros.slice(inicio, fim).forEach(r => {
+    const tr = document.createElement("tr");
+    const geo = mapaGeografico.get(chaveMunicipioUF(r.municipio, r.uf));
+    const distancia = geo ? numeroSeguro(geo.distancia_km) : null;
+    const potencial = geo ? numeroSeguro(geo.potencial_cota) : null;
+
+    const distanciaTexto = distancia === null
+      ? "Sem correspondência geográfica"
+      : `${distancia.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
+
+    const potencialTexto = potencial === null
+      ? "—"
+      : potencial.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+    const status = normalizarStatusCursoEaD(r);
+    const statusCell = criarCelulaCursoEaD(status);
+
+    statusCell.style.fontWeight = "700";
+    if (status === "Aprovado") statusCell.style.color = "#16835b";
+    else if (status === "Vencido" || status === "Reprovado") statusCell.style.color = "#c94c4c";
+    else statusCell.style.color = "#9a6700";
+
+    const valores = [
+      r.protocolo,
+      `${valorTexto(r.municipio)} / ${valorTexto(r.uf)}`,
+      r.curso,
+      null,
+      formatarDataCursosEaD(r.data_protocolo),
+      formatarDataCursosEaD(r.data_aprovacao),
+      formatarDataCursosEaD(r.data_validade),
+      r.portaria,
+      r.cbo,
+      r.faixa_etaria,
+      r.subsede,
+      r.polos,
+      potencialTexto,
+      distanciaTexto,
+      geo?.classificacao_distancia || "Sem correspondência geográfica",
+      geo?.subsede_responsavel || "Sem correspondência geográfica"
+    ];
+
+    valores.forEach((valor, index) => {
+      if (index === 3) tr.appendChild(statusCell);
+      else tr.appendChild(criarCelulaCursoEaD(valor));
+    });
+
+    if (geo) {
+      tr.title = `Dados geográficos do município: ${valorTexto(geo.municipio)} - ${valorTexto(geo.uf)}. Distância registrada: ${distanciaTexto}.`;
+    } else {
+      tr.title = "Não foi encontrado município com a mesma combinação de município e UF na análise geográfica.";
+    }
+
+    tbody.appendChild(tr);
+  });
+
+  atualizarPaginacaoCursosEaD(total, inicio + 1, fim, totalPaginas);
+}
+
+function atualizarPaginacaoCursosEaD(total, primeiro, ultimo, totalPaginas) {
+  const info = $("ead-cursos-paginacao-info");
+  const anterior = $("ead-cursos-pagina-anterior");
+  const proxima = $("ead-cursos-pagina-proxima");
+
+  if (info) {
+    info.textContent = total
+      ? `Exibindo ${primeiro}–${ultimo} de ${total.toLocaleString("pt-BR")} protocolos · Página ${eadCursosPaginaAtual} de ${totalPaginas}`
+      : "Nenhum protocolo para exibir.";
+  }
+
+  if (anterior) anterior.disabled = eadCursosPaginaAtual <= 1;
+  if (proxima) proxima.disabled = eadCursosPaginaAtual >= totalPaginas || total === 0;
 }
