@@ -30,7 +30,8 @@ const EAD_FIELDS = [
   "id", "municipio", "uf", "potencial_cota", "latitude_municipio",
   "longitude_municipio", "ponto_mais_proximo", "uf_ponto", "tipo_ponto",
   "subsede_responsavel", "distancia_km", "classificacao_distancia",
-  "classificacao_potencial", "status_calculo", "atualizado_em"
+  "classificacao_potencial", "status_calculo", "atualizado_em",
+  "cursos_validados", "protocolos"
 ];
 
 let subRegistros = [];
@@ -1184,8 +1185,10 @@ async function carregarAnaliseEaD() {
       .range(offset, offset + pageSize - 1);
 
     if (error) throw error;
+
     const pagina = data || [];
     registros.push(...pagina);
+
     if (pagina.length < pageSize) break;
     offset += pageSize;
   }
@@ -1194,6 +1197,7 @@ async function carregarAnaliseEaD() {
   eadPaginaAtual = 1;
   preencherFiltrosEaD();
   renderizarAnaliseEaD();
+
   mostrarMensagemEaD(`${eadRegistros.length.toLocaleString("pt-BR")} municípios carregados.`);
 }
 
@@ -1552,6 +1556,224 @@ function escaparHTML(value) {
   }[char]));
 }
 
+// ==================================================
+// EaD — CONVERSÃO E EXIBIÇÃO DE CURSOS E PROTOCOLOS
+// ==================================================
+
+function eadConverterLista(valor) {
+  if (Array.isArray(valor)) return valor;
+
+  if (valor && typeof valor === "object") {
+    return [valor];
+  }
+
+  if (typeof valor === "string" && valor.trim()) {
+    try {
+      const convertido = JSON.parse(valor);
+
+      if (Array.isArray(convertido)) return convertido;
+      if (convertido && typeof convertido === "object") return [convertido];
+
+      return convertido ? [convertido] : [];
+    } catch {
+      return [valor.trim()];
+    }
+  }
+
+  return [];
+}
+
+function eadRotuloCampo(campo) {
+  const rotulos = {
+    curso: "Curso",
+    nome_curso: "Nome do curso",
+    curso_nome: "Nome do curso",
+    modalidade: "Modalidade",
+    carga_horaria: "Carga horária",
+    status: "Status",
+    situacao: "Situação",
+    protocolo: "Protocolo",
+    numero_protocolo: "Número do protocolo",
+    numero: "Número",
+    portaria: "Portaria",
+    cbo: "CBO",
+    codigo_cbo: "Código CBO",
+    faixa_etaria: "Faixa etária",
+    data_protocolo: "Data do protocolo",
+    data_validacao: "Data da validação",
+    data_validacao_curso: "Data da validação",
+    data_aprovacao: "Data da aprovação",
+    data_inicio_validade: "Início da validade",
+    data_fim_validade: "Fim da validade",
+    data_validade: "Validade",
+    validade: "Validade",
+    inicio_validade: "Início da validade",
+    fim_validade: "Fim da validade",
+    observacao: "Observação",
+    observacao_protocolo: "Observação do protocolo",
+    municipio: "Município",
+    uf: "UF"
+  };
+
+  const chave = String(campo ?? "");
+  const chaveNormalizada = normalize(chave).replace(/[\s-]+/g, "_");
+
+  if (rotulos[chaveNormalizada]) return rotulos[chaveNormalizada];
+
+  return chave
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, letra => letra.toUpperCase());
+}
+
+function eadFormatarValorDetalhe(campo, valor) {
+  if (valor === null || valor === undefined || valor === "") {
+    return "Não informado";
+  }
+
+  if (typeof valor === "boolean") {
+    return valor ? "Sim" : "Não";
+  }
+
+  if (Array.isArray(valor)) {
+    return valor
+      .map(item => eadFormatarValorDetalhe(campo, item))
+      .filter(Boolean)
+      .join(", ") || "Não informado";
+  }
+
+  if (typeof valor === "object") {
+    return Object.entries(valor)
+      .map(([chave, conteudo]) =>
+        `${eadRotuloCampo(chave)}: ${eadFormatarValorDetalhe(chave, conteudo)}`
+      )
+      .join(" · ") || "Não informado";
+  }
+
+  const texto = String(valor).trim();
+  if (!texto) return "Não informado";
+
+  const campoNormalizado = normalize(campo);
+  const pareceData =
+    campoNormalizado.includes("data") ||
+    campoNormalizado.includes("validade") ||
+    campoNormalizado.includes("inicio") ||
+    campoNormalizado.includes("fim");
+
+  if (pareceData && /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(texto)) {
+    const partes = texto.slice(0, 10).split("-");
+
+    if (partes.length === 3) {
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+  }
+
+  return texto;
+}
+
+function eadRegistroTemInformacao(registro) {
+  if (registro === null || registro === undefined) return false;
+
+  if (typeof registro !== "object") {
+    return String(registro).trim() !== "";
+  }
+
+  return Object.values(registro).some(valor => {
+    if (valor === null || valor === undefined) return false;
+    if (typeof valor === "string" && !valor.trim()) return false;
+    if (Array.isArray(valor)) return valor.length > 0;
+    return true;
+  });
+}
+
+function eadHtmlCartoesInformacoes(registro) {
+  if (registro === null || registro === undefined) return "";
+
+  if (typeof registro !== "object") {
+    return `
+      <div class="ead-detalhe-item">
+        <span class="ead-detalhe-valor">
+          ${escaparHTML(eadFormatarValorDetalhe("", registro))}
+        </span>
+      </div>
+    `;
+  }
+
+  return Object.entries(registro)
+    .filter(([, valor]) =>
+      valor !== null &&
+      valor !== undefined &&
+      valor !== "" &&
+      !(Array.isArray(valor) && valor.length === 0)
+    )
+    .map(([campo, valor]) => `
+      <div class="ead-detalhe-item">
+        <span class="ead-detalhe-label">${escaparHTML(eadRotuloCampo(campo))}</span>
+        <span class="ead-detalhe-valor">${escaparHTML(eadFormatarValorDetalhe(campo, valor))}</span>
+      </div>
+    `)
+    .join("");
+}
+
+function eadHtmlSecaoRegistros(titulo, registros, tipo) {
+  const lista = eadConverterLista(registros).filter(eadRegistroTemInformacao);
+
+  const cards = lista.map((registro, indice) => {
+    const numero = lista.length > 1 ? ` ${indice + 1}` : "";
+
+    return `
+      <article style="
+        background:#ffffff;
+        border:1px solid #dce7f2;
+        border-radius:10px;
+        padding:13px;
+        margin-top:10px
+      ">
+        <h5 style="margin:0 0 10px;color:#174a7e;font-size:13px">
+          ${escaparHTML(tipo)}${numero}
+        </h5>
+        <div class="ead-detalhe-grade">
+          ${eadHtmlCartoesInformacoes(registro)}
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <section style="margin-top:22px">
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        flex-wrap:wrap;
+        border-bottom:1px solid #dce7f2;
+        padding-bottom:9px
+      ">
+        <h4 style="margin:0;color:#174a7e;font-size:15px">
+          ${escaparHTML(titulo)}
+        </h4>
+        <span style="
+          background:#eaf4ff;
+          color:#174a7e;
+          padding:5px 9px;
+          border-radius:20px;
+          font-size:12px;
+          font-weight:700
+        ">
+          ${lista.length} ${lista.length === 1 ? "registro" : "registros"}
+        </span>
+      </div>
+
+      ${cards || `
+        <p style="margin:10px 0 0;color:#60758b;font-size:13px;line-height:1.6">
+          Nenhum registro de ${escaparHTML(titulo.toLowerCase())}
+          foi encontrado para este município.
+        </p>
+      `}
+    </section>
+  `;
+}
+
 function eadMapaAdicionarPontosAtendimento() {
   if (!eadMapa || !eadMapaMarcadoresAtendimento) return;
 
@@ -1614,11 +1836,8 @@ function eadMapaEncontrarPonto(r) {
     return nomeCompativel && ufCompativel && tipoCompativel && subsedeCompativel;
   });
 
-  if (candidatos.length) {
-    return candidatos[0];
-  }
+  if (candidatos.length) return candidatos[0];
 
-  // Segunda tentativa: usa o nome do ponto e a UF, sem exigir tipo/subsede.
   const alternativas = EAD_MAPA_PONTOS.filter(p =>
     normalize(p[1]) === nomePonto &&
     (!ufPonto || normalize(p[2]) === ufPonto)
@@ -1626,6 +1845,10 @@ function eadMapaEncontrarPonto(r) {
 
   return alternativas.length === 1 ? alternativas[0] : null;
 }
+
+// ==================================================
+// EaD — DETALHES DO MUNICÍPIO SELECIONADO
+// ==================================================
 
 function eadMapaRenderizarDetalhes(r, ponto = null) {
   const container = $("ead-mapa-detalhes");
@@ -1635,7 +1858,8 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
     container.innerHTML = `
       <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Visão geral</h4>
       <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
-        O mapa está exibindo os municípios e os pontos de atendimento. Use o filtro de município para destacar um município específico.
+        Selecione um município no mapa ou na tabela para consultar
+        seus dados geográficos, cursos validados e protocolos.
       </p>
     `;
     return;
@@ -1662,12 +1886,25 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
     ["Distância registrada", distanciaTexto],
     ["Classificação de distância", valorTexto(r.classificacao_distancia)],
     ["Classificação de potencial", valorTexto(r.classificacao_potencial)],
-    ["Status do cálculo", valorTexto(r.status_calculo)]
+    ["Status do cálculo", valorTexto(r.status_calculo)],
+    ["Última atualização", r.atualizado_em ? formatarDataEaD(r.atualizado_em) : "—"]
   ];
 
   const avisoPonto = ponto
     ? `Ponto localizado no mapa: ${ponto[1]} - ${ponto[2]}.`
     : "Não foi possível localizar uma coordenada correspondente ao ponto informado. A conexão não foi desenhada para evitar indicar um local incorreto.";
+
+  const secaoCursos = eadHtmlSecaoRegistros(
+    "Cursos validados",
+    r.cursos_validados,
+    "Curso"
+  );
+
+  const secaoProtocolos = eadHtmlSecaoRegistros(
+    "Protocolos",
+    r.protocolos,
+    "Protocolo"
+  );
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
@@ -1675,12 +1912,16 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
         <h4 style="margin:0 0 5px;color:#174a7e;font-size:16px">
           ${escaparHTML(valorTexto(r.municipio))} - ${escaparHTML(valorTexto(r.uf))}
         </h4>
-        <p style="margin:0;color:#60758b;font-size:12px">Detalhes do registro selecionado</p>
+        <p style="margin:0;color:#60758b;font-size:12px">
+          Detalhes do município selecionado
+        </p>
       </div>
+
       <button type="button" id="ead-mapa-limpar-selecao" class="ead-mapa-botao">
         Ver mapa geral
       </button>
     </div>
+
     <div class="ead-detalhe-grade">
       ${itens.map(([label, value]) => `
         <div class="ead-detalhe-item">
@@ -1689,16 +1930,24 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
         </div>
       `).join("")}
     </div>
+
     <p style="font-size:12px;line-height:1.5;color:#60758b;margin:12px 0 0">
       ${escaparHTML(avisoPonto)}
       A distância apresentada é a registrada na base e não representa necessariamente uma distância rodoviária.
     </p>
+
+    ${secaoCursos}
+    ${secaoProtocolos}
   `;
 
   const limpar = $("ead-mapa-limpar-selecao");
+
   if (limpar) {
     limpar.addEventListener("click", () => {
-      if ($("ead-filtro-municipio")) $("ead-filtro-municipio").value = "";
+      if ($("ead-filtro-municipio")) {
+        $("ead-filtro-municipio").value = "";
+      }
+
       eadPaginaAtual = 1;
       renderizarAnaliseEaD();
     });
@@ -1707,6 +1956,7 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
 
 function eadMapaLimparSelecao() {
   if (eadMapaCamadaSelecao) eadMapaCamadaSelecao.clearLayers();
+
   if (eadMapaLinhaConexao) {
     eadMapa.removeLayer(eadMapaLinhaConexao);
     eadMapaLinhaConexao = null;
@@ -1778,6 +2028,7 @@ function eadMapaSelecionarMunicipio(r, ajustarEnquadramento = true) {
 
   if (ajustarEnquadramento) {
     const bounds = window.L.latLngBounds(coordenadasEnquadramento);
+
     eadMapa.fitBounds(bounds.pad(ponto ? 0.45 : 0.15), {
       maxZoom: ponto ? 9 : 10,
       animate: true
@@ -1795,14 +2046,10 @@ function eadMapaObterSelecao(registros) {
   const texto = normalize($("ead-filtro-municipio")?.value || "");
   if (!texto) return null;
 
-  // Só considera selecionado quando o texto corresponde ao nome completo
-  // de um município presente nos resultados filtrados.
   const exatos = registros.filter(r => normalize(r.municipio) === texto);
 
   if (exatos.length === 1) return exatos[0];
 
-  // Se houver apenas um resultado e o texto identificar claramente o município,
-  // permite selecioná-lo sem exigir que o usuário digite o nome completo.
   if (registros.length === 1 && normalize(registros[0].municipio).includes(texto)) {
     return registros[0];
   }
@@ -1899,6 +2146,7 @@ async function atualizarMapaEaD(registros) {
         }
       } else if (todosPontos > 0) {
         const bounds = eadMapaMarcadoresAtendimento.getBounds();
+
         if (bounds.isValid()) {
           eadMapa.fitBounds(bounds.pad(0.08), {
             maxZoom: 7,
@@ -1920,6 +2168,7 @@ async function atualizarMapaEaD(registros) {
     setTimeout(() => eadMapa?.invalidateSize(), 100);
   } catch (error) {
     console.error("Erro ao carregar mapa EaD:", error);
+
     if (aviso) {
       aviso.textContent = "Não foi possível carregar o mapa. Confira a conexão e tente atualizar a página.";
     }
@@ -1952,6 +2201,7 @@ function renderizarAnaliseEaD() {
   const registros = obterRegistrosEaDFiltrados();
 
   const total = registros.length;
+
   const ate70 = registros.filter(r => {
     const d = numeroSeguro(r.distancia_km);
     return d !== null && d <= 70;
@@ -1989,6 +2239,7 @@ function renderizarAnaliseEaD() {
 function renderizarTabelaEaD(registros) {
   const tbody = $("ead-tabela-corpo");
   if (!tbody) return;
+
   tbody.replaceChildren();
 
   const ordenados = [...registros].sort((a, b) =>
@@ -2004,10 +2255,13 @@ function renderizarTabelaEaD(registros) {
   if (!total) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
+
     td.colSpan = 11;
     td.textContent = "Nenhum município encontrado para os filtros selecionados.";
+
     tr.appendChild(td);
     tbody.appendChild(tr);
+
     atualizarPaginacaoEaD(0, 0, 0, 1);
     return;
   }
@@ -2050,17 +2304,20 @@ function renderizarTabelaEaD(registros) {
     });
 
     tr.title = `Última atualização: ${atualizado}`;
-
-    // Clicar na linha seleciona o município no mapa e sincroniza o filtro.
     tr.style.cursor = "pointer";
+
     tr.addEventListener("click", () => {
       const filtroMunicipio = $("ead-filtro-municipio");
-      if (filtroMunicipio) filtroMunicipio.value = r.municipio || "";
+
+      if (filtroMunicipio) {
+        filtroMunicipio.value = r.municipio || "";
+      }
 
       eadPaginaAtual = 1;
       renderizarAnaliseEaD();
 
       const painelMapa = $("ead-mapa-painel");
+
       if (painelMapa) {
         painelMapa.scrollIntoView({ behavior: "smooth", block: "start" });
       }
