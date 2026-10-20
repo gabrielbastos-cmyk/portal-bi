@@ -33,15 +33,52 @@ let subGraficos = {};
 let subInicializado = false;
 let subPaginaAtual = 1;
 
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD
+// ==================================================
+
+const EAD_TABLE = "ead_analise_geografica";
+const EAD_PAGE_SIZE = 20;
+
+const EAD_FIELDS = [
+  "id",
+  "municipio",
+  "uf",
+  "potencial_cota",
+  "latitude_municipio",
+  "longitude_municipio",
+  "ponto_mais_proximo",
+  "uf_ponto",
+  "tipo_ponto",
+  "subsede_responsavel",
+  "distancia_km",
+  "classificacao_distancia",
+  "classificacao_potencial",
+  "status_calculo",
+  "atualizado_em"
+];
+
+let eadRegistros = [];
+let eadInicializado = false;
+let eadPaginaAtual = 1;
+
+// ==================================================
+// FUNÇÕES GERAIS
+// ==================================================
+
 function showMessage(id, message, type = "error") {
   const el = $(id);
   if (!el) return;
+
   el.textContent = message;
-  el.className = type === "success" ? "message-success" : "message-error";
+  el.className = type === "success"
+    ? "message-success"
+    : "message-error";
 }
 
 function clearMessage(id) {
   const el = $(id);
+
   if (el) {
     el.textContent = "";
     el.className = "";
@@ -55,10 +92,13 @@ function setLoading(button, loading, loadingText = "Aguarde...") {
     if (!button.dataset.originalText) {
       button.dataset.originalText = button.textContent;
     }
+
     button.textContent = loadingText;
     button.disabled = true;
   } else {
-    button.textContent = button.dataset.originalText || button.textContent;
+    button.textContent =
+      button.dataset.originalText || button.textContent;
+
     button.disabled = false;
     delete button.dataset.originalText;
   }
@@ -70,12 +110,15 @@ function friendlyError(error) {
   if (/invalid login credentials/i.test(m)) {
     return "E-mail ou senha incorretos.";
   }
+
   if (/email not confirmed/i.test(m)) {
     return "Seu e-mail ainda não foi confirmado.";
   }
+
   if (/failed to fetch|networkerror/i.test(m)) {
     return "Não foi possível conectar. Confira a internet e o Supabase.";
   }
+
   if (/permission denied|row-level security|42501/i.test(m)) {
     return "Acesso negado. Confira as políticas de acesso do Supabase.";
   }
@@ -102,21 +145,26 @@ function normalize(value) {
 }
 
 function valorTexto(value, fallback = "—") {
-  return value === null || value === undefined || String(value).trim() === ""
+  return value === null ||
+    value === undefined ||
+    String(value).trim() === ""
     ? fallback
     : String(value).trim();
 }
 
 function numeroSeguro(value) {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
 
   const n = Number(String(value).replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
 
 function ehSim(value) {
-  return ["sim", "yes", "true", "1", "realizado", "substituido"]
-    .includes(normalize(value));
+  return [
+    "sim", "yes", "true", "1", "realizado", "substituido"
+  ].includes(normalize(value));
 }
 
 function ehNao(value) {
@@ -140,7 +188,9 @@ function definirMensagemSubstituicoes(message, type = "success") {
   if (!el) return;
 
   el.textContent = message;
-  el.className = type === "error" ? "message-error" : "message-success";
+  el.className = type === "error"
+    ? "message-error"
+    : "message-success";
 }
 
 // ==================================================
@@ -183,9 +233,14 @@ async function iniciarPortal() {
       currentProfile = null;
       allDashboards = [];
       adminUsers = [];
+
       subRegistros = [];
       subInicializado = false;
       subPaginaAtual = 1;
+
+      eadRegistros = [];
+      eadInicializado = false;
+      eadPaginaAtual = 1;
 
       destruirGraficosSubstituicoes();
       mostrarLogin();
@@ -199,19 +254,34 @@ function mostrarLogin() {
     "admin-section",
     "admin-nav-link",
     "substituicoes-section",
-    "substituicoes-nav-link"
+    "substituicoes-nav-link",
+    "ead-section",
+    "ead-nav-link"
   ].forEach(id => {
     if ($(id)) $(id).hidden = true;
   });
 
-  if ($("login-section")) $("login-section").hidden = false;
-  if ($("user-email")) $("user-email").textContent = "";
+  if ($("login-section")) {
+    $("login-section").hidden = false;
+  }
+
+  if ($("user-email")) {
+    $("user-email").textContent = "";
+  }
 }
 
 function mostrarPortal() {
-  if ($("login-section")) $("login-section").hidden = true;
-  if ($("portal-section")) $("portal-section").hidden = false;
-  if ($("user-email")) $("user-email").textContent = currentUser?.email || "";
+  if ($("login-section")) {
+    $("login-section").hidden = true;
+  }
+
+  if ($("portal-section")) {
+    $("portal-section").hidden = false;
+  }
+
+  if ($("user-email")) {
+    $("user-email").textContent = currentUser?.email || "";
+  }
 }
 
 const loginForm = $("login-form");
@@ -232,7 +302,10 @@ if (loginForm) {
         throw new Error("Informe seu e-mail e sua senha.");
       }
 
-      const { error } = await sb.auth.signInWithPassword({ email, password });
+      const { error } = await sb.auth.signInWithPassword({
+        email,
+        password
+      });
 
       if (error) throw error;
 
@@ -286,7 +359,9 @@ async function atualizarPortal() {
     if (profileError) throw profileError;
 
     if (!profile) {
-      throw new Error("Seu perfil não foi encontrado na tabela profiles.");
+      throw new Error(
+        "Seu perfil não foi encontrado na tabela profiles."
+      );
     }
 
     currentProfile = profile;
@@ -294,8 +369,13 @@ async function atualizarPortal() {
 
     const isAdmin = profile.role === "admin";
 
-    if ($("admin-section")) $("admin-section").hidden = !isAdmin;
-    if ($("admin-nav-link")) $("admin-nav-link").hidden = !isAdmin;
+    if ($("admin-section")) {
+      $("admin-section").hidden = !isAdmin;
+    }
+
+    if ($("admin-nav-link")) {
+      $("admin-nav-link").hidden = !isAdmin;
+    }
 
     await carregarDashboards();
 
@@ -363,18 +443,25 @@ async function carregarDashboards() {
   });
 
   if ($("summary-total")) {
-    $("summary-total").textContent = String(allDashboards.length);
+    $("summary-total").textContent =
+      String(allDashboards.length);
   }
 
   if ($("summary-categories")) {
     $("summary-categories").textContent = String(
-      new Set(allDashboards.map(d => normalize(d.category || "outros"))).size
+      new Set(
+        allDashboards.map(d =>
+          normalize(d.category || "outros")
+        )
+      ).size
     );
   }
 
   aplicarFiltrosDashboards();
   renderizarDashboardsAdministrativos();
+
   configurarAcessoSubstituicoes();
+  configurarAcessoEaD();
 }
 
 function aplicarFiltrosDashboards() {
@@ -390,7 +477,9 @@ function aplicarFiltrosDashboards() {
 
     const categoryMatches =
       !category ||
-      normalize(card.querySelector(".card-category")?.dataset.category) === category;
+      normalize(
+        card.querySelector(".card-category")?.dataset.category
+      ) === category;
 
     card.hidden = !(matches && categoryMatches);
 
@@ -403,11 +492,17 @@ function aplicarFiltrosDashboards() {
 }
 
 if ($("dashboard-search")) {
-  $("dashboard-search").addEventListener("input", aplicarFiltrosDashboards);
+  $("dashboard-search").addEventListener(
+    "input",
+    aplicarFiltrosDashboards
+  );
 }
 
 if ($("category-filter")) {
-  $("category-filter").addEventListener("change", aplicarFiltrosDashboards);
+  $("category-filter").addEventListener(
+    "change",
+    aplicarFiltrosDashboards
+  );
 }
 
 // ==================================================
@@ -459,7 +554,9 @@ function preencherListaUsuarios() {
   adminUsers.forEach(user => {
     const option = document.createElement("option");
     option.value = user.id;
-    option.textContent = `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
+    option.textContent =
+      `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
+
     select.appendChild(option);
   });
 
@@ -467,7 +564,9 @@ function preencherListaUsuarios() {
     select.value = previous;
   }
 
-  if (select.value) carregarPermissoesUsuario();
+  if (select.value) {
+    carregarPermissoesUsuario();
+  }
 }
 
 if ($("user-create-form")) {
@@ -486,7 +585,11 @@ if ($("user-create-form")) {
         throw new Error("Preencha todos os campos do usuário.");
       }
 
-      await adminCall("create_user", { email, password, role });
+      await adminCall("create_user", {
+        email,
+        password,
+        role
+      });
 
       $("user-create-form").reset();
 
@@ -506,7 +609,10 @@ if ($("user-create-form")) {
 }
 
 if ($("permission-user")) {
-  $("permission-user").addEventListener("change", carregarPermissoesUsuario);
+  $("permission-user").addEventListener(
+    "change",
+    carregarPermissoesUsuario
+  );
 }
 
 async function carregarPermissoesUsuario() {
@@ -541,7 +647,9 @@ async function carregarPermissoesUsuario() {
 
     if (error) throw error;
 
-    const ids = new Set((permissions || []).map(p => p.dashboard_id));
+    const ids = new Set(
+      (permissions || []).map(p => p.dashboard_id)
+    );
 
     const { data: dashboards, error: dError } = await sb
       .from("dashboards")
@@ -575,7 +683,10 @@ if ($("save-permissions-btn")) {
     const userId = $("permission-user")?.value;
 
     if (!userId) {
-      return showMessage("permission-message", "Selecione um usuário primeiro.");
+      return showMessage(
+        "permission-message",
+        "Selecione um usuário primeiro."
+      );
     }
 
     const user = adminUsers.find(u => u.id === userId);
@@ -652,8 +763,15 @@ if ($("dashboard-form")) {
         url: $("dashboard-url").value.trim()
       };
 
-      if (!d.id || !d.name || !d.description || !isSafeDashboardUrl(d.url)) {
-        throw new Error("Preencha todos os campos e informe uma URL válida.");
+      if (
+        !d.id ||
+        !d.name ||
+        !d.description ||
+        !isSafeDashboardUrl(d.url)
+      ) {
+        throw new Error(
+          "Preencha todos os campos e informe uma URL válida."
+        );
       }
 
       const { error } = await sb
@@ -724,19 +842,22 @@ function configurarAcessoSubstituicoes() {
 
 function prepararInterfaceSubstituicoes() {
   if ($("substituicoes-atualizar")) {
-    $("substituicoes-atualizar").addEventListener("click", async () => {
-      const button = $("substituicoes-atualizar");
+    $("substituicoes-atualizar").addEventListener(
+      "click",
+      async () => {
+        const button = $("substituicoes-atualizar");
 
-      setLoading(button, true, "Atualizando...");
+        setLoading(button, true, "Atualizando...");
 
-      try {
-        await carregarSubstituicoes();
-      } catch (error) {
-        mostrarErroSubstituicoes(friendlyError(error));
-      } finally {
-        setLoading(button, false);
+        try {
+          await carregarSubstituicoes();
+        } catch (error) {
+          mostrarErroSubstituicoes(friendlyError(error));
+        } finally {
+          setLoading(button, false);
+        }
       }
-    });
+    );
   }
 
   [
@@ -766,7 +887,10 @@ function prepararInterfaceSubstituicoes() {
   if ($("sub-pagina-proxima")) {
     $("sub-pagina-proxima").addEventListener("click", () => {
       const total = obterRegistrosFiltrados().length;
-      const totalPaginas = Math.max(1, Math.ceil(total / SUB_PAGE_SIZE));
+      const totalPaginas = Math.max(
+        1,
+        Math.ceil(total / SUB_PAGE_SIZE)
+      );
 
       if (subPaginaAtual < totalPaginas) {
         subPaginaAtual++;
@@ -783,7 +907,9 @@ function mostrarErroSubstituicoes(message) {
 async function carregarSubstituicoes() {
   if (!sb || !currentUser || !currentProfile) return;
 
-  definirMensagemSubstituicoes("Carregando dados de substituições...");
+  definirMensagemSubstituicoes(
+    "Carregando dados de substituições..."
+  );
 
   const all = [];
   const pageSize = 1000;
@@ -863,8 +989,6 @@ function normalizarRegistroSubstituicao(row) {
   const faixaAtrasada =
     /31 a 60|61 a 90|mais de 90|acima de 90|acima de 60|mais de 60|atraso/.test(faixa);
 
-  // Regra: substituição realizada é resolvida.
-  // Não realizada só fica atrasada se passou de 30 dias.
   const atrasada = !realizada && !faixaNoFechamento && (
     (dias !== null && dias > 30) ||
     (dias === null && faixaAtrasada && prazo !== "sim")
@@ -1019,7 +1143,7 @@ function obterRegistrosFiltrados() {
 }
 
 // ==================================================
-// RENDERIZAÇÃO GERAL
+// RENDERIZAÇÃO GERAL DE SUBSTITUIÇÕES
 // ==================================================
 
 function renderizarBISelecionado() {
@@ -1043,6 +1167,7 @@ function atualizarIndicadoresSubstituicoes(rows) {
   const total = rows.length;
   const realizadas = rows.filter(r => r._realizada).length;
   const atrasadas = rows.filter(r => r._atrasada).length;
+
   const pendentes = rows.filter(
     r => !r._realizada && !r._atrasada
   ).length;
@@ -1073,7 +1198,6 @@ function destruirGraficosSubstituicoes() {
   subGraficos = {};
 }
 
-// Plugin para mostrar os valores diretamente nos gráficos.
 const pluginRotulosSubstituicoes = {
   id: "rotulosSubstituicoes",
 
@@ -1094,7 +1218,11 @@ const pluginRotulosSubstituicoes = {
       meta.data.forEach((element, index) => {
         const value = dataset.data[index];
 
-        if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        if (
+          value === null ||
+          value === undefined ||
+          !Number.isFinite(Number(value))
+        ) {
           return;
         }
 
@@ -1106,11 +1234,13 @@ const pluginRotulosSubstituicoes = {
           ctx.fillStyle = "#ffffff";
           ctx.strokeStyle = "rgba(0,0,0,0.25)";
           ctx.lineWidth = 2;
+
           ctx.strokeText(
             Number(value).toLocaleString("pt-BR"),
             position.x,
             position.y
           );
+
           ctx.fillText(
             Number(value).toLocaleString("pt-BR"),
             position.x,
@@ -1165,7 +1295,10 @@ function agruparContagem(rows, keyFn) {
   const map = new Map();
 
   rows.forEach(row => {
-    const label = String(keyFn(row) || "Não informado").trim();
+    const label = String(
+      keyFn(row) || "Não informado"
+    ).trim();
+
     map.set(label, (map.get(label) || 0) + 1);
   });
 
@@ -1194,9 +1327,11 @@ function ordenarPeriodosMensais(periodos) {
       return indexA - indexB;
     }
 
-    return String(a[0]).localeCompare(String(b[0]), "pt-BR", {
-      numeric: true
-    });
+    return String(a[0]).localeCompare(
+      String(b[0]),
+      "pt-BR",
+      { numeric: true }
+    );
   });
 }
 
@@ -1226,6 +1361,7 @@ function opcoesGraficoSubstituicoes() {
           maxRotation: 45,
           minRotation: 0
         },
+
         grid: {
           display: false
         }
@@ -1233,6 +1369,7 @@ function opcoesGraficoSubstituicoes() {
 
       y: {
         beginAtZero: true,
+
         ticks: {
           precision: 0
         }
@@ -1243,11 +1380,12 @@ function opcoesGraficoSubstituicoes() {
 
 function renderizarGraficosSubstituicoes(rows) {
   if (typeof Chart === "undefined") {
-    mostrarErroSubstituicoes("A biblioteca Chart.js não carregou.");
+    mostrarErroSubstituicoes(
+      "A biblioteca Chart.js não carregou."
+    );
     return;
   }
 
-  // Evolução mensal
   const mesesAgrupados = agruparContagem(rows, r => r._mes);
   const meses = ordenarPeriodosMensais(mesesAgrupados);
 
@@ -1300,7 +1438,6 @@ function renderizarGraficosSubstituicoes(rows) {
     options: opcoesGraficoSubstituicoes()
   });
 
-  // Registros por subsede
   const subsedes = agruparContagem(
     rows,
     r => r.subsede
@@ -1326,7 +1463,6 @@ function renderizarGraficosSubstituicoes(rows) {
     }
   });
 
-  // Principais motivos
   const motivos = agruparContagem(
     rows,
     r => r.motivo || "Não informado"
@@ -1352,12 +1488,13 @@ function renderizarGraficosSubstituicoes(rows) {
     }
   });
 
-  // Situação das substituições
   const certas = rows.filter(r => r._realizadaCerta).length;
   const outras = rows.filter(r => r._realizadaOutro).length;
+
   const pendentes = rows.filter(
     r => !r._realizada && !r._atrasada
   ).length;
+
   const atrasadas = rows.filter(r => r._atrasada).length;
 
   criarGraficoSubstituicoes("sub-grafico-situacao", {
@@ -1403,7 +1540,7 @@ function renderizarGraficosSubstituicoes(rows) {
 }
 
 // ==================================================
-// TABELA E PAGINAÇÃO
+// TABELA E PAGINAÇÃO DE SUBSTITUIÇÕES
 // ==================================================
 
 function criarCelulaTabela(value, row) {
@@ -1547,5 +1684,410 @@ function atualizarPaginacaoSubstituicoes(
 
   if (container) {
     container.hidden = false;
+  }
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — ACESSO
+// ==================================================
+
+function dashboardEhEaD(d) {
+  const nome = normalize(d?.name);
+  const id = normalize(d?.id);
+
+  return (
+    nome.includes("analise geografica ead") ||
+    nome.includes("analise geografica") ||
+    id === "analise_geografica_ead" ||
+    id === "analise-geografica-ead" ||
+    id === "bi_ead" ||
+    id === "bi-ead"
+  );
+}
+
+function configurarAcessoEaD() {
+  const section = $("ead-section");
+  const nav = $("ead-nav-link");
+
+  if (!section || !nav) return;
+
+  const allowed =
+    currentProfile?.role === "admin" ||
+    allDashboards.some(dashboardEhEaD);
+
+  section.hidden = !allowed;
+  nav.hidden = !allowed;
+
+  if (allowed && !eadInicializado) {
+    eadInicializado = true;
+    prepararInterfaceEaD();
+
+    carregarAnaliseEaD().catch(error => {
+      mostrarMensagemEaD(friendlyError(error), "error");
+    });
+  }
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — INTERFACE
+// ==================================================
+
+function prepararInterfaceEaD() {
+  const atualizar = $("ead-atualizar");
+
+  if (atualizar) {
+    atualizar.addEventListener("click", async () => {
+      setLoading(atualizar, true, "Atualizando...");
+
+      try {
+        await carregarAnaliseEaD();
+      } catch (error) {
+        mostrarMensagemEaD(friendlyError(error), "error");
+      } finally {
+        setLoading(atualizar, false);
+      }
+    });
+  }
+
+  [
+    "ead-filtro-uf",
+    "ead-filtro-distancia",
+    "ead-filtro-potencial"
+  ].forEach(id => {
+    if ($(id)) {
+      $(id).addEventListener("change", () => {
+        eadPaginaAtual = 1;
+        renderizarAnaliseEaD();
+      });
+    }
+  });
+
+  const filtroMunicipio = $("ead-filtro-municipio");
+
+  if (filtroMunicipio) {
+    filtroMunicipio.addEventListener("input", () => {
+      eadPaginaAtual = 1;
+      renderizarAnaliseEaD();
+    });
+  }
+
+  const anterior = $("ead-pagina-anterior");
+
+  if (anterior) {
+    anterior.addEventListener("click", () => {
+      if (eadPaginaAtual > 1) {
+        eadPaginaAtual--;
+        renderizarAnaliseEaD();
+      }
+    });
+  }
+
+  const proxima = $("ead-pagina-proxima");
+
+  if (proxima) {
+    proxima.addEventListener("click", () => {
+      const total = obterRegistrosEaDFiltrados().length;
+
+      const totalPaginas = Math.max(
+        1,
+        Math.ceil(total / EAD_PAGE_SIZE)
+      );
+
+      if (eadPaginaAtual < totalPaginas) {
+        eadPaginaAtual++;
+        renderizarAnaliseEaD();
+      }
+    });
+  }
+}
+
+function mostrarMensagemEaD(message, type = "success") {
+  const el = $("ead-message");
+  if (!el) return;
+
+  el.textContent = message;
+  el.className = type === "error"
+    ? "message-error"
+    : "message-success";
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — CONSULTA AO SUPABASE
+// ==================================================
+
+async function carregarAnaliseEaD() {
+  if (!sb || !currentUser || !currentProfile) return;
+
+  mostrarMensagemEaD("Carregando análise geográfica EaD...");
+
+  const registros = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await sb
+      .from(EAD_TABLE)
+      .select(EAD_FIELDS.join(","))
+      .order("municipio")
+      .range(offset, offset + pageSize - 1);
+
+    if (error) throw error;
+
+    const pagina = data || [];
+    registros.push(...pagina);
+
+    if (pagina.length < pageSize) break;
+
+    offset += pageSize;
+  }
+
+  eadRegistros = registros;
+  eadPaginaAtual = 1;
+
+  preencherFiltrosEaD();
+  renderizarAnaliseEaD();
+
+  mostrarMensagemEaD(
+    `${eadRegistros.length.toLocaleString("pt-BR")} municípios carregados.`
+  );
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — FILTROS
+// ==================================================
+
+function preencherFiltrosEaD() {
+  preencherSelectDinamico({
+    id: "ead-filtro-uf",
+    values: eadRegistros.map(r => r.uf),
+    placeholder: "Todas as UFs"
+  });
+
+  preencherSelectDinamico({
+    id: "ead-filtro-distancia",
+    values: eadRegistros.map(r => r.classificacao_distancia),
+    placeholder: "Todas as classificações de distância"
+  });
+
+  preencherSelectDinamico({
+    id: "ead-filtro-potencial",
+    values: eadRegistros.map(r => r.classificacao_potencial),
+    placeholder: "Todas as classificações de potencial"
+  });
+}
+
+function obterRegistrosEaDFiltrados() {
+  const municipio = normalize(
+    $("ead-filtro-municipio")?.value || ""
+  );
+
+  const uf = $("ead-filtro-uf")?.value || "";
+  const distancia = $("ead-filtro-distancia")?.value || "";
+  const potencial = $("ead-filtro-potencial")?.value || "";
+
+  return eadRegistros.filter(r => {
+    const nomeMunicipio = normalize(r.municipio);
+
+    return (
+      (!municipio || nomeMunicipio.includes(municipio)) &&
+      (!uf || String(r.uf || "") === uf) &&
+      (
+        !distancia ||
+        String(r.classificacao_distancia || "") === distancia
+      ) &&
+      (
+        !potencial ||
+        String(r.classificacao_potencial || "") === potencial
+      )
+    );
+  });
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — INDICADORES
+// ==================================================
+
+function renderizarAnaliseEaD() {
+  const registros = obterRegistrosEaDFiltrados();
+
+  const total = registros.length;
+
+  const ate70 = registros.filter(r => {
+    const distancia = numeroSeguro(r.distancia_km);
+
+    return distancia !== null && distancia <= 70;
+  }).length;
+
+  const acima70 = registros.filter(r => {
+    const distancia = numeroSeguro(r.distancia_km);
+
+    return distancia !== null && distancia > 70;
+  }).length;
+
+  const potencialAte99 = registros.filter(r => {
+    const potencial = numeroSeguro(r.potencial_cota);
+
+    return potencial !== null && potencial <= 99;
+  }).length;
+
+  const indicadores = {
+    "ead-total": total,
+    "ead-ate70": ate70,
+    "ead-acima70": acima70,
+    "ead-potencial99": potencialAte99
+  };
+
+  Object.entries(indicadores).forEach(([id, valor]) => {
+    if ($(id)) {
+      $(id).textContent = valor.toLocaleString("pt-BR");
+    }
+  });
+
+  renderizarTabelaEaD(registros);
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — TABELA
+// ==================================================
+
+function renderizarTabelaEaD(registros) {
+  const tbody = $("ead-tabela-corpo");
+  if (!tbody) return;
+
+  tbody.replaceChildren();
+
+  const ordenados = [...registros].sort((a, b) => {
+    return String(a.municipio || "").localeCompare(
+      String(b.municipio || ""),
+      "pt-BR"
+    );
+  });
+
+  const total = ordenados.length;
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(total / EAD_PAGE_SIZE)
+  );
+
+  if (eadPaginaAtual > totalPaginas) {
+    eadPaginaAtual = totalPaginas;
+  }
+
+  if (eadPaginaAtual < 1) {
+    eadPaginaAtual = 1;
+  }
+
+  if (total === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 11;
+    td.textContent =
+      "Nenhum município encontrado para os filtros selecionados.";
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+
+    atualizarPaginacaoEaD(0, 0, 0, 1);
+    return;
+  }
+
+  const inicio = (eadPaginaAtual - 1) * EAD_PAGE_SIZE;
+  const fim = Math.min(inicio + EAD_PAGE_SIZE, total);
+  const pagina = ordenados.slice(inicio, fim);
+
+  pagina.forEach(r => {
+    const tr = document.createElement("tr");
+
+    const distancia = numeroSeguro(r.distancia_km);
+    const potencial = numeroSeguro(r.potencial_cota);
+
+    const distanciaFormatada = distancia === null
+      ? "—"
+      : `${distancia.toLocaleString("pt-BR", {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 2
+        })} km`;
+
+    const potencialFormatado = potencial === null
+      ? valorTexto(r.potencial_cota)
+      : potencial.toLocaleString("pt-BR", {
+          maximumFractionDigits: 2
+        });
+
+    const atualizado = r.atualizado_em
+      ? formatarDataEaD(r.atualizado_em)
+      : "—";
+
+    const valores = [
+      r.municipio,
+      r.uf,
+      potencialFormatado,
+      r.ponto_mais_proximo,
+      r.uf_ponto,
+      r.tipo_ponto,
+      r.subsede_responsavel,
+      distanciaFormatada,
+      r.classificacao_distancia,
+      r.classificacao_potencial,
+      r.status_calculo
+    ];
+
+    valores.forEach(valor => {
+      const td = document.createElement("td");
+      td.textContent = valorTexto(valor);
+      tr.appendChild(td);
+    });
+
+    tr.title = `Última atualização: ${atualizado}`;
+    tbody.appendChild(tr);
+  });
+
+  atualizarPaginacaoEaD(
+    total,
+    inicio + 1,
+    fim,
+    totalPaginas
+  );
+}
+
+function formatarDataEaD(value) {
+  const data = new Date(value);
+
+  if (Number.isNaN(data.getTime())) {
+    return String(value);
+  }
+
+  return data.toLocaleString("pt-BR");
+}
+
+// ==================================================
+// ANÁLISE GEOGRÁFICA EaD — PAGINAÇÃO
+// ==================================================
+
+function atualizarPaginacaoEaD(
+  total,
+  primeiro,
+  ultimo,
+  totalPaginas
+) {
+  const info = $("ead-paginacao-info");
+  const anterior = $("ead-pagina-anterior");
+  const proxima = $("ead-pagina-proxima");
+
+  if (info) {
+    info.textContent = total
+      ? `Exibindo ${primeiro}–${ultimo} de ${total.toLocaleString("pt-BR")} municípios · Página ${eadPaginaAtual} de ${totalPaginas}`
+      : "Nenhum município para exibir.";
+  }
+
+  if (anterior) {
+    anterior.disabled = eadPaginaAtual <= 1;
+  }
+
+  if (proxima) {
+    proxima.disabled =
+      eadPaginaAtual >= totalPaginas || total === 0;
   }
 }
