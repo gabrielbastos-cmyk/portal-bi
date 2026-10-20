@@ -10,53 +10,34 @@ let allDashboards = [];
 let adminUsers = [];
 
 const SUB_VIEW = "vw_substituicoes_bi";
+const SUB_PAGE_SIZE = 20;
+const EAD_TABLE = "ead_analise_geografica";
+const EAD_PAGE_SIZE = 20;
 
 const SUB_FIELDS = [
   "id", "subsede", "cidade", "angariador", "jovem", "empresa", "motivo",
-  "situacao_substituicao", "status_da_substituicao",
-  "jovem_foi_substituido", "jovem_substituto",
-  "inicio_substituto", "fim_substituto",
+  "situacao_substituicao", "status_da_substituicao", "jovem_foi_substituido",
+  "jovem_substituto", "inicio_substituto", "fim_substituto",
   "data_desligamento", "mes_ano_desligamento", "periodo",
-  "mes_da_substituicao", "dias_ate_substituicao",
-  "dentro_do_prazo", "faixa_de_atraso", "prioridade",
-  "inicio_fechamento", "fim_fechamento", "periodo_fechamento",
-  "mes_fechamento", "numero_mes_fechamento", "ano_fechamento",
-  "mes_fechamento_da_substituicao", "fechamento_da_substituicao",
-  "dias_pendentes", "dias_em_aberto",
+  "mes_da_substituicao", "dias_ate_substituicao", "dentro_do_prazo",
+  "faixa_de_atraso", "prioridade", "inicio_fechamento", "fim_fechamento",
+  "periodo_fechamento", "mes_fechamento", "numero_mes_fechamento",
+  "ano_fechamento", "mes_fechamento_da_substituicao",
+  "fechamento_da_substituicao", "dias_pendentes", "dias_em_aberto",
   "substituido_em_outro_fechamento", "ultima_atualizacao"
 ];
 
-const SUB_PAGE_SIZE = 20;
+const EAD_FIELDS = [
+  "id", "municipio", "uf", "potencial_cota", "latitude_municipio",
+  "longitude_municipio", "ponto_mais_proximo", "uf_ponto", "tipo_ponto",
+  "subsede_responsavel", "distancia_km", "classificacao_distancia",
+  "classificacao_potencial", "status_calculo", "atualizado_em"
+];
 
 let subRegistros = [];
 let subGraficos = {};
 let subInicializado = false;
 let subPaginaAtual = 1;
-
-// ==================================================
-// ANÁLISE GEOGRÁFICA EaD
-// ==================================================
-
-const EAD_TABLE = "ead_analise_geografica";
-const EAD_PAGE_SIZE = 20;
-
-const EAD_FIELDS = [
-  "id",
-  "municipio",
-  "uf",
-  "potencial_cota",
-  "latitude_municipio",
-  "longitude_municipio",
-  "ponto_mais_proximo",
-  "uf_ponto",
-  "tipo_ponto",
-  "subsede_responsavel",
-  "distancia_km",
-  "classificacao_distancia",
-  "classificacao_potencial",
-  "status_calculo",
-  "atualizado_em"
-];
 
 let eadRegistros = [];
 let eadInicializado = false;
@@ -69,16 +50,12 @@ let eadPaginaAtual = 1;
 function showMessage(id, message, type = "error") {
   const el = $(id);
   if (!el) return;
-
   el.textContent = message;
-  el.className = type === "success"
-    ? "message-success"
-    : "message-error";
+  el.className = type === "success" ? "message-success" : "message-error";
 }
 
 function clearMessage(id) {
   const el = $(id);
-
   if (el) {
     el.textContent = "";
     el.className = "";
@@ -92,13 +69,10 @@ function setLoading(button, loading, loadingText = "Aguarde...") {
     if (!button.dataset.originalText) {
       button.dataset.originalText = button.textContent;
     }
-
     button.textContent = loadingText;
     button.disabled = true;
   } else {
-    button.textContent =
-      button.dataset.originalText || button.textContent;
-
+    button.textContent = button.dataset.originalText || button.textContent;
     button.disabled = false;
     delete button.dataset.originalText;
   }
@@ -107,21 +81,10 @@ function setLoading(button, loading, loadingText = "Aguarde...") {
 function friendlyError(error) {
   const m = error?.message || "";
 
-  if (/invalid login credentials/i.test(m)) {
-    return "E-mail ou senha incorretos.";
-  }
-
-  if (/email not confirmed/i.test(m)) {
-    return "Seu e-mail ainda não foi confirmado.";
-  }
-
-  if (/failed to fetch|networkerror/i.test(m)) {
-    return "Não foi possível conectar. Confira a internet e o Supabase.";
-  }
-
-  if (/permission denied|row-level security|42501/i.test(m)) {
-    return "Acesso negado. Confira as políticas de acesso do Supabase.";
-  }
+  if (/invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+  if (/email not confirmed/i.test(m)) return "Seu e-mail ainda não foi confirmado.";
+  if (/failed to fetch|networkerror/i.test(m)) return "Não foi possível conectar. Confira a internet e o Supabase.";
+  if (/permission denied|row-level security|42501/i.test(m)) return "Acesso negado. Confira as políticas de acesso do Supabase.";
 
   return m || "Ocorreu um erro inesperado.";
 }
@@ -145,38 +108,27 @@ function normalize(value) {
 }
 
 function valorTexto(value, fallback = "—") {
-  return value === null ||
-    value === undefined ||
-    String(value).trim() === ""
+  return value === null || value === undefined || String(value).trim() === ""
     ? fallback
     : String(value).trim();
 }
 
 function numeroSeguro(value) {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(String(value).replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
 
 function ehSim(value) {
-  return [
-    "sim", "yes", "true", "1", "realizado", "substituido"
-  ].includes(normalize(value));
+  return ["sim", "yes", "true", "1", "realizado", "substituido"].includes(normalize(value));
 }
 
 function ehNao(value) {
-  return [
-    "nao", "no", "false", "0", "pendente",
-    "nao substituido", "nao realizada"
-  ].includes(normalize(value));
+  return ["nao", "no", "false", "0", "pendente", "nao substituido", "nao realizada"].includes(normalize(value));
 }
 
 function temValor(value) {
   const v = normalize(value);
-
   return !!v && ![
     "—", "-", "null", "undefined", "nao", "false", "0",
     "pendente", "nao substituido", "nao realizada"
@@ -186,11 +138,8 @@ function temValor(value) {
 function definirMensagemSubstituicoes(message, type = "success") {
   const el = $("substituicoes-message");
   if (!el) return;
-
   el.textContent = message;
-  el.className = type === "error"
-    ? "message-error"
-    : "message-success";
+  el.className = type === "error" ? "message-error" : "message-success";
 }
 
 // ==================================================
@@ -198,10 +147,7 @@ function definirMensagemSubstituicoes(message, type = "success") {
 // ==================================================
 
 if (!sb) {
-  showMessage(
-    "login-message",
-    "O Supabase não foi configurado. Confira o arquivo config.js."
-  );
+  showMessage("login-message", "O Supabase não foi configurado. Confira o arquivo config.js.");
 } else {
   iniciarPortal();
 }
@@ -209,14 +155,10 @@ if (!sb) {
 async function iniciarPortal() {
   try {
     const { data, error } = await sb.auth.getSession();
-
     if (error) throw error;
 
-    if (data.session) {
-      await atualizarPortal();
-    } else {
-      mostrarLogin();
-    }
+    if (data.session) await atualizarPortal();
+    else mostrarLogin();
   } catch (error) {
     console.error(error);
     mostrarLogin();
@@ -250,44 +192,25 @@ async function iniciarPortal() {
 
 function mostrarLogin() {
   [
-    "portal-section",
-    "admin-section",
-    "admin-nav-link",
-    "substituicoes-section",
-    "substituicoes-nav-link",
-    "ead-section",
-    "ead-nav-link"
+    "portal-section", "admin-section", "admin-nav-link",
+    "substituicoes-section", "substituicoes-nav-link",
+    "ead-section", "ead-nav-link"
   ].forEach(id => {
     if ($(id)) $(id).hidden = true;
   });
 
-  if ($("login-section")) {
-    $("login-section").hidden = false;
-  }
-
-  if ($("user-email")) {
-    $("user-email").textContent = "";
-  }
+  if ($("login-section")) $("login-section").hidden = false;
+  if ($("user-email")) $("user-email").textContent = "";
 }
 
 function mostrarPortal() {
-  if ($("login-section")) {
-    $("login-section").hidden = true;
-  }
-
-  if ($("portal-section")) {
-    $("portal-section").hidden = false;
-  }
-
-  if ($("user-email")) {
-    $("user-email").textContent = currentUser?.email || "";
-  }
+  if ($("login-section")) $("login-section").hidden = true;
+  if ($("portal-section")) $("portal-section").hidden = false;
+  if ($("user-email")) $("user-email").textContent = currentUser?.email || "";
 }
 
-const loginForm = $("login-form");
-
-if (loginForm) {
-  loginForm.addEventListener("submit", async event => {
+if ($("login-form")) {
+  $("login-form").addEventListener("submit", async event => {
     event.preventDefault();
     clearMessage("login-message");
 
@@ -298,15 +221,9 @@ if (loginForm) {
       const email = $("email")?.value.trim();
       const password = $("password")?.value;
 
-      if (!email || !password) {
-        throw new Error("Informe seu e-mail e sua senha.");
-      }
+      if (!email || !password) throw new Error("Informe seu e-mail e sua senha.");
 
-      const { error } = await sb.auth.signInWithPassword({
-        email,
-        password
-      });
-
+      const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
       await atualizarPortal();
@@ -318,15 +235,11 @@ if (loginForm) {
   });
 }
 
-const logoutButton = $("logout-btn");
-
-if (logoutButton) {
-  logoutButton.addEventListener("click", async () => {
+if ($("logout-btn")) {
+  $("logout-btn").addEventListener("click", async () => {
     try {
       const { error } = await sb.auth.signOut();
-
       if (error) throw error;
-
       mostrarLogin();
     } catch (error) {
       showMessage("dashboard-message", friendlyError(error));
@@ -336,52 +249,31 @@ if (logoutButton) {
 
 async function atualizarPortal() {
   try {
-    const {
-      data: { user },
-      error: userError
-    } = await sb.auth.getUser();
-
+    const { data: { user }, error: userError } = await sb.auth.getUser();
     if (userError) throw userError;
-
     if (!user) return mostrarLogin();
 
     currentUser = user;
 
-    const {
-      data: profile,
-      error: profileError
-    } = await sb
+    const { data: profile, error: profileError } = await sb
       .from("profiles")
       .select("id, email, role")
       .eq("id", user.id)
       .maybeSingle();
 
     if (profileError) throw profileError;
-
-    if (!profile) {
-      throw new Error(
-        "Seu perfil não foi encontrado na tabela profiles."
-      );
-    }
+    if (!profile) throw new Error("Seu perfil não foi encontrado na tabela profiles.");
 
     currentProfile = profile;
     mostrarPortal();
 
     const isAdmin = profile.role === "admin";
 
-    if ($("admin-section")) {
-      $("admin-section").hidden = !isAdmin;
-    }
-
-    if ($("admin-nav-link")) {
-      $("admin-nav-link").hidden = !isAdmin;
-    }
+    if ($("admin-section")) $("admin-section").hidden = !isAdmin;
+    if ($("admin-nav-link")) $("admin-nav-link").hidden = !isAdmin;
 
     await carregarDashboards();
-
-    if (isAdmin) {
-      await carregarAdministracao();
-    }
+    if (isAdmin) await carregarAdministracao();
   } catch (error) {
     console.error(error);
     showMessage("dashboard-message", friendlyError(error));
@@ -397,7 +289,6 @@ async function carregarDashboards() {
 
   const grid = $("dashboard-grid");
   if (!grid) return;
-
   grid.replaceChildren();
 
   const { data, error } = await sb
@@ -406,7 +297,6 @@ async function carregarDashboards() {
     .order("name");
 
   if (error) throw error;
-
   allDashboards = data || [];
 
   allDashboards.forEach(d => {
@@ -442,24 +332,16 @@ async function carregarDashboards() {
     grid.appendChild(card);
   });
 
-  if ($("summary-total")) {
-    $("summary-total").textContent =
-      String(allDashboards.length);
-  }
+  if ($("summary-total")) $("summary-total").textContent = String(allDashboards.length);
 
   if ($("summary-categories")) {
     $("summary-categories").textContent = String(
-      new Set(
-        allDashboards.map(d =>
-          normalize(d.category || "outros")
-        )
-      ).size
+      new Set(allDashboards.map(d => normalize(d.category || "outros"))).size
     );
   }
 
   aplicarFiltrosDashboards();
   renderizarDashboardsAdministrativos();
-
   configurarAcessoSubstituicoes();
   configurarAcessoEaD();
 }
@@ -474,36 +356,18 @@ function aplicarFiltrosDashboards() {
 
   [...grid.querySelectorAll(".dashboard-card")].forEach(card => {
     const matches = normalize(card.innerText).includes(term);
-
-    const categoryMatches =
-      !category ||
-      normalize(
-        card.querySelector(".card-category")?.dataset.category
-      ) === category;
+    const categoryMatches = !category ||
+      normalize(card.querySelector(".card-category")?.dataset.category) === category;
 
     card.hidden = !(matches && categoryMatches);
-
     if (!card.hidden) visible++;
   });
 
-  if ($("filter-empty")) {
-    $("filter-empty").hidden = visible > 0;
-  }
+  if ($("filter-empty")) $("filter-empty").hidden = visible > 0;
 }
 
-if ($("dashboard-search")) {
-  $("dashboard-search").addEventListener(
-    "input",
-    aplicarFiltrosDashboards
-  );
-}
-
-if ($("category-filter")) {
-  $("category-filter").addEventListener(
-    "change",
-    aplicarFiltrosDashboards
-  );
-}
+if ($("dashboard-search")) $("dashboard-search").addEventListener("input", aplicarFiltrosDashboards);
+if ($("category-filter")) $("category-filter").addEventListener("change", aplicarFiltrosDashboards);
 
 // ==================================================
 // ADMINISTRAÇÃO E PERMISSÕES
@@ -514,23 +378,15 @@ async function adminCall(action, payload = {}) {
     body: { action, ...payload }
   });
 
-  if (error) {
-    throw new Error(
-      "Falha na operação administrativa. Confira a função portal-admin."
-    );
-  }
-
+  if (error) throw new Error("Falha na operação administrativa. Confira a função portal-admin.");
   if (data?.error) throw new Error(data.error);
-
   return data;
 }
 
 async function carregarAdministracao() {
   try {
     const result = await adminCall("list_users");
-
     adminUsers = result.users || [];
-
     preencherListaUsuarios();
     renderizarDashboardsAdministrativos();
   } catch (error) {
@@ -543,7 +399,6 @@ function preencherListaUsuarios() {
   if (!select) return;
 
   const previous = select.value;
-
   select.replaceChildren();
 
   const placeholder = document.createElement("option");
@@ -554,25 +409,17 @@ function preencherListaUsuarios() {
   adminUsers.forEach(user => {
     const option = document.createElement("option");
     option.value = user.id;
-    option.textContent =
-      `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
-
+    option.textContent = `${user.email || "Sem e-mail"} — ${user.role || "user"}`;
     select.appendChild(option);
   });
 
-  if (adminUsers.some(u => u.id === previous)) {
-    select.value = previous;
-  }
-
-  if (select.value) {
-    carregarPermissoesUsuario();
-  }
+  if (adminUsers.some(u => u.id === previous)) select.value = previous;
+  if (select.value) carregarPermissoesUsuario();
 }
 
 if ($("user-create-form")) {
   $("user-create-form").addEventListener("submit", async event => {
     event.preventDefault();
-
     const button = event.submitter;
     setLoading(button, true, "Criando usuário...");
 
@@ -581,24 +428,11 @@ if ($("user-create-form")) {
       const password = $("new-user-password")?.value;
       const role = $("new-user-role")?.value;
 
-      if (!email || !password || !role) {
-        throw new Error("Preencha todos os campos do usuário.");
-      }
+      if (!email || !password || !role) throw new Error("Preencha todos os campos do usuário.");
 
-      await adminCall("create_user", {
-        email,
-        password,
-        role
-      });
-
+      await adminCall("create_user", { email, password, role });
       $("user-create-form").reset();
-
-      showMessage(
-        "user-create-message",
-        "Usuário criado com sucesso!",
-        "success"
-      );
-
+      showMessage("user-create-message", "Usuário criado com sucesso!", "success");
       await carregarAdministracao();
     } catch (error) {
       showMessage("user-create-message", friendlyError(error));
@@ -609,10 +443,7 @@ if ($("user-create-form")) {
 }
 
 if ($("permission-user")) {
-  $("permission-user").addEventListener(
-    "change",
-    carregarPermissoesUsuario
-  );
+  $("permission-user").addEventListener("change", carregarPermissoesUsuario);
 }
 
 async function carregarPermissoesUsuario() {
@@ -620,22 +451,15 @@ async function carregarPermissoesUsuario() {
 
   const userId = $("permission-user")?.value;
   const container = $("permission-dashboard-list");
-
   if (!container) return;
-
   container.replaceChildren();
-
   if (!userId) return;
 
   const user = adminUsers.find(u => u.id === userId);
   if (!user) return;
 
   if (user.role === "admin") {
-    showMessage(
-      "permission-message",
-      "Administradores possuem acesso a todos os dashboards.",
-      "success"
-    );
+    showMessage("permission-message", "Administradores possuem acesso a todos os dashboards.", "success");
     return;
   }
 
@@ -646,10 +470,7 @@ async function carregarPermissoesUsuario() {
       .eq("user_id", userId);
 
     if (error) throw error;
-
-    const ids = new Set(
-      (permissions || []).map(p => p.dashboard_id)
-    );
+    const ids = new Set((permissions || []).map(p => p.dashboard_id));
 
     const { data: dashboards, error: dError } = await sb
       .from("dashboards")
@@ -683,41 +504,23 @@ if ($("save-permissions-btn")) {
     const userId = $("permission-user")?.value;
 
     if (!userId) {
-      return showMessage(
-        "permission-message",
-        "Selecione um usuário primeiro."
-      );
+      return showMessage("permission-message", "Selecione um usuário primeiro.");
     }
 
     const user = adminUsers.find(u => u.id === userId);
-
     if (user?.role === "admin") {
-      return showMessage(
-        "permission-message",
-        "Administradores já possuem acesso a todos os dashboards."
-      );
+      return showMessage("permission-message", "Administradores já possuem acesso a todos os dashboards.");
     }
 
     const button = $("save-permissions-btn");
     setLoading(button, true, "Salvando...");
 
     try {
-      const ids = [
-        ...$("permission-dashboard-list").querySelectorAll(
-          'input[type="checkbox"]:checked'
-        )
-      ].map(i => i.value);
+      const ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')]
+        .map(i => i.value);
 
-      await adminCall("set_permissions", {
-        user_id: userId,
-        dashboard_ids: ids
-      });
-
-      showMessage(
-        "permission-message",
-        "Permissões salvas com sucesso!",
-        "success"
-      );
+      await adminCall("set_permissions", { user_id: userId, dashboard_ids: ids });
+      showMessage("permission-message", "Permissões salvas com sucesso!", "success");
     } catch (error) {
       showMessage("permission-message", friendlyError(error));
     } finally {
@@ -729,7 +532,6 @@ if ($("save-permissions-btn")) {
 function renderizarDashboardsAdministrativos() {
   const container = $("admin-dashboard-list");
   if (!container) return;
-
   container.replaceChildren();
 
   allDashboards.forEach(d => {
@@ -750,7 +552,6 @@ function renderizarDashboardsAdministrativos() {
 if ($("dashboard-form")) {
   $("dashboard-form").addEventListener("submit", async event => {
     event.preventDefault();
-
     const button = event.submitter;
     setLoading(button, true, "Salvando...");
 
@@ -763,36 +564,18 @@ if ($("dashboard-form")) {
         url: $("dashboard-url").value.trim()
       };
 
-      if (
-        !d.id ||
-        !d.name ||
-        !d.description ||
-        !isSafeDashboardUrl(d.url)
-      ) {
-        throw new Error(
-          "Preencha todos os campos e informe uma URL válida."
-        );
+      if (!d.id || !d.name || !d.description || !isSafeDashboardUrl(d.url)) {
+        throw new Error("Preencha todos os campos e informe uma URL válida.");
       }
 
-      const { error } = await sb
-        .from("dashboards")
-        .upsert(d, { onConflict: "id" });
-
+      const { error } = await sb.from("dashboards").upsert(d, { onConflict: "id" });
       if (error) throw error;
 
-      showMessage(
-        "dashboard-form-message",
-        "Dashboard salvo com sucesso!",
-        "success"
-      );
-
+      showMessage("dashboard-form-message", "Dashboard salvo com sucesso!", "success");
       $("dashboard-form").reset();
-
       await carregarDashboards();
 
-      if (currentProfile?.role === "admin") {
-        await carregarAdministracao();
-      }
+      if (currentProfile?.role === "admin") await carregarAdministracao();
     } catch (error) {
       showMessage("dashboard-form-message", friendlyError(error));
     } finally {
@@ -802,77 +585,57 @@ if ($("dashboard-form")) {
 }
 
 // ==================================================
-// SUBSTITUIÇÕES — ACESSO E CARREGAMENTO
+// SUBSTITUIÇÕES — ACESSO
 // ==================================================
 
 function dashboardEhSubstituicoes(d) {
   const nome = normalize(d?.name);
   const id = normalize(d?.id);
-
-  return (
-    nome.includes("bi de substituicoes") ||
+  return nome.includes("bi de substituicoes") ||
     nome.includes("bi substituicoes") ||
     id === "bi_substituicoes" ||
-    id === "bi-substituicoes"
-  );
+    id === "bi-substituicoes";
 }
 
 function configurarAcessoSubstituicoes() {
   const section = $("substituicoes-section");
   const nav = $("substituicoes-nav-link");
-
   if (!section || !nav) return;
 
-  const allowed =
-    currentProfile?.role === "admin" ||
-    allDashboards.some(dashboardEhSubstituicoes);
-
+  const allowed = currentProfile?.role === "admin" || allDashboards.some(dashboardEhSubstituicoes);
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
   if (allowed && !subInicializado) {
     subInicializado = true;
     prepararInterfaceSubstituicoes();
-
-    carregarSubstituicoes().catch(error => {
-      mostrarErroSubstituicoes(friendlyError(error));
-    });
+    carregarSubstituicoes().catch(error => mostrarErroSubstituicoes(friendlyError(error)));
   }
 }
 
 function prepararInterfaceSubstituicoes() {
   if ($("substituicoes-atualizar")) {
-    $("substituicoes-atualizar").addEventListener(
-      "click",
-      async () => {
-        const button = $("substituicoes-atualizar");
-
-        setLoading(button, true, "Atualizando...");
-
-        try {
-          await carregarSubstituicoes();
-        } catch (error) {
-          mostrarErroSubstituicoes(friendlyError(error));
-        } finally {
-          setLoading(button, false);
-        }
+    $("substituicoes-atualizar").addEventListener("click", async () => {
+      const button = $("substituicoes-atualizar");
+      setLoading(button, true, "Atualizando...");
+      try {
+        await carregarSubstituicoes();
+      } catch (error) {
+        mostrarErroSubstituicoes(friendlyError(error));
+      } finally {
+        setLoading(button, false);
       }
-    );
+    });
   }
 
   [
-    "sub-filtro-subsede",
-    "sub-filtro-angariador",
-    "sub-filtro-ano",
-    "sub-filtro-periodo-fechamento",
-    "sub-filtro-situacao"
+    "sub-filtro-subsede", "sub-filtro-angariador", "sub-filtro-ano",
+    "sub-filtro-periodo-fechamento", "sub-filtro-situacao"
   ].forEach(id => {
-    if ($(id)) {
-      $(id).addEventListener("change", () => {
-        subPaginaAtual = 1;
-        renderizarBISelecionado();
-      });
-    }
+    if ($(id)) $(id).addEventListener("change", () => {
+      subPaginaAtual = 1;
+      renderizarBISelecionado();
+    });
   });
 
   if ($("sub-pagina-anterior")) {
@@ -886,12 +649,7 @@ function prepararInterfaceSubstituicoes() {
 
   if ($("sub-pagina-proxima")) {
     $("sub-pagina-proxima").addEventListener("click", () => {
-      const total = obterRegistrosFiltrados().length;
-      const totalPaginas = Math.max(
-        1,
-        Math.ceil(total / SUB_PAGE_SIZE)
-      );
-
+      const totalPaginas = Math.max(1, Math.ceil(obterRegistrosFiltrados().length / SUB_PAGE_SIZE));
       if (subPaginaAtual < totalPaginas) {
         subPaginaAtual++;
         renderizarBISelecionado();
@@ -906,70 +664,47 @@ function mostrarErroSubstituicoes(message) {
 
 async function carregarSubstituicoes() {
   if (!sb || !currentUser || !currentProfile) return;
-
-  definirMensagemSubstituicoes(
-    "Carregando dados de substituições..."
-  );
+  definirMensagemSubstituicoes("Carregando dados de substituições...");
 
   const all = [];
   const pageSize = 1000;
   let offset = 0;
 
   while (true) {
-    const { data, error } = await sb
-      .from(SUB_VIEW)
+    const { data, error } = await sb.from(SUB_VIEW)
       .select(SUB_FIELDS.join(","))
       .range(offset, offset + pageSize - 1);
 
     if (error) throw error;
-
     const page = data || [];
     all.push(...page);
-
     if (page.length < pageSize) break;
-
     offset += pageSize;
   }
 
   subRegistros = all.map(normalizarRegistroSubstituicao);
   subPaginaAtual = 1;
-
   preencherFiltrosSubstituicoes();
 
-  definirMensagemSubstituicoes(
-    `${subRegistros.length.toLocaleString("pt-BR")} registros carregados.`
-  );
-
+  definirMensagemSubstituicoes(`${subRegistros.length.toLocaleString("pt-BR")} registros carregados.`);
   renderizarBISelecionado();
 }
-
-// ==================================================
-// CLASSIFICAÇÃO DAS SUBSTITUIÇÕES
-// ==================================================
 
 function normalizarRegistroSubstituicao(row) {
   const situacao = normalize(row.situacao_substituicao);
   const status = normalize(row.status_da_substituicao);
   const jovemFoiSubstituido = normalize(row.jovem_foi_substituido);
-  const outroRaw = normalize(row.substituido_em_outro_fechamento);
+  const outroFechamento = ehSim(row.substituido_em_outro_fechamento);
   const faixa = normalize(row.faixa_de_atraso);
   const prazo = normalize(row.dentro_do_prazo);
-
-  const outroFechamento = ehSim(outroRaw);
 
   const sinalRealizada =
     situacao.includes("substituido realizado") ||
     status.includes("realizado") ||
-    (
-      temValor(jovemFoiSubstituido) &&
-      !ehNao(jovemFoiSubstituido)
-    ) ||
+    (temValor(jovemFoiSubstituido) && !ehNao(jovemFoiSubstituido)) ||
     temValor(row.jovem_substituto) ||
     outroFechamento ||
-    (
-      temValor(row.fechamento_da_substituicao) &&
-      !ehNao(row.fechamento_da_substituicao)
-    );
+    (temValor(row.fechamento_da_substituicao) && !ehNao(row.fechamento_da_substituicao));
 
   const declaradaPendente =
     situacao.includes("nao substituido") ||
@@ -979,73 +714,40 @@ function normalizarRegistroSubstituicao(row) {
 
   const realizada = sinalRealizada && !declaradaPendente;
 
-  const dias =
-    numeroSeguro(row.dias_pendentes) ??
+  const dias = numeroSeguro(row.dias_pendentes) ??
     numeroSeguro(row.dias_em_aberto) ??
     numeroSeguro(row.dias_ate_substituicao);
 
   const faixaNoFechamento = faixa.includes("no fechamento");
+  const faixaAtrasada = /31 a 60|61 a 90|mais de 90|acima de 90|acima de 60|mais de 60|atraso/.test(faixa);
 
-  const faixaAtrasada =
-    /31 a 60|61 a 90|mais de 90|acima de 90|acima de 60|mais de 60|atraso/.test(faixa);
+  const atrasada = !realizada && !faixaNoFechamento &&
+    ((dias !== null && dias > 30) || (dias === null && faixaAtrasada && prazo !== "sim"));
 
-  const atrasada = !realizada && !faixaNoFechamento && (
-    (dias !== null && dias > 30) ||
-    (dias === null && faixaAtrasada && prazo !== "sim")
-  );
-
-  const realizadaOutro = realizada && outroFechamento;
-  const realizadaCerta = realizada && !outroFechamento;
-
-  const periodoFechamento = valorTexto(
-    row.periodo_fechamento,
-    ""
-  );
-
+  const periodoFechamento = valorTexto(row.periodo_fechamento, "");
   const mes = valorTexto(
-    row.mes_fechamento ||
-    periodoFechamento ||
-    row.mes_fechamento_da_substituicao ||
-    row.mes_ano_desligamento ||
-    row.mes_da_substituicao,
+    row.mes_fechamento || periodoFechamento || row.mes_fechamento_da_substituicao ||
+    row.mes_ano_desligamento || row.mes_da_substituicao,
     "Sem mês"
   );
 
-  const anoInformado = valorTexto(row.ano_fechamento, "");
-
   const anoExtraido = String(
-    periodoFechamento ||
-    row.mes_fechamento ||
-    row.mes_ano_desligamento ||
-    row.data_desligamento ||
-    ""
+    periodoFechamento || row.mes_fechamento || row.mes_ano_desligamento ||
+    row.data_desligamento || ""
   ).match(/20\d{2}/)?.[0] || "Sem ano";
 
   return {
     ...row,
-
     _realizada: realizada,
-    _realizadaCerta: realizadaCerta,
-    _realizadaOutro: realizadaOutro,
+    _realizadaCerta: realizada && !outroFechamento,
+    _realizadaOutro: realizada && outroFechamento,
     _atrasada: atrasada,
-
-    _situacao: realizada
-      ? "realizada"
-      : atrasada
-        ? "atrasada"
-        : "pendente",
-
+    _situacao: realizada ? "realizada" : atrasada ? "atrasada" : "pendente",
     _dias: dias,
     _mes: mes,
-    _ano: anoInformado || anoExtraido,
-
+    _ano: valorTexto(row.ano_fechamento, "") || anoExtraido,
     _periodoFechamento: periodoFechamento,
-
-    _prioridade: realizada
-      ? "Resolvida"
-      : atrasada
-        ? "Atrasada"
-        : valorTexto(row.prioridade, "Normal")
+    _prioridade: realizada ? "Resolvida" : atrasada ? "Atrasada" : valorTexto(row.prioridade, "Normal")
   };
 }
 
@@ -1053,36 +755,23 @@ function normalizarRegistroSubstituicao(row) {
 // FILTROS DINÂMICOS
 // ==================================================
 
-function preencherSelectDinamico({
-  id,
-  values,
-  placeholder,
-  preserveValue = true,
-  descending = false
-}) {
+function preencherSelectDinamico({ id, values, placeholder, preserveValue = true, descending = false }) {
   const select = $(id);
   if (!select) return;
 
   const current = preserveValue ? select.value : "";
+  const unique = [...new Set(values.map(v => String(v ?? "").trim()).filter(Boolean))];
 
-  const unique = [...new Set(
-    values
-      .map(value => String(value ?? "").trim())
-      .filter(Boolean)
-  )];
-
-  unique.sort((a, b) => {
-    return descending
-      ? b.localeCompare(a, "pt-BR", { numeric: true })
-      : a.localeCompare(b, "pt-BR", { numeric: true });
-  });
+  unique.sort((a, b) => descending
+    ? b.localeCompare(a, "pt-BR", { numeric: true })
+    : a.localeCompare(b, "pt-BR", { numeric: true }));
 
   select.replaceChildren();
 
-  const allOption = document.createElement("option");
-  allOption.value = "";
-  allOption.textContent = placeholder;
-  select.appendChild(allOption);
+  const optionAll = document.createElement("option");
+  optionAll.value = "";
+  optionAll.textContent = placeholder;
+  select.appendChild(optionAll);
 
   unique.forEach(value => {
     const option = document.createElement("option");
@@ -1091,39 +780,14 @@ function preencherSelectDinamico({
     select.appendChild(option);
   });
 
-  if (unique.includes(current)) {
-    select.value = current;
-  }
+  if (unique.includes(current)) select.value = current;
 }
 
 function preencherFiltrosSubstituicoes() {
-  preencherSelectDinamico({
-    id: "sub-filtro-subsede",
-    values: subRegistros.map(r => r.subsede),
-    placeholder: "Todas as subsedes"
-  });
-
-  preencherSelectDinamico({
-    id: "sub-filtro-angariador",
-    values: subRegistros.map(r => r.angariador),
-    placeholder: "Todos os angariadores"
-  });
-
-  preencherSelectDinamico({
-    id: "sub-filtro-ano",
-    values: subRegistros
-      .map(r => r._ano)
-      .filter(ano => ano && ano !== "Sem ano"),
-    placeholder: "Todos os anos",
-    descending: true
-  });
-
-  preencherSelectDinamico({
-    id: "sub-filtro-periodo-fechamento",
-    values: subRegistros.map(r => r._periodoFechamento),
-    placeholder: "Todos os períodos",
-    descending: true
-  });
+  preencherSelectDinamico({ id: "sub-filtro-subsede", values: subRegistros.map(r => r.subsede), placeholder: "Todas as subsedes" });
+  preencherSelectDinamico({ id: "sub-filtro-angariador", values: subRegistros.map(r => r.angariador), placeholder: "Todos os angariadores" });
+  preencherSelectDinamico({ id: "sub-filtro-ano", values: subRegistros.map(r => r._ano).filter(a => a && a !== "Sem ano"), placeholder: "Todos os anos", descending: true });
+  preencherSelectDinamico({ id: "sub-filtro-periodo-fechamento", values: subRegistros.map(r => r._periodoFechamento), placeholder: "Todos os períodos", descending: true });
 }
 
 function obterRegistrosFiltrados() {
@@ -1142,21 +806,10 @@ function obterRegistrosFiltrados() {
   );
 }
 
-// ==================================================
-// RENDERIZAÇÃO GERAL DE SUBSTITUIÇÕES
-// ==================================================
-
 function renderizarBISelecionado() {
   const rows = obterRegistrosFiltrados();
-
-  const totalPaginas = Math.max(
-    1,
-    Math.ceil(rows.length / SUB_PAGE_SIZE)
-  );
-
-  if (subPaginaAtual > totalPaginas) {
-    subPaginaAtual = totalPaginas;
-  }
+  const totalPaginas = Math.max(1, Math.ceil(rows.length / SUB_PAGE_SIZE));
+  if (subPaginaAtual > totalPaginas) subPaginaAtual = totalPaginas;
 
   atualizarIndicadoresSubstituicoes(rows);
   renderizarGraficosSubstituicoes(rows);
@@ -1164,106 +817,54 @@ function renderizarBISelecionado() {
 }
 
 function atualizarIndicadoresSubstituicoes(rows) {
-  const total = rows.length;
-  const realizadas = rows.filter(r => r._realizada).length;
-  const atrasadas = rows.filter(r => r._atrasada).length;
-
-  const pendentes = rows.filter(
-    r => !r._realizada && !r._atrasada
-  ).length;
-
   const values = {
-    "sub-total": total,
-    "sub-realizadas": realizadas,
-    "sub-pendentes": pendentes,
-    "sub-atrasadas": atrasadas
+    "sub-total": rows.length,
+    "sub-realizadas": rows.filter(r => r._realizada).length,
+    "sub-pendentes": rows.filter(r => !r._realizada && !r._atrasada).length,
+    "sub-atrasadas": rows.filter(r => r._atrasada).length
   };
 
   Object.entries(values).forEach(([id, value]) => {
-    if ($(id)) {
-      $(id).textContent = value.toLocaleString("pt-BR");
-    }
+    if ($(id)) $(id).textContent = value.toLocaleString("pt-BR");
   });
 }
 
 // ==================================================
-// GRÁFICOS CHART.JS E RÓTULOS
+// GRÁFICOS DE SUBSTITUIÇÕES
 // ==================================================
 
 function destruirGraficosSubstituicoes() {
-  Object.values(subGraficos).forEach(chart => {
-    chart?.destroy?.();
-  });
-
+  Object.values(subGraficos).forEach(chart => chart?.destroy?.());
   subGraficos = {};
 }
 
 const pluginRotulosSubstituicoes = {
   id: "rotulosSubstituicoes",
-
   afterDatasetsDraw(chart) {
     const { ctx } = chart;
-
     ctx.save();
     ctx.font = "600 11px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "#263746";
 
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       const meta = chart.getDatasetMeta(datasetIndex);
-
       if (meta.hidden) return;
 
       meta.data.forEach((element, index) => {
         const value = dataset.data[index];
-
-        if (
-          value === null ||
-          value === undefined ||
-          !Number.isFinite(Number(value))
-        ) {
-          return;
-        }
-
-        if (chart.config.type === "doughnut") {
-          if (Number(value) === 0) return;
-
-          const position = element.tooltipPosition();
-
-          ctx.fillStyle = "#ffffff";
-          ctx.strokeStyle = "rgba(0,0,0,0.25)";
-          ctx.lineWidth = 2;
-
-          ctx.strokeText(
-            Number(value).toLocaleString("pt-BR"),
-            position.x,
-            position.y
-          );
-
-          ctx.fillText(
-            Number(value).toLocaleString("pt-BR"),
-            position.x,
-            position.y
-          );
-
-          return;
-        }
+        if (value === null || value === undefined || !Number.isFinite(Number(value))) return;
+        if (chart.config.type === "doughnut" && Number(value) === 0) return;
 
         const position = element.tooltipPosition();
         const isHorizontal = chart.options.indexAxis === "y";
 
-        ctx.fillStyle = "#263746";
+        ctx.fillStyle = chart.config.type === "doughnut" ? "#ffffff" : "#263746";
         ctx.textAlign = isHorizontal ? "left" : "center";
 
         const x = isHorizontal ? position.x + 7 : position.x;
         const y = isHorizontal ? position.y : position.y - 10;
-
-        ctx.fillText(
-          Number(value).toLocaleString("pt-BR"),
-          x,
-          y
-        );
+        ctx.fillText(Number(value).toLocaleString("pt-BR"), x, y);
       });
     });
 
@@ -1273,21 +874,13 @@ const pluginRotulosSubstituicoes = {
 
 function criarGraficoSubstituicoes(id, config) {
   const canvas = $(id);
-
   if (!canvas || typeof Chart === "undefined") return;
 
-  if (subGraficos[id]) {
-    subGraficos[id].destroy();
-  }
-
-  const plugins = [
-    ...(config.plugins || []),
-    pluginRotulosSubstituicoes
-  ];
+  if (subGraficos[id]) subGraficos[id].destroy();
 
   subGraficos[id] = new Chart(canvas, {
     ...config,
-    plugins
+    plugins: [...(config.plugins || []), pluginRotulosSubstituicoes]
   });
 }
 
@@ -1295,10 +888,7 @@ function agruparContagem(rows, keyFn) {
   const map = new Map();
 
   rows.forEach(row => {
-    const label = String(
-      keyFn(row) || "Não informado"
-    ).trim();
-
+    const label = String(keyFn(row) || "Não informado").trim();
     map.set(label, (map.get(label) || 0) + 1);
   });
 
@@ -1306,32 +896,20 @@ function agruparContagem(rows, keyFn) {
 }
 
 function ordenarPeriodosMensais(periodos) {
-  const meses = [
-    "janeiro", "fevereiro", "marco", "abril", "maio", "junho",
-    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
-  ];
+  const meses = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
   return [...periodos].sort((a, b) => {
     const anoA = Number(String(a[0]).match(/20\d{2}/)?.[0] || 0);
     const anoB = Number(String(b[0]).match(/20\d{2}/)?.[0] || 0);
-
     if (anoA !== anoB) return anoA - anoB;
 
     const mesA = normalize(a[0]);
     const mesB = normalize(b[0]);
-
     const indexA = meses.findIndex(m => mesA.includes(m));
     const indexB = meses.findIndex(m => mesB.includes(m));
 
-    if (indexA !== -1 && indexB !== -1 && indexA !== indexB) {
-      return indexA - indexB;
-    }
-
-    return String(a[0]).localeCompare(
-      String(b[0]),
-      "pt-BR",
-      { numeric: true }
-    );
+    if (indexA !== -1 && indexB !== -1 && indexA !== indexB) return indexA - indexB;
+    return String(a[0]).localeCompare(String(b[0]), "pt-BR", { numeric: true });
   });
 }
 
@@ -1339,92 +917,36 @@ function opcoesGraficoSubstituicoes() {
   return {
     responsive: true,
     maintainAspectRatio: false,
-
-    interaction: {
-      intersect: false,
-      mode: "index"
-    },
-
-    plugins: {
-      legend: {
-        position: "bottom"
-      },
-
-      tooltip: {
-        enabled: true
-      }
-    },
-
+    interaction: { intersect: false, mode: "index" },
+    plugins: { legend: { position: "bottom" }, tooltip: { enabled: true } },
     scales: {
-      x: {
-        ticks: {
-          maxRotation: 45,
-          minRotation: 0
-        },
-
-        grid: {
-          display: false
-        }
-      },
-
-      y: {
-        beginAtZero: true,
-
-        ticks: {
-          precision: 0
-        }
-      }
+      x: { ticks: { maxRotation: 45, minRotation: 0 }, grid: { display: false } },
+      y: { beginAtZero: true, ticks: { precision: 0 } }
     }
   };
 }
 
 function renderizarGraficosSubstituicoes(rows) {
   if (typeof Chart === "undefined") {
-    mostrarErroSubstituicoes(
-      "A biblioteca Chart.js não carregou."
-    );
+    mostrarErroSubstituicoes("A biblioteca Chart.js não carregou.");
     return;
   }
 
-  const mesesAgrupados = agruparContagem(rows, r => r._mes);
-  const meses = ordenarPeriodosMensais(mesesAgrupados);
-
+  const meses = ordenarPeriodosMensais(agruparContagem(rows, r => r._mes));
   const datasets = [
-    {
-      label: "Fechadas no período correto",
-      key: r => r._realizadaCerta,
-      color: "#16835b"
-    },
-    {
-      label: "Fechadas em outro período",
-      key: r => r._realizadaOutro,
-      color: "#7b61a8"
-    },
-    {
-      label: "Pendentes",
-      key: r => !r._realizada && !r._atrasada,
-      color: "#3678c8"
-    },
-    {
-      label: "Em atraso",
-      key: r => r._atrasada,
-      color: "#c94c4c"
-    }
+    { label: "Fechadas no período correto", key: r => r._realizadaCerta, color: "#16835b" },
+    { label: "Fechadas em outro período", key: r => r._realizadaOutro, color: "#7b61a8" },
+    { label: "Pendentes", key: r => !r._realizada && !r._atrasada, color: "#3678c8" },
+    { label: "Em atraso", key: r => r._atrasada, color: "#c94c4c" }
   ];
 
   criarGraficoSubstituicoes("sub-grafico-mensal", {
     type: "line",
-
     data: {
       labels: meses.map(item => item[0]),
-
       datasets: datasets.map(d => ({
         label: d.label,
-
-        data: meses.map(([mes]) =>
-          rows.filter(r => r._mes === mes && d.key(r)).length
-        ),
-
+        data: meses.map(([mes]) => rows.filter(r => r._mes === mes && d.key(r)).length),
         borderColor: d.color,
         backgroundColor: d.color + "20",
         pointBackgroundColor: d.color,
@@ -1434,107 +956,48 @@ function renderizarGraficosSubstituicoes(rows) {
         tension: 0.25
       }))
     },
-
     options: opcoesGraficoSubstituicoes()
   });
 
-  const subsedes = agruparContagem(
-    rows,
-    r => r.subsede
-  ).slice(0, 12);
-
+  const subsedes = agruparContagem(rows, r => r.subsede).slice(0, 12);
   criarGraficoSubstituicoes("sub-grafico-subsede", {
     type: "bar",
-
     data: {
-      labels: subsedes.map(item => item[0]),
-
-      datasets: [{
-        label: "Registros",
-        data: subsedes.map(item => item[1]),
-        backgroundColor: "#3678c8",
-        borderRadius: 5
-      }]
+      labels: subsedes.map(i => i[0]),
+      datasets: [{ label: "Registros", data: subsedes.map(i => i[1]), backgroundColor: "#3678c8", borderRadius: 5 }]
     },
-
-    options: {
-      ...opcoesGraficoSubstituicoes(),
-      indexAxis: "y"
-    }
+    options: { ...opcoesGraficoSubstituicoes(), indexAxis: "y" }
   });
 
-  const motivos = agruparContagem(
-    rows,
-    r => r.motivo || "Não informado"
-  ).slice(0, 10);
-
+  const motivos = agruparContagem(rows, r => r.motivo || "Não informado").slice(0, 10);
   criarGraficoSubstituicoes("sub-grafico-motivos", {
     type: "bar",
-
     data: {
-      labels: motivos.map(item => item[0]),
-
-      datasets: [{
-        label: "Registros",
-        data: motivos.map(item => item[1]),
-        backgroundColor: "#244b78",
-        borderRadius: 5
-      }]
+      labels: motivos.map(i => i[0]),
+      datasets: [{ label: "Registros", data: motivos.map(i => i[1]), backgroundColor: "#244b78", borderRadius: 5 }]
     },
-
-    options: {
-      ...opcoesGraficoSubstituicoes(),
-      indexAxis: "y"
-    }
+    options: { ...opcoesGraficoSubstituicoes(), indexAxis: "y" }
   });
 
   const certas = rows.filter(r => r._realizadaCerta).length;
   const outras = rows.filter(r => r._realizadaOutro).length;
-
-  const pendentes = rows.filter(
-    r => !r._realizada && !r._atrasada
-  ).length;
-
+  const pendentes = rows.filter(r => !r._realizada && !r._atrasada).length;
   const atrasadas = rows.filter(r => r._atrasada).length;
 
   criarGraficoSubstituicoes("sub-grafico-situacao", {
     type: "doughnut",
-
     data: {
-      labels: [
-        "Fechadas no período correto",
-        "Fechadas em outro período",
-        "Pendentes",
-        "Em atraso"
-      ],
-
+      labels: ["Fechadas no período correto", "Fechadas em outro período", "Pendentes", "Em atraso"],
       datasets: [{
         data: [certas, outras, pendentes, atrasadas],
-
-        backgroundColor: [
-          "#16835b",
-          "#7b61a8",
-          "#3678c8",
-          "#c94c4c"
-        ],
-
+        backgroundColor: ["#16835b", "#7b61a8", "#3678c8", "#c94c4c"],
         borderWidth: 0
       }]
     },
-
     options: {
       responsive: true,
       maintainAspectRatio: false,
-
-      plugins: {
-        legend: {
-          position: "bottom"
-        },
-
-        tooltip: {
-          enabled: true
-        }
-      }
+      plugins: { legend: { position: "bottom" }, tooltip: { enabled: true } }
     }
   });
 }
@@ -1546,123 +1009,63 @@ function renderizarGraficosSubstituicoes(rows) {
 function criarCelulaTabela(value, row) {
   const td = document.createElement("td");
   td.textContent = valorTexto(value);
-
-  if (row) {
-    td.title = String(value ?? "");
-  }
-
+  if (row) td.title = String(value ?? "");
   return td;
 }
 
 function renderizarTabelaSubstituicoes(rows) {
   const tbody = $("sub-tabela-corpo");
   const contagem = $("sub-tabela-contagem");
-
   if (!tbody) return;
-
   tbody.replaceChildren();
 
-  if (contagem) {
-    contagem.textContent =
-      `${rows.length.toLocaleString("pt-BR")} registros`;
-  }
+  if (contagem) contagem.textContent = `${rows.length.toLocaleString("pt-BR")} registros`;
 
-  const sorted = [...rows].sort((a, b) => {
-    return (b._dias ?? -1) - (a._dias ?? -1);
-  });
-
-  const totalPaginas = Math.max(
-    1,
-    Math.ceil(sorted.length / SUB_PAGE_SIZE)
-  );
-
-  if (subPaginaAtual > totalPaginas) {
-    subPaginaAtual = totalPaginas;
-  }
-
-  if (subPaginaAtual < 1) {
-    subPaginaAtual = 1;
-  }
+  const sorted = [...rows].sort((a, b) => (b._dias ?? -1) - (a._dias ?? -1));
+  const totalPaginas = Math.max(1, Math.ceil(sorted.length / SUB_PAGE_SIZE));
+  if (subPaginaAtual > totalPaginas) subPaginaAtual = totalPaginas;
+  if (subPaginaAtual < 1) subPaginaAtual = 1;
 
   if (!sorted.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-
     td.colSpan = 8;
-    td.textContent =
-      "Nenhum registro encontrado para os filtros selecionados.";
-
+    td.textContent = "Nenhum registro encontrado para os filtros selecionados.";
     tr.appendChild(td);
     tbody.appendChild(tr);
-
     atualizarPaginacaoSubstituicoes(0, 0, 0, 1);
     return;
   }
 
   const inicio = (subPaginaAtual - 1) * SUB_PAGE_SIZE;
   const fim = Math.min(inicio + SUB_PAGE_SIZE, sorted.length);
-  const pagina = sorted.slice(inicio, fim);
 
-  pagina.forEach(r => {
+  sorted.slice(inicio, fim).forEach(r => {
     const tr = document.createElement("tr");
 
     const situacao = r._realizada
-      ? (
-          r._realizadaOutro
-            ? "Fechada em outro período"
-            : "Fechada no período correto"
-        )
-      : r._atrasada
-        ? "Em atraso"
-        : "Pendente";
+      ? (r._realizadaOutro ? "Fechada em outro período" : "Fechada no período correto")
+      : r._atrasada ? "Em atraso" : "Pendente";
 
     const fechamento = valorTexto(
-      r.periodo_fechamento ||
-      r.mes_fechamento ||
-      r.fim_fechamento ||
-      r.inicio_fechamento ||
-      r.mes_da_substituicao
+      r.periodo_fechamento || r.mes_fechamento || r.fim_fechamento ||
+      r.inicio_fechamento || r.mes_da_substituicao
     );
 
-    const cells = [
-      r.subsede,
-      r.jovem,
-      r.empresa,
-      r.motivo,
-      fechamento,
-      r._dias,
-      situacao,
-      r._prioridade
-    ];
-
-    cells.forEach((value, index) => {
-      const td = criarCelulaTabela(
-        index === 5 && (value === null || value === undefined)
-          ? "—"
-          : value,
-        r
-      );
-
-      tr.appendChild(td);
+    [
+      r.subsede, r.jovem, r.empresa, r.motivo, fechamento,
+      r._dias, situacao, r._prioridade
+    ].forEach((value, index) => {
+      tr.appendChild(criarCelulaTabela(index === 5 && value == null ? "—" : value, r));
     });
 
     tbody.appendChild(tr);
   });
 
-  atualizarPaginacaoSubstituicoes(
-    sorted.length,
-    inicio + 1,
-    fim,
-    totalPaginas
-  );
+  atualizarPaginacaoSubstituicoes(sorted.length, inicio + 1, fim, totalPaginas);
 }
 
-function atualizarPaginacaoSubstituicoes(
-  total,
-  primeiro,
-  ultimo,
-  totalPaginas
-) {
+function atualizarPaginacaoSubstituicoes(total, primeiro, ultimo, totalPaginas) {
   const info = $("sub-paginacao-info");
   const anterior = $("sub-pagina-anterior");
   const proxima = $("sub-pagina-proxima");
@@ -1674,107 +1077,73 @@ function atualizarPaginacaoSubstituicoes(
       : "Nenhum registro para exibir.";
   }
 
-  if (anterior) {
-    anterior.disabled = subPaginaAtual <= 1;
-  }
-
-  if (proxima) {
-    proxima.disabled = subPaginaAtual >= totalPaginas || total === 0;
-  }
-
-  if (container) {
-    container.hidden = false;
-  }
+  if (anterior) anterior.disabled = subPaginaAtual <= 1;
+  if (proxima) proxima.disabled = subPaginaAtual >= totalPaginas || total === 0;
+  if (container) container.hidden = false;
 }
 
 // ==================================================
-// ANÁLISE GEOGRÁFICA EaD — ACESSO
+// EaD — ACESSO E INTERFACE
 // ==================================================
 
 function dashboardEhEaD(d) {
   const nome = normalize(d?.name);
   const id = normalize(d?.id);
-
-  return (
-    nome.includes("analise geografica ead") ||
+  return nome.includes("analise geografica ead") ||
     nome.includes("analise geografica") ||
     id === "analise_geografica_ead" ||
     id === "analise-geografica-ead" ||
     id === "bi_ead" ||
-    id === "bi-ead"
-  );
+    id === "bi-ead";
 }
 
 function configurarAcessoEaD() {
   const section = $("ead-section");
   const nav = $("ead-nav-link");
-
   if (!section || !nav) return;
 
-  const allowed =
-    currentProfile?.role === "admin" ||
-    allDashboards.some(dashboardEhEaD);
-
+  const allowed = currentProfile?.role === "admin" || allDashboards.some(dashboardEhEaD);
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
   if (allowed && !eadInicializado) {
     eadInicializado = true;
     prepararInterfaceEaD();
-
-    carregarAnaliseEaD().catch(error => {
-      mostrarMensagemEaD(friendlyError(error), "error");
-    });
+    carregarAnaliseEaD().catch(error => mostrarMensagemEaD(friendlyError(error), "error"));
   }
 }
 
-// ==================================================
-// ANÁLISE GEOGRÁFICA EaD — INTERFACE
-// ==================================================
-
 function prepararInterfaceEaD() {
-  const atualizar = $("ead-atualizar");
-
-  if (atualizar) {
-    atualizar.addEventListener("click", async () => {
-      setLoading(atualizar, true, "Atualizando...");
-
+  if ($("ead-atualizar")) {
+    $("ead-atualizar").addEventListener("click", async () => {
+      const button = $("ead-atualizar");
+      setLoading(button, true, "Atualizando...");
       try {
         await carregarAnaliseEaD();
       } catch (error) {
         mostrarMensagemEaD(friendlyError(error), "error");
       } finally {
-        setLoading(atualizar, false);
+        setLoading(button, false);
       }
     });
   }
 
-  [
-    "ead-filtro-uf",
-    "ead-filtro-distancia",
-    "ead-filtro-potencial"
-  ].forEach(id => {
-    if ($(id)) {
-      $(id).addEventListener("change", () => {
-        eadPaginaAtual = 1;
-        renderizarAnaliseEaD();
-      });
-    }
+  ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
+    if ($(id)) $(id).addEventListener("change", () => {
+      eadPaginaAtual = 1;
+      renderizarAnaliseEaD();
+    });
   });
 
-  const filtroMunicipio = $("ead-filtro-municipio");
-
-  if (filtroMunicipio) {
-    filtroMunicipio.addEventListener("input", () => {
+  if ($("ead-filtro-municipio")) {
+    $("ead-filtro-municipio").addEventListener("input", () => {
       eadPaginaAtual = 1;
       renderizarAnaliseEaD();
     });
   }
 
-  const anterior = $("ead-pagina-anterior");
-
-  if (anterior) {
-    anterior.addEventListener("click", () => {
+  if ($("ead-pagina-anterior")) {
+    $("ead-pagina-anterior").addEventListener("click", () => {
       if (eadPaginaAtual > 1) {
         eadPaginaAtual--;
         renderizarAnaliseEaD();
@@ -1782,17 +1151,9 @@ function prepararInterfaceEaD() {
     });
   }
 
-  const proxima = $("ead-pagina-proxima");
-
-  if (proxima) {
-    proxima.addEventListener("click", () => {
-      const total = obterRegistrosEaDFiltrados().length;
-
-      const totalPaginas = Math.max(
-        1,
-        Math.ceil(total / EAD_PAGE_SIZE)
-      );
-
+  if ($("ead-pagina-proxima")) {
+    $("ead-pagina-proxima").addEventListener("click", () => {
+      const totalPaginas = Math.max(1, Math.ceil(obterRegistrosEaDFiltrados().length / EAD_PAGE_SIZE));
       if (eadPaginaAtual < totalPaginas) {
         eadPaginaAtual++;
         renderizarAnaliseEaD();
@@ -1804,20 +1165,12 @@ function prepararInterfaceEaD() {
 function mostrarMensagemEaD(message, type = "success") {
   const el = $("ead-message");
   if (!el) return;
-
   el.textContent = message;
-  el.className = type === "error"
-    ? "message-error"
-    : "message-success";
+  el.className = type === "error" ? "message-error" : "message-success";
 }
-
-// ==================================================
-// ANÁLISE GEOGRÁFICA EaD — CONSULTA AO SUPABASE
-// ==================================================
 
 async function carregarAnaliseEaD() {
   if (!sb || !currentUser || !currentProfile) return;
-
   mostrarMensagemEaD("Carregando análise geográfica EaD...");
 
   const registros = [];
@@ -1825,109 +1178,426 @@ async function carregarAnaliseEaD() {
   let offset = 0;
 
   while (true) {
-    const { data, error } = await sb
-      .from(EAD_TABLE)
+    const { data, error } = await sb.from(EAD_TABLE)
       .select(EAD_FIELDS.join(","))
       .order("municipio")
       .range(offset, offset + pageSize - 1);
 
     if (error) throw error;
-
     const pagina = data || [];
     registros.push(...pagina);
-
     if (pagina.length < pageSize) break;
-
     offset += pageSize;
   }
 
   eadRegistros = registros;
   eadPaginaAtual = 1;
-
   preencherFiltrosEaD();
   renderizarAnaliseEaD();
-
-  mostrarMensagemEaD(
-    `${eadRegistros.length.toLocaleString("pt-BR")} municípios carregados.`
-  );
+  mostrarMensagemEaD(`${eadRegistros.length.toLocaleString("pt-BR")} municípios carregados.`);
 }
 
-// ==================================================
-// ANÁLISE GEOGRÁFICA EaD — FILTROS
-// ==================================================
-
 function preencherFiltrosEaD() {
-  preencherSelectDinamico({
-    id: "ead-filtro-uf",
-    values: eadRegistros.map(r => r.uf),
-    placeholder: "Todas as UFs"
-  });
-
-  preencherSelectDinamico({
-    id: "ead-filtro-distancia",
-    values: eadRegistros.map(r => r.classificacao_distancia),
-    placeholder: "Todas as classificações de distância"
-  });
-
-  preencherSelectDinamico({
-    id: "ead-filtro-potencial",
-    values: eadRegistros.map(r => r.classificacao_potencial),
-    placeholder: "Todas as classificações de potencial"
-  });
+  preencherSelectDinamico({ id: "ead-filtro-uf", values: eadRegistros.map(r => r.uf), placeholder: "Todas as UFs" });
+  preencherSelectDinamico({ id: "ead-filtro-distancia", values: eadRegistros.map(r => r.classificacao_distancia), placeholder: "Todas as classificações de distância" });
+  preencherSelectDinamico({ id: "ead-filtro-potencial", values: eadRegistros.map(r => r.classificacao_potencial), placeholder: "Todas as classificações de potencial" });
 }
 
 function obterRegistrosEaDFiltrados() {
-  const municipio = normalize(
-    $("ead-filtro-municipio")?.value || ""
-  );
-
+  const municipio = normalize($("ead-filtro-municipio")?.value || "");
   const uf = $("ead-filtro-uf")?.value || "";
   const distancia = $("ead-filtro-distancia")?.value || "";
   const potencial = $("ead-filtro-potencial")?.value || "";
 
-  return eadRegistros.filter(r => {
-    const nomeMunicipio = normalize(r.municipio);
-
-    return (
-      (!municipio || nomeMunicipio.includes(municipio)) &&
-      (!uf || String(r.uf || "") === uf) &&
-      (
-        !distancia ||
-        String(r.classificacao_distancia || "") === distancia
-      ) &&
-      (
-        !potencial ||
-        String(r.classificacao_potencial || "") === potencial
-      )
-    );
-  });
+  return eadRegistros.filter(r =>
+    (!municipio || normalize(r.municipio).includes(municipio)) &&
+    (!uf || String(r.uf || "") === uf) &&
+    (!distancia || String(r.classificacao_distancia || "") === distancia) &&
+    (!potencial || String(r.classificacao_potencial || "") === potencial)
+  );
 }
 
 // ==================================================
-// ANÁLISE GEOGRÁFICA EaD — INDICADORES
+// EaD — MAPA INTERATIVO
+// ==================================================
+
+let eadMapa = null;
+let eadMapaMarcadoresMunicipios = null;
+let eadMapaMarcadoresAtendimento = null;
+let eadMapaCarregamento = null;
+let eadMapaPreparado = false;
+let eadMapaAjustouEnquadramento = false;
+
+// Coordenadas aproximadas de municípios/pontos de atendimento.
+// Marcadores não representam endereços exatos.
+const EAD_MAPA_PONTOS = [
+  ["SUBSEDE","Curitiba","PR","Curitiba",-25.432956,-49.271848],
+  ["POLO","São José dos Pinhais","PR","Curitiba",-25.537702,-49.200082],
+  ["POLO","Araucária","PR","Curitiba",-25.591645,-49.401940],
+  ["POLO","Campo Largo","PR","Curitiba",-25.459491,-49.528841],
+  ["POLO","Paranaguá","PR","Curitiba",-25.506842,-48.524733],
+  ["SUBSEDE","Ponta Grossa","PR","Ponta Grossa",-25.092547,-50.161442],
+  ["POLO","Carambeí","PR","Ponta Grossa",-24.950873,-50.113092],
+  ["POLO","Castro","PR","Ponta Grossa",-24.795418,-50.002811],
+  ["POLO","Palmeira","PR","Ponta Grossa",-25.418568,-50.003247],
+  ["POLO","Porto Amazonas","PR","Ponta Grossa",-25.541573,-49.889721],
+  ["SUBSEDE","Maringá","PR","Maringá",-23.422280,-51.939882],
+  ["POLO","Cianorte","PR","Maringá",-23.653813,-52.609151],
+  ["POLO","Campo Mourão","PR","Maringá",-24.041223,-52.381115],
+  ["POLO","Jandaia do Sul","PR","Maringá",-23.601179,-51.643395],
+  ["POLO","Ivatuba","PR","Maringá",-23.618274,-52.217669],
+  ["SUBSEDE","Joinville","SC","Joinville",-26.304518,-48.849409],
+  ["POLO","Rio Negrinho","SC","Joinville",-26.255325,-49.517295],
+  ["POLO","São Bento do Sul","SC","Joinville",-26.249485,-49.386979],
+  ["POLO","Jaraguá do Sul","SC","Joinville",-26.490484,-49.076299],
+  ["POLO","Itapoá","SC","Joinville",-26.006048,-48.604168],
+  ["POLO","Garuva","SC","Joinville",-26.022076,-48.849842],
+  ["POLO","Araquari","SC","Joinville",-26.375952,-48.692707],
+  ["POLO","Itajaí","SC","Joinville",-26.907426,-48.657023],
+  ["POLO","Navegantes","SC","Joinville",-26.897439,-48.649183],
+  ["POLO","Luiz Alves","SC","Joinville",-26.721111,-48.926047],
+  ["SUBSEDE","Cascavel","PR","Cascavel",-24.953798,-53.459722],
+  ["POLO","Foz do Iguaçu","PR","Cascavel",-25.542493,-54.587102],
+  ["POLO","Toledo","PR","Cascavel",-24.732077,-53.741411],
+  ["POLO","Palotina","PR","Cascavel",-24.279409,-53.838772],
+  ["POLO","Assis Chateaubriand","PR","Cascavel",-24.408530,-53.521237],
+  ["POLO","Umuarama","PR","Cascavel",-23.763950,-53.308460],
+  ["POLO","Marechal Cândido Rondon","PR","Cascavel",-24.559255,-54.060008],
+  ["POLO","Terra Roxa","PR","Cascavel",-24.167484,-54.098514],
+  ["POLO","Maripá","PR","Cascavel",-24.417209,-53.833478],
+  ["SUBSEDE","Florianópolis","SC","Florianópolis",-27.587796,-48.547638],
+  ["POLO","São José","SC","Florianópolis",-27.590312,-48.616023],
+  ["POLO","Criciúma","SC","Florianópolis",-28.673573,-49.365940],
+  ["POLO","Tubarão","SC","Florianópolis",-28.480034,-49.005268],
+  ["POLO","Palhoça","SC","Florianópolis",-27.647044,-48.670288],
+  ["SUBSEDE","Londrina","PR","Londrina",-23.312156,-51.162773],
+  ["POLO","Rolândia","PR","Londrina",-23.313592,-51.362781],
+  ["SUBSEDE","Blumenau","SC","Blumenau",-26.916108,-49.057631],
+  ["POLO","Brusque","SC","Blumenau",-27.098310,-48.915163],
+  ["POLO","Gaspar","SC","Blumenau",-26.918369,-48.967707],
+  ["POLO","Indaial","SC","Blumenau",-26.906256,-49.240140],
+  ["POLO","Pomerode","SC","Blumenau",-26.744827,-49.174197],
+  ["SUBSEDE","Guarapuava","PR","Guarapuava",-25.393592,-51.463431],
+  ["POLO","Pato Branco","PR","Guarapuava",-26.229958,-52.677362],
+  ["POLO","Francisco Beltrão","PR","Guarapuava",-26.078450,-53.056136]
+];
+
+function eadMapaPrepararElemento() {
+  const section = $("ead-section");
+  if (!section) return null;
+
+  let painel = $("ead-mapa-painel");
+  if (painel) return painel;
+
+  painel = document.createElement("section");
+  painel.id = "ead-mapa-painel";
+  painel.className = "ead-mapa-painel";
+  painel.style.cssText = [
+    "margin:20px 0",
+    "padding:16px",
+    "border:1px solid #dce4ec",
+    "border-radius:12px",
+    "background:#fff"
+  ].join(";");
+
+  const titulo = document.createElement("h3");
+  titulo.textContent = "Mapa geográfico — EaD";
+  titulo.style.cssText = "margin:0 0 8px;font-size:18px;color:#24364b";
+
+  const descricao = document.createElement("p");
+  descricao.textContent = "Azul: municípios da análise. Verde: subsedes. Laranja: polos. Selecione um marcador para ver os detalhes.";
+  descricao.style.cssText = "margin:0 0 12px;color:#586779;font-size:13px;line-height:1.5";
+
+  const legenda = document.createElement("div");
+  legenda.style.cssText = "display:flex;gap:14px;flex-wrap:wrap;margin:0 0 12px;font-size:13px";
+  legenda.innerHTML = [
+    '<span><span style="color:#2474c7">●</span> Município analisado</span>',
+    '<span><span style="color:#16835b">●</span> Subsede</span>',
+    '<span><span style="color:#e58a22">●</span> Polo</span>'
+  ].join("");
+
+  const mapa = document.createElement("div");
+  mapa.id = "ead-mapa-canvas";
+  mapa.setAttribute("role", "application");
+  mapa.setAttribute("aria-label", "Mapa interativo da análise geográfica EaD");
+  mapa.style.cssText = "width:100%;height:480px;min-height:320px;border-radius:8px;background:#eef2f6;z-index:1";
+
+  const aviso = document.createElement("p");
+  aviso.id = "ead-mapa-aviso";
+  aviso.textContent = "Carregando mapa...";
+  aviso.style.cssText = "font-size:12px;color:#667085;margin:10px 0 0;line-height:1.5";
+
+  painel.append(titulo, descricao, legenda, mapa, aviso);
+
+  const tabela = section.querySelector(".ead-tabela");
+  if (tabela) section.insertBefore(painel, tabela);
+  else section.appendChild(painel);
+
+  if (!eadMapaPreparado) {
+    const style = document.createElement("style");
+    style.id = "ead-mapa-estilos";
+    style.textContent = `
+      #ead-mapa-canvas .leaflet-popup-content { line-height:1.5; }
+      #ead-mapa-canvas .ead-popup-titulo { font-weight:700; font-size:14px; margin-bottom:5px; }
+      #ead-mapa-canvas .ead-popup-linha { margin:2px 0; }
+      #ead-mapa-canvas .ead-mapa-legenda { font-size:12px; }
+    `;
+    document.head.appendChild(style);
+    eadMapaPreparado = true;
+  }
+
+  return painel;
+}
+
+function eadMapaCarregarLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (eadMapaCarregamento) return eadMapaCarregamento;
+
+  eadMapaCarregamento = new Promise((resolve, reject) => {
+    const cssId = "ead-leaflet-css";
+    const jsId = "ead-leaflet-js";
+
+    if (!document.getElementById(cssId)) {
+      const css = document.createElement("link");
+      css.id = cssId;
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+    }
+
+    const existente = document.getElementById(jsId);
+
+    if (existente) {
+      if (window.L) return resolve(window.L);
+
+      existente.addEventListener("load", () => {
+        if (window.L) resolve(window.L);
+        else reject(new Error("A biblioteca do mapa não ficou disponível."));
+      }, { once: true });
+
+      existente.addEventListener("error", () => {
+        eadMapaCarregamento = null;
+        reject(new Error("Não foi possível carregar a biblioteca do mapa."));
+      }, { once: true });
+
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = jsId;
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.async = true;
+
+    script.onload = () => {
+      if (window.L) resolve(window.L);
+      else reject(new Error("A biblioteca Leaflet não foi inicializada."));
+    };
+
+    script.onerror = () => {
+      eadMapaCarregamento = null;
+      reject(new Error("Não foi possível carregar o mapa. Verifique sua conexão."));
+    };
+
+    document.head.appendChild(script);
+  });
+
+  return eadMapaCarregamento;
+}
+
+function eadMapaIcone(cor) {
+  return window.L.divIcon({
+    className: "ead-mapa-icone",
+    html: `<div style="width:14px;height:14px;border:2px solid #fff;border-radius:50%;background:${cor};box-shadow:0 1px 5px #0006"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -8]
+  });
+}
+
+function eadMapaPopupMunicipio(r) {
+  const distancia = numeroSeguro(r.distancia_km);
+  const potencial = numeroSeguro(r.potencial_cota);
+
+  const distanciaTexto = distancia === null
+    ? "Não informada"
+    : `${distancia.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
+
+  const potencialTexto = potencial === null
+    ? valorTexto(r.potencial_cota)
+    : potencial.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+  const itens = [
+    ["UF", valorTexto(r.uf)],
+    ["Potencial de cota", potencialTexto],
+    ["Ponto mais próximo", valorTexto(r.ponto_mais_proximo)],
+    ["UF do ponto", valorTexto(r.uf_ponto)],
+    ["Tipo do ponto", valorTexto(r.tipo_ponto)],
+    ["Subsede responsável", valorTexto(r.subsede_responsavel)],
+    ["Distância registrada", distanciaTexto],
+    ["Classificação de distância", valorTexto(r.classificacao_distancia)],
+    ["Classificação de potencial", valorTexto(r.classificacao_potencial)],
+    ["Status do cálculo", valorTexto(r.status_calculo)]
+  ];
+
+  return `<div class="ead-popup-titulo">${escaparHTML(valorTexto(r.municipio))} - ${escaparHTML(valorTexto(r.uf))}</div>` +
+    itens.map(([label, value]) =>
+      `<div class="ead-popup-linha"><strong>${escaparHTML(label)}:</strong> ${escaparHTML(value)}</div>`
+    ).join("") +
+    `<div style="margin-top:7px;font-size:11px;color:#667085">A distância exibida é a que consta na base do sistema; não significa necessariamente distância por estrada.</div>`;
+}
+
+function escaparHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function eadMapaAdicionarPontosAtendimento() {
+  if (!eadMapa || !eadMapaMarcadoresAtendimento) return;
+
+  eadMapaMarcadoresAtendimento.clearLayers();
+
+  EAD_MAPA_PONTOS.forEach(p => {
+    const [tipo, municipio, uf, subsede, lat, lng] = p;
+    const cor = tipo === "SUBSEDE" ? "#16835b" : "#e58a22";
+
+    const marcador = window.L.marker([lat, lng], {
+      icon: eadMapaIcone(cor),
+      title: `${tipo}: ${municipio} - ${uf}`
+    });
+
+    marcador.bindPopup(
+      `<div class="ead-popup-titulo">${escaparHTML(municipio)} - ${escaparHTML(uf)}</div>` +
+      `<div class="ead-popup-linha"><strong>Tipo:</strong> ${escaparHTML(tipo)}</div>` +
+      `<div class="ead-popup-linha"><strong>Subsede responsável:</strong> ${escaparHTML(subsede)}</div>` +
+      `<div style="font-size:11px;color:#667085;margin-top:6px">Coordenada aproximada do município.</div>`
+    );
+
+    marcador.addTo(eadMapaMarcadoresAtendimento);
+  });
+}
+
+function eadMapaCoordenadasValidas(r) {
+  const lat = numeroSeguro(r.latitude_municipio);
+  const lng = numeroSeguro(r.longitude_municipio);
+
+  return lat !== null && lng !== null &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180 &&
+    !(lat === 0 && lng === 0);
+}
+
+async function atualizarMapaEaD(registros) {
+  const painel = eadMapaPrepararElemento();
+  if (!painel) return;
+
+  const aviso = $("ead-mapa-aviso");
+
+  try {
+    await eadMapaCarregarLeaflet();
+
+    const container = $("ead-mapa-canvas");
+    if (!container) return;
+
+    if (!eadMapa) {
+      eadMapa = window.L.map(container, {
+        scrollWheelZoom: false
+      }).setView([-25.5, -50.5], 6);
+
+      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
+      }).addTo(eadMapa);
+
+      eadMapaMarcadoresMunicipios = window.L.featureGroup().addTo(eadMapa);
+      eadMapaMarcadoresAtendimento = window.L.featureGroup().addTo(eadMapa);
+
+      eadMapaAdicionarPontosAtendimento();
+
+      setTimeout(() => eadMapa?.invalidateSize(), 150);
+    }
+
+    eadMapaMarcadoresMunicipios.clearLayers();
+
+    let validos = 0;
+
+    registros.forEach(r => {
+      if (!eadMapaCoordenadasValidas(r)) return;
+
+      const lat = numeroSeguro(r.latitude_municipio);
+      const lng = numeroSeguro(r.longitude_municipio);
+
+      const marcador = window.L.marker([lat, lng], {
+        icon: eadMapaIcone("#2474c7"),
+        title: `${r.municipio || "Município"} - ${r.uf || ""}`
+      });
+
+      marcador.bindPopup(eadMapaPopupMunicipio(r));
+      marcador.addTo(eadMapaMarcadoresMunicipios);
+      validos++;
+    });
+
+    const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
+    const todosPontos = eadMapaMarcadoresAtendimento.getLayers().length;
+
+    if (!eadMapaAjustouEnquadramento) {
+      const todosMarcadores = window.L.featureGroup([
+        ...eadMapaMarcadoresAtendimento.getLayers(),
+        ...eadMapaMarcadoresMunicipios.getLayers()
+      ]);
+
+      if (todosMarcadores.getLayers().length) {
+        eadMapa.fitBounds(todosMarcadores.getBounds().pad(0.08), {
+          maxZoom: 7
+        });
+      }
+
+      eadMapaAjustouEnquadramento = true;
+    } else if (pontosVisiveis > 0) {
+      // Mantém o enquadramento atual ao trocar filtros para evitar saltos no mapa.
+    }
+
+    setTimeout(() => eadMapa?.invalidateSize(), 100);
+
+    if (aviso) {
+      aviso.textContent =
+        `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas exibidos. ` +
+        `${todosPontos} pontos de atendimento aproximados no mapa. ` +
+        "O mapa usa coordenadas da base e não calcula rotas rodoviárias.";
+    }
+  } catch (error) {
+    console.error("Erro ao carregar mapa EaD:", error);
+    if (aviso) {
+      aviso.textContent = "Não foi possível carregar o mapa. Confira a conexão e tente atualizar a página.";
+    }
+  }
+}
+
+// ==================================================
+// EaD — INDICADORES, MAPA E TABELA
 // ==================================================
 
 function renderizarAnaliseEaD() {
   const registros = obterRegistrosEaDFiltrados();
 
   const total = registros.length;
-
   const ate70 = registros.filter(r => {
-    const distancia = numeroSeguro(r.distancia_km);
-
-    return distancia !== null && distancia <= 70;
+    const d = numeroSeguro(r.distancia_km);
+    return d !== null && d <= 70;
   }).length;
 
   const acima70 = registros.filter(r => {
-    const distancia = numeroSeguro(r.distancia_km);
-
-    return distancia !== null && distancia > 70;
+    const d = numeroSeguro(r.distancia_km);
+    return d !== null && d > 70;
   }).length;
 
   const potencialAte99 = registros.filter(r => {
-    const potencial = numeroSeguro(r.potencial_cota);
-
-    return potencial !== null && potencial <= 99;
+    const p = numeroSeguro(r.potencial_cota);
+    return p !== null && p <= 99;
   }).length;
 
   const indicadores = {
@@ -1938,66 +1608,48 @@ function renderizarAnaliseEaD() {
   };
 
   Object.entries(indicadores).forEach(([id, valor]) => {
-    if ($(id)) {
-      $(id).textContent = valor.toLocaleString("pt-BR");
-    }
+    if ($(id)) $(id).textContent = valor.toLocaleString("pt-BR");
   });
 
+  // A tabela e o mapa usam os mesmos registros filtrados.
   renderizarTabelaEaD(registros);
+  atualizarMapaEaD(registros);
 }
 
 // ==================================================
-// ANÁLISE GEOGRÁFICA EaD — TABELA
+// EaD — TABELA
 // ==================================================
 
 function renderizarTabelaEaD(registros) {
   const tbody = $("ead-tabela-corpo");
   if (!tbody) return;
-
   tbody.replaceChildren();
 
-  const ordenados = [...registros].sort((a, b) => {
-    return String(a.municipio || "").localeCompare(
-      String(b.municipio || ""),
-      "pt-BR"
-    );
-  });
-
-  const total = ordenados.length;
-
-  const totalPaginas = Math.max(
-    1,
-    Math.ceil(total / EAD_PAGE_SIZE)
+  const ordenados = [...registros].sort((a, b) =>
+    String(a.municipio || "").localeCompare(String(b.municipio || ""), "pt-BR")
   );
 
-  if (eadPaginaAtual > totalPaginas) {
-    eadPaginaAtual = totalPaginas;
-  }
+  const total = ordenados.length;
+  const totalPaginas = Math.max(1, Math.ceil(total / EAD_PAGE_SIZE));
 
-  if (eadPaginaAtual < 1) {
-    eadPaginaAtual = 1;
-  }
+  if (eadPaginaAtual > totalPaginas) eadPaginaAtual = totalPaginas;
+  if (eadPaginaAtual < 1) eadPaginaAtual = 1;
 
-  if (total === 0) {
+  if (!total) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-
     td.colSpan = 11;
-    td.textContent =
-      "Nenhum município encontrado para os filtros selecionados.";
-
+    td.textContent = "Nenhum município encontrado para os filtros selecionados.";
     tr.appendChild(td);
     tbody.appendChild(tr);
-
     atualizarPaginacaoEaD(0, 0, 0, 1);
     return;
   }
 
   const inicio = (eadPaginaAtual - 1) * EAD_PAGE_SIZE;
   const fim = Math.min(inicio + EAD_PAGE_SIZE, total);
-  const pagina = ordenados.slice(inicio, fim);
 
-  pagina.forEach(r => {
+  ordenados.slice(inicio, fim).forEach(r => {
     const tr = document.createElement("tr");
 
     const distancia = numeroSeguro(r.distancia_km);
@@ -2005,22 +1657,15 @@ function renderizarTabelaEaD(registros) {
 
     const distanciaFormatada = distancia === null
       ? "—"
-      : `${distancia.toLocaleString("pt-BR", {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 2
-        })} km`;
+      : `${distancia.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 2 })} km`;
 
     const potencialFormatado = potencial === null
       ? valorTexto(r.potencial_cota)
-      : potencial.toLocaleString("pt-BR", {
-          maximumFractionDigits: 2
-        });
+      : potencial.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
-    const atualizado = r.atualizado_em
-      ? formatarDataEaD(r.atualizado_em)
-      : "—";
+    const atualizado = r.atualizado_em ? formatarDataEaD(r.atualizado_em) : "—";
 
-    const valores = [
+    [
       r.municipio,
       r.uf,
       potencialFormatado,
@@ -2032,9 +1677,7 @@ function renderizarTabelaEaD(registros) {
       r.classificacao_distancia,
       r.classificacao_potencial,
       r.status_calculo
-    ];
-
-    valores.forEach(valor => {
+    ].forEach(valor => {
       const td = document.createElement("td");
       td.textContent = valorTexto(valor);
       tr.appendChild(td);
@@ -2044,34 +1687,16 @@ function renderizarTabelaEaD(registros) {
     tbody.appendChild(tr);
   });
 
-  atualizarPaginacaoEaD(
-    total,
-    inicio + 1,
-    fim,
-    totalPaginas
-  );
+  atualizarPaginacaoEaD(total, inicio + 1, fim, totalPaginas);
 }
 
 function formatarDataEaD(value) {
   const data = new Date(value);
-
-  if (Number.isNaN(data.getTime())) {
-    return String(value);
-  }
-
+  if (Number.isNaN(data.getTime())) return String(value);
   return data.toLocaleString("pt-BR");
 }
 
-// ==================================================
-// ANÁLISE GEOGRÁFICA EaD — PAGINAÇÃO
-// ==================================================
-
-function atualizarPaginacaoEaD(
-  total,
-  primeiro,
-  ultimo,
-  totalPaginas
-) {
+function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
   const info = $("ead-paginacao-info");
   const anterior = $("ead-pagina-anterior");
   const proxima = $("ead-pagina-proxima");
@@ -2082,12 +1707,6 @@ function atualizarPaginacaoEaD(
       : "Nenhum município para exibir.";
   }
 
-  if (anterior) {
-    anterior.disabled = eadPaginaAtual <= 1;
-  }
-
-  if (proxima) {
-    proxima.disabled =
-      eadPaginaAtual >= totalPaginas || total === 0;
-  }
+  if (anterior) anterior.disabled = eadPaginaAtual <= 1;
+  if (proxima) proxima.disabled = eadPaginaAtual >= totalPaginas || total === 0;
 }
