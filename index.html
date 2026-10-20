@@ -55,7 +55,7 @@
       box-sizing: border-box;
     }
 
-    /* Paginação da tabela */
+    /* Paginação da tabela de Substituições */
     .sub-paginacao {
       display: flex;
       align-items: center;
@@ -80,18 +80,190 @@
       opacity: 0.5;
     }
 
+    /* Análise Geográfica EaD */
+    .ead-filtros {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+      align-items: end;
+      margin: 22px 0;
+    }
+
+    .ead-filtros label {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .ead-filtros input,
+    .ead-filtros select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 11px 12px;
+      border: 1px solid var(--border, #e3e8f0);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text, #182538);
+      font: inherit;
+    }
+
+    .ead-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .ead-card {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--border, #e3e8f0);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: var(--shadow, 0 8px 28px rgba(20, 42, 72, .055));
+    }
+
+    .ead-card span {
+      display: block;
+      color: var(--muted, #778397);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .ead-card strong {
+      display: block;
+      margin-top: 8px;
+      color: var(--navy, #17365d);
+      font-size: 28px;
+      overflow-wrap: anywhere;
+    }
+
+    .ead-tabela {
+      min-width: 0;
+      margin-top: 22px;
+      padding: 20px;
+      border: 1px solid var(--border, #e3e8f0);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: var(--shadow, 0 8px 28px rgba(20, 42, 72, .055));
+    }
+
+    .ead-tabela-topo,
+    .ead-paginacao {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .ead-tabela-topo {
+      margin-bottom: 16px;
+    }
+
+    .ead-tabela-topo h3 {
+      margin: 0;
+      color: var(--text, #182538);
+    }
+
+    .ead-tabela-scroll {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .ead-tabela table {
+      width: 100%;
+      min-width: 1200px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .ead-tabela th,
+    .ead-tabela td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border, #e3e8f0);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .ead-tabela th {
+      background: var(--bg, #f4f6fa);
+      color: var(--navy, #17365d);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .ead-tabela td {
+      overflow-wrap: anywhere;
+    }
+
+    .ead-paginacao {
+      margin-top: 18px;
+    }
+
+    .ead-paginacao-controles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ead-paginacao button,
+    #ead-atualizar {
+      padding: 10px 14px;
+      border: 1px solid var(--border, #e3e8f0);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--navy, #17365d);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .ead-paginacao button:disabled,
+    #ead-atualizar:disabled {
+      cursor: not-allowed;
+      opacity: .5;
+    }
+
+    .ead-aviso {
+      margin-top: 16px;
+      color: var(--muted, #778397);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 850px) {
+      .ead-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 700px) {
       #vagas-aprendiz-frame {
         width: 100%;
       }
 
-      .substituicoes-filtros {
+      .substituicoes-filtros,
+      .ead-filtros {
         grid-template-columns: 1fr;
       }
 
       .sub-paginacao {
         align-items: flex-start;
         flex-direction: column;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .ead-kpis {
+        grid-template-columns: 1fr;
+      }
+
+      .ead-tabela {
+        padding: 12px;
       }
     }
   </style>
@@ -182,6 +354,16 @@
         hidden
       >
         <span class="nav-icon">↻</span> BI de Substituições
+      </a>
+
+      <!-- NOVO ACESSO: ANÁLISE GEOGRÁFICA EaD -->
+      <a
+        class="nav-link"
+        href="#ead-section"
+        id="ead-nav-link"
+        hidden
+      >
+        <span class="nav-icon">⌖</span> Análise Geográfica EaD
       </a>
 
       <a
@@ -373,7 +555,6 @@
 
         <!-- FILTROS -->
         <div class="substituicoes-filtros">
-
           <label for="sub-filtro-subsede">
             Subsede
             <select id="sub-filtro-subsede">
@@ -411,7 +592,6 @@
               <option value="atrasada">Em atraso</option>
             </select>
           </label>
-
         </div>
 
         <!-- INDICADORES -->
@@ -508,15 +688,145 @@
             </table>
           </div>
 
-          <!-- O JavaScript poderá inserir os controles de paginação aqui. -->
           <div id="sub-paginacao" class="sub-paginacao">
-            <span id="sub-paginacao-info">
-              Página 1
-            </span>
+            <span id="sub-paginacao-info">Página 1</span>
 
             <div class="sub-paginacao-controles">
+              <button id="sub-pagina-anterior" type="button" disabled>
+                ← Anterior
+              </button>
+
+              <button id="sub-pagina-proxima" type="button" disabled>
+                Próxima →
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- NOVO MÓDULO: ANÁLISE GEOGRÁFICA EaD -->
+      <section id="ead-section" class="dashboard-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">ANÁLISE DE LOCALIDADES</p>
+            <h2>Análise Geográfica EaD</h2>
+            <p class="muted">
+              Consulte o potencial de atendimento, os pontos mais próximos
+              e as distâncias calculadas para cada município.
+            </p>
+          </div>
+
+          <button id="ead-atualizar" type="button">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <p id="ead-message" role="status" aria-live="polite"></p>
+
+        <!-- FILTROS EaD -->
+        <div class="ead-filtros">
+          <label for="ead-filtro-municipio">
+            Município
+            <input
+              id="ead-filtro-municipio"
+              type="search"
+              placeholder="Buscar município..."
+            >
+          </label>
+
+          <label for="ead-filtro-uf">
+            UF
+            <select id="ead-filtro-uf">
+              <option value="">Todas as UFs</option>
+            </select>
+          </label>
+
+          <label for="ead-filtro-distancia">
+            Classificação da distância
+            <select id="ead-filtro-distancia">
+              <option value="">Todas as classificações</option>
+            </select>
+          </label>
+
+          <label for="ead-filtro-potencial">
+            Classificação do potencial
+            <select id="ead-filtro-potencial">
+              <option value="">Todas as classificações</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- INDICADORES EaD -->
+        <div class="ead-kpis">
+          <article class="ead-card">
+            <span>Municípios encontrados</span>
+            <strong id="ead-total">0</strong>
+          </article>
+
+          <article class="ead-card">
+            <span>Até 70 km</span>
+            <strong id="ead-ate70">0</strong>
+          </article>
+
+          <article class="ead-card">
+            <span>Acima de 70 km</span>
+            <strong id="ead-acima70">0</strong>
+          </article>
+
+          <article class="ead-card">
+            <span>Potencial até 99</span>
+            <strong id="ead-potencial99">0</strong>
+          </article>
+        </div>
+
+        <!-- TABELA EaD -->
+        <article class="ead-tabela">
+          <div class="ead-tabela-topo">
+            <div>
+              <h3>Detalhamento por município</h3>
+              <p class="muted">
+                Os registros respeitam os filtros selecionados.
+              </p>
+            </div>
+
+            <span id="ead-tabela-contagem">0 registros</span>
+          </div>
+
+          <div class="ead-tabela-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Município</th>
+                  <th>UF</th>
+                  <th>Potencial</th>
+                  <th>Ponto mais próximo</th>
+                  <th>UF do ponto</th>
+                  <th>Tipo de ponto</th>
+                  <th>Subsede responsável</th>
+                  <th>Distância (km)</th>
+                  <th>Classificação da distância</th>
+                  <th>Classificação do potencial</th>
+                  <th>Status do cálculo</th>
+                </tr>
+              </thead>
+
+              <tbody id="ead-tabela-corpo">
+                <tr>
+                  <td colspan="11">
+                    Os dados serão carregados após a integração com o Supabase.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- PAGINAÇÃO EaD -->
+          <div id="ead-paginacao" class="ead-paginacao">
+            <span id="ead-paginacao-info">Página 1</span>
+
+            <div class="ead-paginacao-controles">
               <button
-                id="sub-pagina-anterior"
+                id="ead-pagina-anterior"
                 type="button"
                 disabled
               >
@@ -524,7 +834,7 @@
               </button>
 
               <button
-                id="sub-pagina-proxima"
+                id="ead-pagina-proxima"
                 type="button"
                 disabled
               >
@@ -533,6 +843,13 @@
             </div>
           </div>
         </article>
+
+        <p class="ead-aviso">
+          A análise geográfica é um apoio à avaliação. A distância e o
+          potencial calculados não representam aprovação automática para
+          atendimento EaD. Casos que exijam análise adicional devem ser
+          avaliados pela equipe responsável.
+        </p>
       </section>
 
       <!-- ADMINISTRAÇÃO -->
