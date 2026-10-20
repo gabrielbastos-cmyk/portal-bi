@@ -323,7 +323,7 @@ async function carregarDashboards() {
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = "Abrir dashboard";
-      card.appendChild(link);
+      card.append(link);
     } else {
       const warning = document.createElement("p");
       warning.textContent = "URL do dashboard inválida.";
@@ -1234,6 +1234,8 @@ let eadMapaCarregamento = null;
 let eadMapaPreparado = false;
 let eadMapaUltimaSelecao = "";
 
+const EAD_RAIO_PROXIMIDADE_KM = 50;
+
 const EAD_MAPA_PONTOS = [
   ["SUBSEDE","Curitiba","PR","Curitiba",-25.432956,-49.271848],
   ["POLO","São José dos Pinhais","PR","Curitiba",-25.537702,-49.200082],
@@ -1286,6 +1288,10 @@ const EAD_MAPA_PONTOS = [
   ["POLO","Francisco Beltrão","PR","Guarapuava",-26.078450,-53.056136]
 ];
 
+// ==================================================
+// PREPARAÇÃO DO MAPA
+// ==================================================
+
 function eadMapaPrepararElemento() {
   const section = $("ead-section");
   if (!section) return null;
@@ -1311,7 +1317,7 @@ function eadMapaPrepararElemento() {
 
   const descricao = document.createElement("p");
   descricao.id = "ead-mapa-descricao";
-  descricao.textContent = "Visualize os municípios da análise e os pontos de atendimento.";
+  descricao.textContent = "Selecione um município para consultar cursos validados, protocolos e municípios próximos.";
   descricao.style.cssText = "margin:0 0 14px;color:#60758b;font-size:13px;line-height:1.6";
 
   const legenda = document.createElement("div");
@@ -1320,6 +1326,7 @@ function eadMapaPrepararElemento() {
     '<span><span style="color:#2474c7;font-size:16px">●</span> Município analisado</span>',
     '<span><span style="color:#16835b;font-size:16px">●</span> Subsede</span>',
     '<span><span style="color:#e58a22;font-size:16px">●</span> Polo</span>',
+    '<span><span style="color:#159b83;font-size:16px">●</span> Município próximo com curso validado</span>',
     '<span><span style="color:#174a7e;font-size:16px">●</span> Município selecionado</span>'
   ].join("");
 
@@ -1369,25 +1376,30 @@ function eadMapaPrepararElemento() {
       #ead-mapa-painel .leaflet-container {
         font-family: Arial, sans-serif;
       }
+
       #ead-mapa-canvas .leaflet-popup-content {
         line-height: 1.5;
         color: #243b53;
       }
+
       #ead-mapa-canvas .ead-popup-titulo {
         font-weight: 700;
         font-size: 14px;
         color: #174a7e;
         margin-bottom: 7px;
       }
+
       #ead-mapa-canvas .ead-popup-linha {
         margin: 3px 0;
       }
+
       #ead-mapa-detalhes .ead-detalhe-grade {
         display: grid;
         grid-template-columns: repeat(auto-fit,minmax(145px,1fr));
         gap: 10px;
         margin-top: 12px;
       }
+
       #ead-mapa-detalhes .ead-detalhe-item {
         background: #fff;
         border: 1px solid #e0eaf4;
@@ -1395,12 +1407,14 @@ function eadMapaPrepararElemento() {
         padding: 10px;
         min-width: 0;
       }
+
       #ead-mapa-detalhes .ead-detalhe-label {
         display: block;
         font-size: 11px;
         color: #60758b;
         margin-bottom: 5px;
       }
+
       #ead-mapa-detalhes .ead-detalhe-valor {
         display: block;
         font-size: 13px;
@@ -1408,6 +1422,7 @@ function eadMapaPrepararElemento() {
         color: #174a7e;
         overflow-wrap: anywhere;
       }
+
       #ead-mapa-painel .ead-mapa-botao {
         border: 1px solid #c6dbef;
         border-radius: 8px;
@@ -1417,18 +1432,62 @@ function eadMapaPrepararElemento() {
         font-weight: 600;
         cursor: pointer;
       }
+
       #ead-mapa-painel .ead-mapa-botao:hover {
         background: #eaf4ff;
       }
+
+      #ead-mapa-detalhes .ead-proximo-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 12px;
+        margin-top: 9px;
+        border: 1px solid #dce7f2;
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      #ead-mapa-detalhes .ead-proximo-item strong {
+        display: block;
+        color: #174a7e;
+        font-size: 13px;
+      }
+
+      #ead-mapa-detalhes .ead-proximo-item small {
+        display: block;
+        margin-top: 4px;
+        color: #60758b;
+        line-height: 1.5;
+      }
+
+      #ead-mapa-detalhes .ead-proximo-item button {
+        border: 1px solid #159b83;
+        border-radius: 8px;
+        padding: 7px 10px;
+        background: #e9faf6;
+        color: #087963;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #ead-mapa-detalhes .ead-proximo-item button:hover {
+        background: #d2f4eb;
+      }
+
       @media (max-width: 600px) {
         #ead-mapa-canvas {
           height: 380px !important;
         }
+
         #ead-mapa-painel {
           padding: 12px !important;
         }
       }
     `;
+
     document.head.appendChild(style);
     eadMapaPreparado = true;
   }
@@ -1557,7 +1616,7 @@ function escaparHTML(value) {
 }
 
 // ==================================================
-// EaD — CONVERSÃO E EXIBIÇÃO DE CURSOS E PROTOCOLOS
+// EaD — CURSOS, PROTOCOLOS E DADOS DE DETALHES
 // ==================================================
 
 function eadConverterLista(valor) {
@@ -1715,7 +1774,22 @@ function eadHtmlCartoesInformacoes(registro) {
 }
 
 function eadHtmlSecaoRegistros(titulo, registros, tipo) {
-  const lista = eadConverterLista(registros).filter(eadRegistroTemInformacao);
+  const listaOriginal = eadConverterLista(registros).filter(eadRegistroTemInformacao);
+  const vistos = new Set();
+
+  const lista = listaOriginal.filter(registro => {
+    let chave;
+
+    try {
+      chave = JSON.stringify(registro);
+    } catch {
+      chave = String(registro);
+    }
+
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
 
   const cards = lista.map((registro, indice) => {
     const numero = lista.length > 1 ? ` ${indice + 1}` : "";
@@ -1774,6 +1848,87 @@ function eadHtmlSecaoRegistros(titulo, registros, tipo) {
   `;
 }
 
+// ==================================================
+// EaD — CÁLCULO DE PROXIMIDADE GEOGRÁFICA
+// ==================================================
+
+function eadMapaCoordenadasValidas(r) {
+  const lat = numeroSeguro(r?.latitude_municipio);
+  const lng = numeroSeguro(r?.longitude_municipio);
+
+  return lat !== null && lng !== null &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180 &&
+    !(lat === 0 && lng === 0);
+}
+
+function eadDistanciaGeograficaKm(a, b) {
+  if (!eadMapaCoordenadasValidas(a) || !eadMapaCoordenadasValidas(b)) {
+    return null;
+  }
+
+  const lat1 = numeroSeguro(a.latitude_municipio) * Math.PI / 180;
+  const lat2 = numeroSeguro(b.latitude_municipio) * Math.PI / 180;
+  const deltaLat = lat2 - lat1;
+
+  const lng1 = numeroSeguro(a.longitude_municipio) * Math.PI / 180;
+  const lng2 = numeroSeguro(b.longitude_municipio) * Math.PI / 180;
+  const deltaLng = lng2 - lng1;
+
+  const h =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) *
+    Math.sin(deltaLng / 2) ** 2;
+
+  const arco = 2 * Math.atan2(
+    Math.sqrt(Math.max(0, h)),
+    Math.sqrt(Math.max(0, 1 - h))
+  );
+
+  return 6371 * arco;
+}
+
+function eadChaveMunicipio(r) {
+  return `${normalize(r?.municipio)}|${normalize(r?.uf)}`;
+}
+
+function eadCursosValidados(r) {
+  return eadConverterLista(r?.cursos_validados)
+    .filter(eadRegistroTemInformacao);
+}
+
+function eadTemCursosValidados(r) {
+  return eadCursosValidados(r).length > 0;
+}
+
+function eadMapaObterMunicipiosProximos(selecionado) {
+  if (!selecionado || !eadMapaCoordenadasValidas(selecionado)) {
+    return [];
+  }
+
+  const chaveSelecionada = eadChaveMunicipio(selecionado);
+
+  return eadRegistros
+    .filter(r =>
+      eadChaveMunicipio(r) !== chaveSelecionada &&
+      eadMapaCoordenadasValidas(r) &&
+      eadTemCursosValidados(r)
+    )
+    .map(r => ({
+      registro: r,
+      distanciaProximidadeKm: eadDistanciaGeograficaKm(selecionado, r)
+    }))
+    .filter(item =>
+      item.distanciaProximidadeKm !== null &&
+      item.distanciaProximidadeKm <= EAD_RAIO_PROXIMIDADE_KM
+    )
+    .sort((a, b) => a.distanciaProximidadeKm - b.distanciaProximidadeKm);
+}
+
+// ==================================================
+// EaD — PONTOS DE ATENDIMENTO
+// ==================================================
+
 function eadMapaAdicionarPontosAtendimento() {
   if (!eadMapa || !eadMapaMarcadoresAtendimento) return;
 
@@ -1797,16 +1952,6 @@ function eadMapaAdicionarPontosAtendimento() {
 
     marcador.addTo(eadMapaMarcadoresAtendimento);
   });
-}
-
-function eadMapaCoordenadasValidas(r) {
-  const lat = numeroSeguro(r.latitude_municipio);
-  const lng = numeroSeguro(r.longitude_municipio);
-
-  return lat !== null && lng !== null &&
-    lat >= -90 && lat <= 90 &&
-    lng >= -180 && lng <= 180 &&
-    !(lat === 0 && lng === 0);
 }
 
 function eadMapaEncontrarPonto(r) {
@@ -1847,6 +1992,117 @@ function eadMapaEncontrarPonto(r) {
 }
 
 // ==================================================
+// EaD — LISTA DE MUNICÍPIOS PRÓXIMOS
+// ==================================================
+
+function eadHtmlMunicipiosProximos(selecionado) {
+  const proximos = eadMapaObterMunicipiosProximos(selecionado);
+
+  const conteudo = proximos.length
+    ? proximos.map(item => {
+        const r = item.registro;
+        const distancia = item.distanciaProximidadeKm.toLocaleString("pt-BR", {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 2
+        });
+
+        const quantidadeCursos = eadCursosValidados(r).length;
+
+        return `
+          <article class="ead-proximo-item">
+            <div>
+              <strong>${escaparHTML(valorTexto(r.municipio))} - ${escaparHTML(valorTexto(r.uf))}</strong>
+              <small>
+                ${distancia} km em linha reta ·
+                ${quantidadeCursos} ${quantidadeCursos === 1 ? "curso validado" : "cursos validados"}
+              </small>
+            </div>
+            <button
+              type="button"
+              data-ead-proximo="${escaparHTML(eadChaveMunicipio(r))}"
+            >
+              Consultar
+            </button>
+          </article>
+        `;
+      }).join("")
+    : `
+      <p style="margin:10px 0 0;color:#60758b;font-size:13px;line-height:1.6">
+        Nenhum outro município com cursos validados foi encontrado em um raio de
+        ${EAD_RAIO_PROXIMIDADE_KM} km com as coordenadas disponíveis na base.
+      </p>
+    `;
+
+  return `
+    <section style="margin-top:22px">
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        flex-wrap:wrap;
+        border-bottom:1px solid #dce7f2;
+        padding-bottom:9px
+      ">
+        <h4 style="margin:0;color:#174a7e;font-size:15px">
+          Municípios próximos com cursos validados
+        </h4>
+        <span style="
+          background:#e9faf6;
+          color:#087963;
+          padding:5px 9px;
+          border-radius:20px;
+          font-size:12px;
+          font-weight:700
+        ">
+          ${proximos.length} encontrados
+        </span>
+      </div>
+
+      <p style="margin:10px 0 0;color:#60758b;font-size:12px;line-height:1.6">
+        Distâncias calculadas em linha reta pelas coordenadas dos municípios,
+        considerando o limite de ${EAD_RAIO_PROXIMIDADE_KM} km.
+      </p>
+
+      ${conteudo}
+    </section>
+  `;
+}
+
+function eadMapaVincularBotoesProximos() {
+  const container = $("ead-mapa-detalhes");
+  if (!container) return;
+
+  container.querySelectorAll("[data-ead-proximo]").forEach(botao => {
+    botao.addEventListener("click", () => {
+      const chave = botao.dataset.eadProximo;
+
+      const registro = eadRegistros.find(r =>
+        eadChaveMunicipio(r) === chave
+      );
+
+      if (!registro) return;
+
+      const filtroMunicipio = $("ead-filtro-municipio");
+      if (filtroMunicipio) filtroMunicipio.value = registro.municipio || "";
+
+      // Limpa os outros filtros para permitir consultar o município clicado.
+      ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
+        if ($(id)) $(id).value = "";
+      });
+
+      eadPaginaAtual = 1;
+      renderizarAnaliseEaD();
+
+      $("ead-mapa-painel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+  });
+}
+
+// ==================================================
 // EaD — DETALHES DO MUNICÍPIO SELECIONADO
 // ==================================================
 
@@ -1858,8 +2114,8 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
     container.innerHTML = `
       <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Visão geral</h4>
       <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
-        Selecione um município no mapa ou na tabela para consultar
-        seus dados geográficos, cursos validados e protocolos.
+        Selecione um município no mapa ou na tabela para consultar seus dados,
+        cursos validados, protocolos e municípios próximos em um raio de 50 km.
       </p>
     `;
     return;
@@ -1906,6 +2162,8 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
     "Protocolo"
   );
 
+  const secaoProximos = eadHtmlMunicipiosProximos(r);
+
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
       <div>
@@ -1938,6 +2196,7 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
 
     ${secaoCursos}
     ${secaoProtocolos}
+    ${secaoProximos}
   `;
 
   const limpar = $("ead-mapa-limpar-selecao");
@@ -1952,12 +2211,18 @@ function eadMapaRenderizarDetalhes(r, ponto = null) {
       renderizarAnaliseEaD();
     });
   }
+
+  eadMapaVincularBotoesProximos();
 }
+
+// ==================================================
+// EaD — SELEÇÃO E DESTAQUE NO MAPA
+// ==================================================
 
 function eadMapaLimparSelecao() {
   if (eadMapaCamadaSelecao) eadMapaCamadaSelecao.clearLayers();
 
-  if (eadMapaLinhaConexao) {
+  if (eadMapaLinhaConexao && eadMapa) {
     eadMapa.removeLayer(eadMapaLinhaConexao);
     eadMapaLinhaConexao = null;
   }
@@ -1978,17 +2243,92 @@ function eadMapaSelecionarMunicipio(r, ajustarEnquadramento = true) {
   const coordenadaMunicipio = [lat, lng];
   const ponto = eadMapaEncontrarPonto(r);
 
+  const coordenadasEnquadramento = [coordenadaMunicipio];
+
+  // Marcador do município selecionado.
   const marcadorMunicipio = window.L.marker(coordenadaMunicipio, {
     icon: eadMapaIcone("#174a7e", true),
-    zIndexOffset: 1000,
+    zIndexOffset: 1200,
     title: `Selecionado: ${r.municipio} - ${r.uf}`
   });
 
   marcadorMunicipio.bindPopup(eadMapaPopupMunicipio(r));
   marcadorMunicipio.addTo(eadMapaCamadaSelecao);
 
-  const coordenadasEnquadramento = [coordenadaMunicipio];
+  // Marca todos os municípios próximos com cursos validados.
+  const proximos = eadMapaObterMunicipiosProximos(r);
 
+  proximos.forEach(item => {
+    const vizinho = item.registro;
+
+    const coordenadaVizinho = [
+      numeroSeguro(vizinho.latitude_municipio),
+      numeroSeguro(vizinho.longitude_municipio)
+    ];
+
+    const distanciaTexto = item.distanciaProximidadeKm.toLocaleString("pt-BR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2
+    });
+
+    const quantidadeCursos = eadCursosValidados(vizinho).length;
+
+    const marcadorVizinho = window.L.marker(coordenadaVizinho, {
+      icon: eadMapaIcone("#159b83"),
+      zIndexOffset: 700,
+      title: `${vizinho.municipio} - ${vizinho.uf}: ${distanciaTexto} km`
+    });
+
+    marcadorVizinho.bindPopup(`
+      <div class="ead-popup-titulo">
+        ${escaparHTML(vizinho.municipio)} - ${escaparHTML(vizinho.uf)}
+      </div>
+      <div class="ead-popup-linha">
+        <strong>Distância em linha reta:</strong> ${distanciaTexto} km
+      </div>
+      <div class="ead-popup-linha">
+        <strong>Cursos validados:</strong> ${quantidadeCursos}
+      </div>
+      <button
+        type="button"
+        class="ead-mapa-botao"
+        data-ead-mapa-vizinho="${escaparHTML(eadChaveMunicipio(vizinho))}"
+        style="margin-top:8px"
+      >
+        Consultar município
+      </button>
+    `);
+
+    marcadorVizinho.on("popupopen", evento => {
+      const popupElement = evento.popup.getElement();
+      const botao = popupElement?.querySelector("[data-ead-mapa-vizinho]");
+
+      if (!botao || botao.dataset.eventoVinculado === "sim") return;
+      botao.dataset.eventoVinculado = "sim";
+
+      botao.addEventListener("click", () => {
+        const chave = botao.dataset.eadMapaVizinho;
+        const registro = eadRegistros.find(x => eadChaveMunicipio(x) === chave);
+        if (!registro) return;
+
+        if ($("ead-filtro-municipio")) {
+          $("ead-filtro-municipio").value = registro.municipio || "";
+        }
+
+        ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
+          if ($(id)) $(id).value = "";
+        });
+
+        eadPaginaAtual = 1;
+        renderizarAnaliseEaD();
+      });
+    });
+
+    marcadorVizinho.addTo(eadMapaCamadaSelecao);
+    coordenadasEnquadramento.push(coordenadaVizinho);
+  });
+
+  // Destaca o ponto de atendimento registrado, se for possível identificá-lo.
   if (ponto) {
     const coordenadaPonto = [ponto[4], ponto[5]];
     const corPonto = ponto[0] === "SUBSEDE" ? "#16835b" : "#e58a22";
@@ -2025,14 +2365,17 @@ function eadMapaSelecionarMunicipio(r, ajustarEnquadramento = true) {
   }
 
   eadMapaRenderizarDetalhes(r, ponto);
+  eadMapaUltimaSelecao = eadChaveMunicipio(r);
 
   if (ajustarEnquadramento) {
     const bounds = window.L.latLngBounds(coordenadasEnquadramento);
 
-    eadMapa.fitBounds(bounds.pad(ponto ? 0.45 : 0.15), {
-      maxZoom: ponto ? 9 : 10,
-      animate: true
-    });
+    if (bounds.isValid()) {
+      eadMapa.fitBounds(bounds.pad(0.18), {
+        maxZoom: proximos.length ? 9 : (ponto ? 9 : 10),
+        animate: true
+      });
+    }
 
     if (coordenadasEnquadramento.length === 1) {
       eadMapa.setView(coordenadaMunicipio, 8, { animate: true });
@@ -2046,16 +2389,24 @@ function eadMapaObterSelecao(registros) {
   const texto = normalize($("ead-filtro-municipio")?.value || "");
   if (!texto) return null;
 
-  const exatos = registros.filter(r => normalize(r.municipio) === texto);
+  const todos = eadRegistros.length ? eadRegistros : registros;
+
+  const exatos = todos.filter(r => normalize(r.municipio) === texto);
 
   if (exatos.length === 1) return exatos[0];
 
-  if (registros.length === 1 && normalize(registros[0].municipio).includes(texto)) {
-    return registros[0];
-  }
+  const correspondencias = todos.filter(r =>
+    normalize(r.municipio).includes(texto)
+  );
+
+  if (correspondencias.length === 1) return correspondencias[0];
 
   return null;
 }
+
+// ==================================================
+// EaD — ATUALIZAÇÃO DO MAPA
+// ==================================================
 
 async function atualizarMapaEaD(registros) {
   const painel = eadMapaPrepararElemento();
@@ -2090,16 +2441,45 @@ async function atualizarMapaEaD(registros) {
 
     eadMapaMarcadoresMunicipios.clearLayers();
 
+    const selecao = eadMapaObterSelecao(registros);
+    const proximos = selecao ? eadMapaObterMunicipiosProximos(selecao) : [];
+
+    // Com um município selecionado, mantemos no mapa os municípios filtrados,
+    // o município selecionado e os municípios próximos com cursos validados.
+    const mapaPorChave = new Map();
+
+    registros.forEach(r => mapaPorChave.set(eadChaveMunicipio(r), r));
+
+    if (selecao) {
+      mapaPorChave.set(eadChaveMunicipio(selecao), selecao);
+
+      proximos.forEach(item => {
+        mapaPorChave.set(eadChaveMunicipio(item.registro), item.registro);
+      });
+    }
+
+    const registrosMapa = [...mapaPorChave.values()];
     let validos = 0;
 
-    registros.forEach(r => {
+    registrosMapa.forEach(r => {
       if (!eadMapaCoordenadasValidas(r)) return;
 
       const lat = numeroSeguro(r.latitude_municipio);
       const lng = numeroSeguro(r.longitude_municipio);
+      const chave = eadChaveMunicipio(r);
+      const ehSelecionado = selecao && chave === eadChaveMunicipio(selecao);
+      const ehProximoComCurso = selecao && proximos.some(
+        item => eadChaveMunicipio(item.registro) === chave
+      );
+
+      const cor = ehSelecionado
+        ? "#174a7e"
+        : ehProximoComCurso
+          ? "#159b83"
+          : "#2474c7";
 
       const marcador = window.L.marker([lat, lng], {
-        icon: eadMapaIcone("#2474c7"),
+        icon: eadMapaIcone(cor, Boolean(ehSelecionado)),
         title: `${r.municipio || "Município"} - ${r.uf || ""}`
       });
 
@@ -2110,6 +2490,10 @@ async function atualizarMapaEaD(registros) {
           $("ead-filtro-municipio").value = r.municipio || "";
         }
 
+        ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
+          if ($(id)) $(id).value = "";
+        });
+
         eadPaginaAtual = 1;
         renderizarAnaliseEaD();
       });
@@ -2118,18 +2502,19 @@ async function atualizarMapaEaD(registros) {
       validos++;
     });
 
-    const selecao = eadMapaObterSelecao(registros);
-
     if (selecao) {
       eadMapaSelecionarMunicipio(selecao, true);
 
       if (aviso) {
         aviso.textContent =
-          `Município selecionado: ${selecao.municipio} - ${selecao.uf}. ` +
-          "O mapa destaca o município e o ponto mais próximo quando há correspondência nas coordenadas cadastradas.";
+          `Selecionado: ${selecao.municipio} - ${selecao.uf}. ` +
+          `${proximos.length} município(s) com cursos validados encontrados em até ` +
+          `${EAD_RAIO_PROXIMIDADE_KM} km em linha reta. ` +
+          "Clique nos marcadores ou nos botões de consulta para abrir os detalhes.";
       }
     } else {
       eadMapaLimparSelecao();
+      eadMapaUltimaSelecao = "";
       eadMapaRenderizarDetalhes(null);
 
       const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
@@ -2159,9 +2544,9 @@ async function atualizarMapaEaD(registros) {
 
       if (aviso) {
         aviso.textContent =
-          `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas nos filtros atuais. ` +
-          `${todosPontos} pontos de atendimento aproximados no mapa. ` +
-          "Digite o nome completo de um município para destacá-lo.";
+          `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas no mapa. ` +
+          `${todosPontos} pontos de atendimento aproximados. ` +
+          "Digite ou selecione um município para consultar os cursos, protocolos e municípios próximos.";
       }
     }
 
@@ -2191,6 +2576,9 @@ function destruirMapaEaD() {
 
   const painel = $("ead-mapa-painel");
   if (painel) painel.remove();
+
+  const style = $("ead-mapa-estilos");
+  if (style) style.remove();
 }
 
 // ==================================================
@@ -2313,14 +2701,18 @@ function renderizarTabelaEaD(registros) {
         filtroMunicipio.value = r.municipio || "";
       }
 
+      // Evita que filtros de outros campos escondam o município selecionado.
+      ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
+        if ($(id)) $(id).value = "";
+      });
+
       eadPaginaAtual = 1;
       renderizarAnaliseEaD();
 
-      const painelMapa = $("ead-mapa-painel");
-
-      if (painelMapa) {
-        painelMapa.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      $("ead-mapa-painel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
     });
 
     tbody.appendChild(tr);
