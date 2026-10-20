@@ -2091,3 +2091,4 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 
   if (anterior) anterior.disabled = eadPaginaAtual <= 1;
   if (proxima) proxima.disabled = eadPaginaAtual >= totalPaginas || total === 0;
+}
