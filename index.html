@@ -8,10 +8,7 @@
   <meta name="theme-color" content="#102c4c">
   <title>Portal BI | GERAR</title>
 
-  <!-- CSS principal -->
-  <link rel="stylesheet" href="./style.css?v=20261019">
-
-  <!-- Bibliotecas e configurações existentes -->
+  <link rel="stylesheet" href="./style.css?v=20261020">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -30,57 +27,10 @@
       height: 800px;
       min-height: 300px;
       border: 0;
-      overflow: hidden;
       background: transparent;
     }
 
-    /* Filtros do BI de Substituições */
-    .substituicoes-filtros {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-      gap: 16px;
-      align-items: end;
-    }
-
-    .substituicoes-filtros label {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      min-width: 0;
-    }
-
-    .substituicoes-filtros select {
-      width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
-    }
-
-    /* Paginação da tabela de Substituições */
-    .sub-paginacao {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .sub-paginacao-controles {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .sub-paginacao button {
-      cursor: pointer;
-    }
-
-    .sub-paginacao button:disabled {
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-
-    /* Análise Geográfica EaD */
+    .substituicoes-filtros,
     .ead-filtros {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -89,6 +39,7 @@
       margin: 22px 0;
     }
 
+    .substituicoes-filtros label,
     .ead-filtros label {
       display: flex;
       flex-direction: column;
@@ -98,8 +49,9 @@
       font-weight: 600;
     }
 
-    .ead-filtros input,
-    .ead-filtros select {
+    .substituicoes-filtros select,
+    .ead-filtros select,
+    .ead-filtros input {
       width: 100%;
       min-width: 0;
       box-sizing: border-box;
@@ -118,7 +70,8 @@
       margin: 20px 0;
     }
 
-    .ead-card {
+    .ead-card,
+    .ead-tabela {
       min-width: 0;
       padding: 20px;
       border: 1px solid var(--border, #e3e8f0);
@@ -143,13 +96,7 @@
     }
 
     .ead-tabela {
-      min-width: 0;
       margin-top: 22px;
-      padding: 20px;
-      border: 1px solid var(--border, #e3e8f0);
-      border-radius: 12px;
-      background: #fff;
-      box-shadow: var(--shadow, 0 8px 28px rgba(20, 42, 72, .055));
     }
 
     .ead-tabela-topo,
@@ -167,7 +114,6 @@
 
     .ead-tabela-topo h3 {
       margin: 0;
-      color: var(--text, #182538);
     }
 
     .ead-tabela-scroll {
@@ -188,6 +134,7 @@
       border-bottom: 1px solid var(--border, #e3e8f0);
       text-align: left;
       vertical-align: top;
+      overflow-wrap: anywhere;
     }
 
     .ead-tabela th {
@@ -195,10 +142,6 @@
       color: var(--navy, #17365d);
       font-weight: 700;
       white-space: nowrap;
-    }
-
-    .ead-tabela td {
-      overflow-wrap: anywhere;
     }
 
     .ead-paginacao {
@@ -212,7 +155,8 @@
     }
 
     .ead-paginacao button,
-    #ead-atualizar {
+    #ead-atualizar,
+    #ead-cursos-atualizar {
       padding: 10px 14px;
       border: 1px solid var(--border, #e3e8f0);
       border-radius: 8px;
@@ -223,7 +167,8 @@
     }
 
     .ead-paginacao button:disabled,
-    #ead-atualizar:disabled {
+    #ead-atualizar:disabled,
+    #ead-cursos-atualizar:disabled {
       cursor: not-allowed;
       opacity: .5;
     }
@@ -242,18 +187,9 @@
     }
 
     @media (max-width: 700px) {
-      #vagas-aprendiz-frame {
-        width: 100%;
-      }
-
       .substituicoes-filtros,
       .ead-filtros {
         grid-template-columns: 1fr;
-      }
-
-      .sub-paginacao {
-        align-items: flex-start;
-        flex-direction: column;
       }
     }
 
@@ -262,7 +198,8 @@
         grid-template-columns: 1fr;
       }
 
-      .ead-tabela {
+      .ead-tabela,
+      .ead-card {
         padding: 12px;
       }
     }
@@ -347,31 +284,31 @@
         <span class="nav-icon">▥</span> Controle de Vagas Aprendiz
       </a>
 
-      <a
-        class="nav-link"
-        href="#substituicoes-section"
-        id="substituicoes-nav-link"
-        hidden
-      >
+      <a class="nav-link"
+         href="#substituicoes-section"
+         id="substituicoes-nav-link"
+         hidden>
         <span class="nav-icon">↻</span> BI de Substituições
       </a>
 
-      <!-- NOVO ACESSO: ANÁLISE GEOGRÁFICA EaD -->
-      <a
-        class="nav-link"
-        href="#ead-section"
-        id="ead-nav-link"
-        hidden
-      >
+      <a class="nav-link"
+         href="#ead-section"
+         id="ead-nav-link"
+         hidden>
         <span class="nav-icon">⌖</span> Análise Geográfica EaD
       </a>
 
-      <a
-        class="nav-link"
-        href="#admin-section"
-        id="admin-nav-link"
-        hidden
-      >
+      <a class="nav-link"
+         href="#ead-cursos-painel"
+         id="ead-cursos-nav-link"
+         hidden>
+        <span class="nav-icon">▤</span> Cursos e Protocolos EaD
+      </a>
+
+      <a class="nav-link"
+         href="#admin-section"
+         id="admin-nav-link"
+         hidden>
         <span class="nav-icon">⚙</span> Administração
       </a>
 
@@ -491,7 +428,6 @@
         </div>
 
         <div id="dashboard-grid" class="dashboard-grid"></div>
-
         <p id="dashboard-message" role="status" aria-live="polite"></p>
 
         <p id="filter-empty" class="filter-empty" hidden>
@@ -500,6 +436,7 @@
         </p>
       </section>
 
+      
       <!-- CONTROLE DE VAGAS APRENDIZ -->
       <section id="vagas-aprendiz-section" class="dashboard-section">
         <div class="section-heading">
@@ -512,12 +449,10 @@
             </p>
           </div>
 
-          <a
-            href="./vagas-aprendiz.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="access-pill"
-          >
+          <a href="./vagas-aprendiz.html"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="access-pill">
             Abrir painel completo ↗
           </a>
         </div>
@@ -536,24 +471,30 @@
       </section>
 
       <!-- BI DE SUBSTITUIÇÕES -->
-      <section id="substituicoes-section" class="dashboard-section" hidden>
+      <section id="substituicoes-section"
+               class="dashboard-section"
+               hidden>
         <div class="section-heading">
           <div>
             <p class="section-kicker">INDICADORES OPERACIONAIS</p>
             <h2>BI de Substituições</h2>
             <p class="muted">
-              Acompanhe substituições realizadas, pendências, atrasos e resultados por subsede.
+              Acompanhe substituições realizadas, pendências, atrasos
+              e resultados por subsede.
             </p>
           </div>
 
-          <button id="substituicoes-atualizar" type="button" class="sub-button">
+          <button id="substituicoes-atualizar"
+                  type="button"
+                  class="sub-button">
             ↻ Atualizar dados
           </button>
         </div>
 
-        <p id="substituicoes-message" role="status" aria-live="polite"></p>
+        <p id="substituicoes-message"
+           role="status"
+           aria-live="polite"></p>
 
-        <!-- FILTROS -->
         <div class="substituicoes-filtros">
           <label for="sub-filtro-subsede">
             Subsede
@@ -594,30 +535,25 @@
           </label>
         </div>
 
-        <!-- INDICADORES -->
         <div class="substituicoes-kpis">
           <article class="sub-kpi">
             <span>Total de registros</span>
             <strong id="sub-total">0</strong>
           </article>
-
           <article class="sub-kpi">
             <span>Substituições realizadas</span>
             <strong id="sub-realizadas">0</strong>
           </article>
-
           <article class="sub-kpi">
             <span>Pendentes</span>
             <strong id="sub-pendentes">0</strong>
           </article>
-
           <article class="sub-kpi">
             <span>Em atraso</span>
             <strong id="sub-atrasadas">0</strong>
           </article>
         </div>
 
-        <!-- GRÁFICOS -->
         <div class="substituicoes-graficos">
           <article class="sub-grafico">
             <h3>Evolução mensal</h3>
@@ -625,21 +561,18 @@
               <canvas id="sub-grafico-mensal"></canvas>
             </div>
           </article>
-
           <article class="sub-grafico">
             <h3>Registros por subsede</h3>
             <div class="sub-chart-container">
               <canvas id="sub-grafico-subsede"></canvas>
             </div>
           </article>
-
           <article class="sub-grafico">
             <h3>Principais motivos</h3>
             <div class="sub-chart-container">
               <canvas id="sub-grafico-motivos"></canvas>
             </div>
           </article>
-
           <article class="sub-grafico">
             <h3>Situação das substituições</h3>
             <div class="sub-chart-container sub-chart-doughnut">
@@ -648,7 +581,6 @@
           </article>
         </div>
 
-        <!-- TABELA -->
         <article class="substituicoes-tabela">
           <div class="sub-tabela-heading">
             <div>
@@ -657,7 +589,6 @@
                 Os resultados respeitam os filtros selecionados.
               </p>
             </div>
-
             <span id="sub-tabela-contagem" class="sub-tabela-contagem">
               0 registros
             </span>
@@ -677,12 +608,9 @@
                   <th>Prioridade</th>
                 </tr>
               </thead>
-
               <tbody id="sub-tabela-corpo">
                 <tr>
-                  <td colspan="8">
-                    Carregue os dados para visualizar os registros.
-                  </td>
+                  <td colspan="8">Carregue os dados para visualizar os registros.</td>
                 </tr>
               </tbody>
             </table>
@@ -690,12 +618,10 @@
 
           <div id="sub-paginacao" class="sub-paginacao">
             <span id="sub-paginacao-info">Página 1</span>
-
             <div class="sub-paginacao-controles">
               <button id="sub-pagina-anterior" type="button" disabled>
                 ← Anterior
               </button>
-
               <button id="sub-pagina-proxima" type="button" disabled>
                 Próxima →
               </button>
@@ -704,7 +630,7 @@
         </article>
       </section>
 
-      <!-- NOVO MÓDULO: ANÁLISE GEOGRÁFICA EaD -->
+      <!-- ANÁLISE GEOGRÁFICA EaD -->
       <section id="ead-section" class="dashboard-section" hidden>
         <div class="section-heading">
           <div>
@@ -723,15 +649,12 @@
 
         <p id="ead-message" role="status" aria-live="polite"></p>
 
-        <!-- FILTROS EaD -->
         <div class="ead-filtros">
           <label for="ead-filtro-municipio">
             Município
-            <input
-              id="ead-filtro-municipio"
-              type="search"
-              placeholder="Buscar município..."
-            >
+            <input id="ead-filtro-municipio"
+                   type="search"
+                   placeholder="Buscar município...">
           </label>
 
           <label for="ead-filtro-uf">
@@ -756,30 +679,25 @@
           </label>
         </div>
 
-        <!-- INDICADORES EaD -->
         <div class="ead-kpis">
           <article class="ead-card">
             <span>Municípios encontrados</span>
             <strong id="ead-total">0</strong>
           </article>
-
           <article class="ead-card">
             <span>Até 70 km</span>
             <strong id="ead-ate70">0</strong>
           </article>
-
           <article class="ead-card">
             <span>Acima de 70 km</span>
             <strong id="ead-acima70">0</strong>
           </article>
-
           <article class="ead-card">
             <span>Potencial até 99</span>
             <strong id="ead-potencial99">0</strong>
           </article>
         </div>
 
-        <!-- TABELA EaD -->
         <article class="ead-tabela">
           <div class="ead-tabela-topo">
             <div>
@@ -788,7 +706,6 @@
                 Os registros respeitam os filtros selecionados.
               </p>
             </div>
-
             <span id="ead-tabela-contagem">0 registros</span>
           </div>
 
@@ -809,7 +726,6 @@
                   <th>Status do cálculo</th>
                 </tr>
               </thead>
-
               <tbody id="ead-tabela-corpo">
                 <tr>
                   <td colspan="11">
@@ -820,24 +736,13 @@
             </table>
           </div>
 
-          <!-- PAGINAÇÃO EaD -->
           <div id="ead-paginacao" class="ead-paginacao">
             <span id="ead-paginacao-info">Página 1</span>
-
             <div class="ead-paginacao-controles">
-              <button
-                id="ead-pagina-anterior"
-                type="button"
-                disabled
-              >
+              <button id="ead-pagina-anterior" type="button" disabled>
                 ← Anterior
               </button>
-
-              <button
-                id="ead-pagina-proxima"
-                type="button"
-                disabled
-              >
+              <button id="ead-pagina-proxima" type="button" disabled>
                 Próxima →
               </button>
             </div>
@@ -852,6 +757,113 @@
         </p>
       </section>
 
+      
+      <!-- CURSOS E PROTOCOLOS EaD -->
+      <section id="ead-cursos-painel" class="dashboard-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">GESTÃO DE PROTOCOLOS</p>
+            <h2>Cursos e Protocolos EaD</h2>
+            <p class="muted">
+              Consulte protocolos, cursos aprovados, validade e localidades.
+            </p>
+          </div>
+
+          <button id="ead-cursos-atualizar" type="button">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <p id="ead-cursos-message" role="status" aria-live="polite"></p>
+
+        <div class="ead-filtros">
+          <label for="ead-cursos-filtro-subsede">
+            Subsede
+            <select id="ead-cursos-filtro-subsede">
+              <option value="">Todas as subsedes</option>
+            </select>
+          </label>
+
+          <label for="ead-cursos-filtro-polo">
+            Polo
+            <select id="ead-cursos-filtro-polo">
+              <option value="">Todos os polos</option>
+            </select>
+          </label>
+
+          <label for="ead-cursos-filtro-municipio">
+            Município
+            <input id="ead-cursos-filtro-municipio"
+                   type="search"
+                   placeholder="Buscar município">
+          </label>
+
+          <label for="ead-cursos-filtro-curso">
+            Curso
+            <select id="ead-cursos-filtro-curso">
+              <option value="">Todos os cursos</option>
+            </select>
+          </label>
+
+          <label for="ead-cursos-filtro-status">
+            Status
+            <select id="ead-cursos-filtro-status">
+              <option value="">Todos os status</option>
+            </select>
+          </label>
+        </div>
+
+        <article class="ead-tabela">
+          <div class="ead-tabela-topo">
+            <div>
+              <h3>Protocolos cadastrados</h3>
+              <p class="muted">
+                Os registros respeitam os filtros selecionados.
+              </p>
+            </div>
+            <span id="ead-cursos-tabela-contagem">0 registros</span>
+          </div>
+
+          <div class="ead-tabela-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Protocolo</th>
+                  <th>Data do protocolo</th>
+                  <th>Data da aprovação</th>
+                  <th>Validade</th>
+                  <th>Status</th>
+                  <th>Município</th>
+                  <th>UF</th>
+                  <th>Curso</th>
+                  <th>Portaria</th>
+                  <th>CBO</th>
+                  <th>Faixa etária</th>
+                  <th>Subsede</th>
+                  <th>Polos</th>
+                  <th>Distância (km)</th>
+                  <th>Classificação da distância</th>
+                  <th>Potencial de cota</th>
+                </tr>
+              </thead>
+              <tbody id="ead-cursos-tabela-corpo">
+                <tr>
+                  <td colspan="16">
+                    Aguardando carregamento dos protocolos...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <p class="ead-aviso">
+          As informações de distância e potencial são complementares e,
+          quando disponíveis, devem utilizar os dados já registrados na
+          análise geográfica EaD.
+        </p>
+      </section>
+
       <!-- ADMINISTRAÇÃO -->
       <section id="admin-section" class="admin-panel" hidden>
         <div class="section-heading">
@@ -862,7 +874,6 @@
               Gerencie usuários, acessos e dashboards cadastrados.
             </p>
           </div>
-
           <span class="admin-pill">⚙ Administrador</span>
         </div>
 
@@ -875,23 +886,19 @@
 
             <form id="user-create-form">
               <label for="new-user-email">E-mail do usuário</label>
-              <input
-                type="email"
-                id="new-user-email"
-                autocomplete="off"
-                placeholder="nome@empresa.com"
-                required
-              >
+              <input type="email"
+                     id="new-user-email"
+                     autocomplete="off"
+                     placeholder="nome@empresa.com"
+                     required>
 
               <label for="new-user-password">Senha inicial</label>
-              <input
-                type="password"
-                id="new-user-password"
-                minlength="8"
-                autocomplete="new-password"
-                placeholder="Mínimo de 8 caracteres"
-                required
-              >
+              <input type="password"
+                     id="new-user-password"
+                     minlength="8"
+                     autocomplete="new-password"
+                     placeholder="Mínimo de 8 caracteres"
+                     required>
 
               <label for="new-user-role">Perfil</label>
               <select id="new-user-role">
@@ -920,7 +927,6 @@
             <button id="save-permissions-btn" type="button">
               Salvar permissões
             </button>
-
             <p id="permission-message" role="status" aria-live="polite"></p>
           </section>
 
@@ -971,7 +977,9 @@
 
               <div class="form-wide">
                 <button type="submit">Salvar dashboard</button>
-                <p id="dashboard-form-message" role="status" aria-live="polite"></p>
+                <p id="dashboard-form-message"
+                   role="status"
+                   aria-live="polite"></p>
               </div>
             </form>
           </section>
