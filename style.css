@@ -1687,3 +1687,174 @@ textarea:focus {
     padding: 18px;
   }
 }
+
+/* ==========================================
+   MAPA INTERATIVO — ANÁLISE GEOGRÁFICA EaD
+========================================== */
+
+.ead-mapa-painel {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 22px 0;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+}
+
+.ead-mapa-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ead-mapa-cabecalho h2,
+.ead-mapa-cabecalho h3 {
+  margin: 0 0 6px;
+  color: var(--navy);
+}
+
+.ead-mapa-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ead-mapa-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#ead-mapa-canvas {
+  position: relative;
+  width: 100%;
+  height: 440px;
+  min-height: 320px;
+  z-index: 1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #edf2f7;
+  box-sizing: border-box;
+}
+
+#ead-mapa-aviso {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+#ead-mapa-canvas .leaflet-popup-content-wrapper {
+  border-radius: 10px;
+}
+
+#ead-mapa-canvas .leaflet-popup-content {
+  margin: 13px 15px;
+  line-height: 1.6;
+  font-family: 'DM Sans', Arial, sans-serif;
+  font-size: 12px;
+}
+
+#ead-mapa-canvas .ead-popup-titulo {
+  margin-bottom: 6px;
+  color: var(--navy);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+#ead-mapa-canvas .ead-popup-linha {
+  margin: 2px 0;
+}
+
+#ead-mapa-canvas .leaflet-control-zoom a {
+  color: var(--navy);
+}
+
+#ead-mapa-canvas .leaflet-control-attribution {
+  font-size: 10px;
+}
+
+/* O mapa respeita a largura da seção EaD */
+
+#ead-section {
+  min-width: 0;
+}
+
+#ead-section .ead-mapa-painel {
+  max-width: 100%;
+}
+
+#ead-section #ead-mapa-canvas img {
+  max-width: none;
+}
+
+/* Legenda e painel do mapa em tablets */
+
+@media (max-width: 850px) {
+  .ead-mapa-painel {
+    padding: 16px;
+    margin: 18px 0;
+  }
+
+  #ead-mapa-canvas {
+    height: 380px;
+    min-height: 300px;
+  }
+}
+
+/* Mapa em celulares */
+
+@media (max-width: 600px) {
+  .ead-mapa-painel {
+    padding: 13px;
+    margin: 16px 0;
+    border-radius: 10px;
+  }
+
+  .ead-mapa-cabecalho {
+    gap: 8px;
+  }
+
+  #ead-mapa-canvas {
+    height: 350px;
+    min-height: 280px;
+  }
+
+  .ead-mapa-legenda {
+    gap: 10px;
+    font-size: 11px;
+  }
+
+  #ead-mapa-canvas .leaflet-popup-content {
+    margin: 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 380px) {
+  .ead-mapa-painel {
+    padding: 10px;
+  }
+
+  #ead-mapa-canvas {
+    height: 320px;
+    min-height: 260px;
+  }
+
+  .ead-mapa-legenda {
+    gap: 8px;
+    font-size: 10px;
+  }
+}
