@@ -2741,3 +2741,1509 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
   if (anterior) anterior.disabled = eadPaginaAtual <= 1;
   if (proxima) proxima.disabled = eadPaginaAtual >= totalPaginas || total === 0;
 }
+
+// ==========================================================
+// PORTAL BI GERAR — MÓDULOS APRENDIZ, ESTÁGIO E CARTEIRAS
+// ==========================================================
+
+(() => {
+  "use strict";
+
+  const MODULOS_BI = {
+    aprendizHistorico: "bi_aprendiz_historico",
+    aprendizCarteira: "bi_aprendiz_carteira",
+    aprendizDetalhado: "bi_aprendiz_detalhado",
+    estagioHistorico: "bi_estagio_historico"
+  };
+
+  const MODULO_PAGE_SIZE = 1000;
+  const MODULO_TABELA_PAGE_SIZE = 25;
+
+  const moduloBIState = {
+    inicializado: false,
+    carregando: false,
+    aprendizHistorico: [],
+    aprendizCarteira: [],
+    aprendizDetalhado: [],
+    estagioHistorico: [],
+    filtros: {
+      aprendizAno: "",
+      aprendizMes: "",
+      aprendizSubsede: "",
+      aprendizAngariador: "",
+      detalheBusca: "",
+      detalheSubsede: "",
+      detalheCartao: "",
+      estagioAno: "",
+      estagioMes: "",
+      estagioSubsede: ""
+    },
+    paginas: {
+      aprendiz: 1,
+      carteira: 1,
+      detalhado: 1,
+      estagio: 1
+    },
+    graficos: {}
+  };
+
+  const moduloBI$ = id => document.getElementById(id);
+
+  function moduloBIEscapar(valor) {
+    return String(valor ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function moduloBINumero(valor) {
+    if (valor === null || valor === undefined || valor === "") return 0;
+    if (typeof valor === "number") return Number.isFinite(valor) ? valor : 0;
+
+    let texto = String(valor)
+      .replace(/R\$/gi, "")
+      .replace(/\s/g, "")
+      .replace(/%/g, "");
+
+    if (texto.includes(",") && texto.includes(".")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else if (texto.includes(",")) {
+      texto = texto.replace(",", ".");
+    }
+
+    const n = Number(texto);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function moduloBIMoeda(valor) {
+    return moduloBINumero(valor).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL"
+    });
+  }
+
+  function moduloBINumeroFormatado(valor, casas = 0) {
+    return moduloBINumero(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits: casas,
+      maximumFractionDigits: casas
+    });
+  }
+
+  function moduloBIDataTexto(valor) {
+    if (!valor) return "—";
+
+    const texto = String(valor);
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+      const [ano, mes, dia] = texto.slice(0, 10).split("-");
+      return `${dia}/${mes}/${ano}`;
+    }
+
+    return texto;
+  }
+
+  function moduloBIAno(registro) {
+    if (registro.ano !== null && registro.ano !== undefined && registro.ano !== "") {
+      return String(registro.ano);
+    }
+
+    const data = String(registro.data_referencia || "");
+    return /^\d{4}/.test(data) ? data.slice(0, 4) : "";
+  }
+
+  function moduloBIMes(registro) {
+    const mes = Number(registro.mes);
+
+    if (Number.isFinite(mes) && mes >= 1 && mes <= 12) {
+      return mes;
+    }
+
+    const data = String(registro.data_referencia || "");
+    if (/^\d{4}-\d{2}/.test(data)) return Number(data.slice(5, 7));
+
+    return 0;
+  }
+
+  function moduloBIMesNome(mes) {
+    const nomes = [
+      "Janeiro", "Fevereiro", "Março", "Abril",
+      "Maio", "Junho", "Julho", "Agosto",
+      "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+
+    return nomes[Number(mes) - 1] || "Não informado";
+  }
+
+  function moduloBIChaveMes(registro) {
+    return `${moduloBIAno(registro)}-${String(moduloBIMes(registro)).padStart(2, "0")}`;
+  }
+
+  function moduloBISortMes(a, b) {
+    return moduloBIChaveMes(a).localeCompare(moduloBIChaveMes(b));
+  }
+
+  function moduloBILerCampo(registro, campos) {
+    for (const campo of campos) {
+      const valor = registro?.[campo];
+
+      if (valor !== null && valor !== undefined && String(valor).trim() !== "") {
+        return valor;
+      }
+    }
+
+    return "";
+  }
+
+  function moduloBIValorSimNao(valor) {
+    const texto = String(valor ?? "").trim().toLowerCase();
+
+    return [
+      "sim", "true", "1", "yes", "cartão futuro",
+      "cartao futuro", "cartao_futuro"
+    ].includes(texto);
+  }
+
+  function moduloBIEhCartaoFuturo(registro) {
+    const campos = [
+      registro.cartao_futuro,
+      registro.cartao,
+      registro.tipo
+    ];
+
+    return campos.some(valor => {
+      const texto = String(valor ?? "").trim().toLowerCase();
+
+      return (
+        moduloBIValorSimNao(valor) ||
+        texto.includes("cartão futuro") ||
+        texto.includes("cartao futuro") ||
+        texto.includes("cartao_futuro")
+      );
+    });
+  }
+
+  function moduloBIRegistroAgregado(registro) {
+    const campos = [
+      registro.local_atendimento,
+      registro.subsede,
+      registro.tipo
+    ];
+
+    return campos.some(valor => {
+      const texto = String(valor ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+
+      return texto === "total" ||
+        texto.startsWith("total geral") ||
+        texto === "consolidado geral";
+    });
+  }
+
+  function moduloBIUnicos(valores) {
+    return [...new Set(
+      valores
+        .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+        .map(v => String(v).trim())
+    )].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }
+
+  function moduloBIOptions(id, valores, textoPadrao) {
+    const select = moduloBI$(id);
+    if (!select) return;
+
+    const valorAtual = select.value;
+
+    select.replaceChildren();
+
+    const opcaoInicial = document.createElement("option");
+    opcaoInicial.value = "";
+    opcaoInicial.textContent = textoPadrao;
+    select.appendChild(opcaoInicial);
+
+    valores.forEach(valor => {
+      const opcao = document.createElement("option");
+      opcao.value = valor;
+      opcao.textContent = valor;
+      select.appendChild(opcao);
+    });
+
+    if (valores.includes(valorAtual)) {
+      select.value = valorAtual;
+    }
+  }
+
+  async function moduloBIBuscarTabela(nomeTabela) {
+    const todos = [];
+
+    for (let inicio = 0; ; inicio += MODULO_PAGE_SIZE) {
+      const fim = inicio + MODULO_PAGE_SIZE - 1;
+
+      const { data, error } = await sb
+        .from(nomeTabela)
+        .select("*")
+        .range(inicio, fim);
+
+      if (error) {
+        throw new Error(
+          `Erro ao consultar ${nomeTabela}: ${error.message}`
+        );
+      }
+
+      const lote = data || [];
+      todos.push(...lote);
+
+      if (lote.length < MODULO_PAGE_SIZE) break;
+    }
+
+    return todos;
+  }
+
+  function moduloBIMensagem(texto, erro = false) {
+    const el = moduloBI$("modulos-bi-mensagem");
+    if (!el) return;
+
+    el.textContent = texto;
+    el.style.color = erro ? "#b42318" : "#18794e";
+  }
+
+  function moduloBICriarInterface() {
+    if (moduloBIState.inicializado) return;
+
+    const sidebar = document.querySelector(".sidebar");
+    const main = document.querySelector(".main-content");
+    const footer = main?.querySelector(".page-footer");
+
+    if (!sidebar || !main || !footer) return;
+
+    const navBase = sidebar.querySelector(".sidebar-bottom");
+
+    const nav = document.createElement("div");
+    nav.id = "modulos-bi-nav";
+    nav.innerHTML = `
+      <a class="nav-link" href="#bi-aprendiz-section" id="bi-aprendiz-nav">
+        <span class="nav-icon">▥</span> BI Aprendiz
+      </a>
+      <a class="nav-link" href="#bi-estagio-section" id="bi-estagio-nav">
+        <span class="nav-icon">▤</span> BI Estágio
+      </a>
+      <a class="nav-link" href="#bi-carteiras-section" id="bi-carteiras-nav">
+        <span class="nav-icon">↗</span> Carteiras dos Consultores
+      </a>
+    `;
+
+    if (navBase) sidebar.insertBefore(nav, navBase);
+    else sidebar.appendChild(nav);
+
+    const style = document.createElement("style");
+    style.id = "modulos-bi-estilos";
+    style.textContent = `
+      .modulo-bi-section { margin: 24px 0; }
+      .modulo-bi-filtros {
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+        gap:14px;
+        margin:20px 0;
+      }
+      .modulo-bi-filtros label {
+        display:flex; flex-direction:column; gap:7px;
+        min-width:0; font-size:13px; font-weight:600;
+      }
+      .modulo-bi-filtros input,
+      .modulo-bi-filtros select {
+        box-sizing:border-box; width:100%; min-width:0;
+        padding:10px 12px; border:1px solid #dce3ec;
+        border-radius:8px; background:#fff; color:#182538;
+        font:inherit;
+      }
+      .modulo-bi-kpis {
+        display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:14px; margin:18px 0;
+      }
+      .modulo-bi-card {
+        min-width:0; padding:18px; border:1px solid #e3e8f0;
+        border-radius:12px; background:#fff;
+        box-shadow:0 5px 20px rgba(20,42,72,.04);
+      }
+      .modulo-bi-card span {
+        display:block; color:#778397; font-size:12px; line-height:1.5;
+      }
+      .modulo-bi-card strong {
+        display:block; margin-top:8px; color:#17365d;
+        font-size:clamp(20px,2.3vw,29px); overflow-wrap:anywhere;
+      }
+      .modulo-bi-paineis {
+        display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:16px; margin:20px 0;
+      }
+      .modulo-bi-grafico {
+        min-width:0; padding:18px; border:1px solid #e3e8f0;
+        border-radius:12px; background:#fff;
+      }
+      .modulo-bi-grafico h3 { margin:0 0 14px; font-size:15px; }
+      .modulo-bi-grafico canvas { max-height:310px; }
+      .modulo-bi-tabela {
+        padding:18px; margin-top:20px; border:1px solid #e3e8f0;
+        border-radius:12px; background:#fff; min-width:0;
+      }
+      .modulo-bi-tabela-scroll { width:100%; overflow-x:auto; }
+      .modulo-bi-tabela table {
+        width:100%; min-width:850px; border-collapse:collapse;
+        font-size:13px;
+      }
+      .modulo-bi-tabela th, .modulo-bi-tabela td {
+        padding:11px; border-bottom:1px solid #e3e8f0;
+        text-align:left; vertical-align:top;
+      }
+      .modulo-bi-tabela th {
+        background:#f4f6fa; color:#17365d; white-space:nowrap;
+      }
+      .modulo-bi-tabela td { overflow-wrap:anywhere; }
+      .modulo-bi-tabela-topo, .modulo-bi-paginacao {
+        display:flex; justify-content:space-between; align-items:center;
+        gap:12px; flex-wrap:wrap; margin-bottom:14px;
+      }
+      .modulo-bi-paginacao { margin-top:16px; }
+      .modulo-bi-paginacao button, .modulo-bi-acao {
+        padding:9px 12px; border:1px solid #dce3ec;
+        border-radius:8px; background:#fff; cursor:pointer;
+      }
+      .modulo-bi-paginacao button:disabled { opacity:.5; cursor:not-allowed; }
+      .modulo-bi-aviso { color:#667085; font-size:12px; line-height:1.6; }
+      .modulo-bi-badge {
+        display:inline-block; padding:4px 8px; border-radius:20px;
+        background:#eaf4ff; color:#174a7e; font-weight:600; font-size:11px;
+      }
+      #modulos-bi-mensagem { margin:14px 0; font-size:13px; }
+      @media(max-width:850px) {
+        .modulo-bi-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .modulo-bi-paineis { grid-template-columns:1fr; }
+      }
+      @media(max-width:480px) {
+        .modulo-bi-kpis { grid-template-columns:1fr; }
+        .modulo-bi-card, .modulo-bi-tabela { padding:12px; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    const secao = document.createElement("section");
+    secao.id = "modulos-bi-container";
+    secao.className = "dashboard-section";
+    secao.innerHTML = `
+      <p id="modulos-bi-mensagem" role="status" aria-live="polite">
+        Os módulos serão carregados ao acessar o portal.
+      </p>
+
+      <section id="bi-aprendiz-section" class="modulo-bi-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">INDICADORES E RESULTADOS</p>
+            <h2>BI Aprendiz</h2>
+            <p class="muted">Histórico mensal, metas e relatório detalhado.</p>
+          </div>
+          <button type="button" class="modulo-bi-acao" id="bi-aprendiz-atualizar">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <div class="modulo-bi-filtros">
+          <label>Ano
+            <select id="bi-aprendiz-ano"><option value="">Todos os anos</option></select>
+          </label>
+          <label>Mês
+            <select id="bi-aprendiz-mes"><option value="">Todos os meses</option></select>
+          </label>
+          <label>Subsede
+            <select id="bi-aprendiz-subsede"><option value="">Todas as subsedes</option></select>
+          </label>
+        </div>
+
+        <div class="modulo-bi-kpis">
+          <article class="modulo-bi-card"><span>Faturamento histórico</span><strong id="bi-aprendiz-faturamento">—</strong></article>
+          <article class="modulo-bi-card"><span>Jovens registrados no histórico</span><strong id="bi-aprendiz-jovens">—</strong></article>
+          <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-aprendiz-tkm">—</strong></article>
+          <article class="modulo-bi-card"><span>Empresas registradas</span><strong id="bi-aprendiz-empresas">—</strong></article>
+        </div>
+
+        <div class="modulo-bi-paineis">
+          <article class="modulo-bi-grafico">
+            <h3>Faturamento por mês</h3>
+            <canvas id="bi-aprendiz-grafico-faturamento"></canvas>
+          </article>
+          <article class="modulo-bi-grafico">
+            <h3>Jovens por mês</h3>
+            <canvas id="bi-aprendiz-grafico-jovens"></canvas>
+          </article>
+        </div>
+
+        <article class="modulo-bi-tabela">
+          <div class="modulo-bi-tabela-topo">
+            <div>
+              <h3>Histórico de Aprendiz</h3>
+              <p class="muted">Valores conforme os registros importados.</p>
+            </div>
+            <span id="bi-aprendiz-contagem" class="modulo-bi-badge">0 registros</span>
+          </div>
+          <div class="modulo-bi-tabela-scroll">
+            <table>
+              <thead><tr>
+                <th>Referência</th><th>Local de atendimento</th><th>Subsede</th>
+                <th>Tipo</th><th>Faturamento</th><th>Jovens</th><th>TKM</th>
+                <th>Empresas</th><th>Meta jovens</th><th>Meta faturamento</th>
+              </tr></thead>
+              <tbody id="bi-aprendiz-tabela"></tbody>
+            </table>
+          </div>
+          <div class="modulo-bi-paginacao">
+            <span id="bi-aprendiz-pagina-info">Página 1</span>
+            <div>
+              <button id="bi-aprendiz-anterior" type="button">← Anterior</button>
+              <button id="bi-aprendiz-proxima" type="button">Próxima →</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="modulo-bi-tabela">
+          <div class="modulo-bi-tabela-topo">
+            <div>
+              <h3>Relatório detalhado de Aprendiz</h3>
+              <p class="muted">Consulta por empresa, aprendiz, cidade, subsede e Cartão Futuro.</p>
+            </div>
+            <span id="bi-detalhado-contagem" class="modulo-bi-badge">0 registros</span>
+          </div>
+          <div class="modulo-bi-filtros">
+            <label>Buscar empresa, CNPJ ou aprendiz
+              <input id="bi-detalhado-busca" type="search" placeholder="Digite para pesquisar...">
+            </label>
+            <label>Subsede
+              <select id="bi-detalhado-subsede"><option value="">Todas as subsedes</option></select>
+            </label>
+            <label>Cartão Futuro
+              <select id="bi-detalhado-cartao">
+                <option value="">Todos os registros</option>
+                <option value="sim">Somente Cartão Futuro</option>
+                <option value="nao">Sem Cartão Futuro</option>
+              </select>
+            </label>
+          </div>
+          <p id="bi-detalhado-resumo" class="modulo-bi-aviso"></p>
+          <div class="modulo-bi-tabela-scroll">
+            <table>
+              <thead><tr>
+                <th>Período</th><th>Empresa</th><th>CNPJ</th><th>Aprendiz</th>
+                <th>Angariador</th><th>Cidade</th><th>Subsede</th>
+                <th>Início</th><th>Fim</th><th>Tipo</th><th>Cartão Futuro</th>
+              </tr></thead>
+              <tbody id="bi-detalhado-tabela"></tbody>
+            </table>
+          </div>
+          <div class="modulo-bi-paginacao">
+            <span id="bi-detalhado-pagina-info">Página 1</span>
+            <div>
+              <button id="bi-detalhado-anterior" type="button">← Anterior</button>
+              <button id="bi-detalhado-proxima" type="button">Próxima →</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="bi-estagio-section" class="modulo-bi-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">INDICADORES E METAS</p>
+            <h2>BI Estágio</h2>
+            <p class="muted">Faturamento, jovens, TKM e evolução mensal por subsede.</p>
+          </div>
+          <button type="button" class="modulo-bi-acao" id="bi-estagio-atualizar">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <div class="modulo-bi-filtros">
+          <label>Ano
+            <select id="bi-estagio-ano"><option value="">Todos os anos</option></select>
+          </label>
+          <label>Mês
+            <select id="bi-estagio-mes"><option value="">Todos os meses</option></select>
+          </label>
+          <label>Subsede
+            <select id="bi-estagio-subsede"><option value="">Todas as subsedes</option></select>
+          </label>
+        </div>
+
+        <div class="modulo-bi-kpis">
+          <article class="modulo-bi-card"><span>Faturamento</span><strong id="bi-estagio-faturamento">—</strong></article>
+          <article class="modulo-bi-card"><span>Jovens registrados</span><strong id="bi-estagio-jovens">—</strong></article>
+          <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-estagio-tkm">—</strong></article>
+          <article class="modulo-bi-card"><span>Atingimento da meta de faturamento</span><strong id="bi-estagio-atingimento">—</strong></article>
+        </div>
+
+        <div class="modulo-bi-paineis">
+          <article class="modulo-bi-grafico">
+            <h3>Faturamento por mês</h3>
+            <canvas id="bi-estagio-grafico-faturamento"></canvas>
+          </article>
+          <article class="modulo-bi-grafico">
+            <h3>Jovens por mês</h3>
+            <canvas id="bi-estagio-grafico-jovens"></canvas>
+          </article>
+        </div>
+
+        <article class="modulo-bi-tabela">
+          <div class="modulo-bi-tabela-topo">
+            <div><h3>Histórico e metas de Estágio</h3></div>
+            <span id="bi-estagio-contagem" class="modulo-bi-badge">0 registros</span>
+          </div>
+          <div class="modulo-bi-tabela-scroll">
+            <table>
+              <thead><tr>
+                <th>Referência</th><th>Subsede</th><th>Faturamento</th>
+                <th>Meta faturamento</th><th>Atingimento</th><th>Jovens</th>
+                <th>Meta jovens</th><th>TKM</th>
+              </tr></thead>
+              <tbody id="bi-estagio-tabela"></tbody>
+            </table>
+          </div>
+          <div class="modulo-bi-paginacao">
+            <span id="bi-estagio-pagina-info">Página 1</span>
+            <div>
+              <button id="bi-estagio-anterior" type="button">← Anterior</button>
+              <button id="bi-estagio-proxima" type="button">Próxima →</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="bi-carteiras-section" class="modulo-bi-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">DESEMPENHO COMERCIAL</p>
+            <h2>Carteiras dos Consultores</h2>
+            <p class="muted">Histórico de janeiro a agosto, faturamento, jovens ativos, TKM e crescimento.</p>
+          </div>
+          <button type="button" class="modulo-bi-acao" id="bi-carteiras-atualizar">
+            ↻ Atualizar dados
+          </button>
+        </div>
+
+        <div class="modulo-bi-filtros">
+          <label>Ano
+            <select id="bi-carteira-ano"><option value="">Todos os anos</option></select>
+          </label>
+          <label>Mês
+            <select id="bi-carteira-mes"><option value="">Todos os meses</option></select>
+          </label>
+          <label>Subsede
+            <select id="bi-carteira-subsede"><option value="">Todas as subsedes</option></select>
+          </label>
+          <label>Angariador
+            <select id="bi-carteira-angariador"><option value="">Todos os angariadores</option></select>
+          </label>
+        </div>
+
+        <div class="modulo-bi-kpis">
+          <article class="modulo-bi-card"><span>Faturamento da carteira</span><strong id="bi-carteira-faturamento">—</strong></article>
+          <article class="modulo-bi-card"><span>Jovens ativos registrados</span><strong id="bi-carteira-jovens">—</strong></article>
+          <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-carteira-tkm">—</strong></article>
+          <article class="modulo-bi-card"><span>Crescimento médio registrado</span><strong id="bi-carteira-crescimento">—</strong></article>
+        </div>
+
+        <div class="modulo-bi-paineis">
+          <article class="modulo-bi-grafico">
+            <h3>Faturamento mensal da carteira</h3>
+            <canvas id="bi-carteira-grafico-faturamento"></canvas>
+          </article>
+          <article class="modulo-bi-grafico">
+            <h3>Ranking de faturamento por angariador</h3>
+            <canvas id="bi-carteira-grafico-ranking"></canvas>
+          </article>
+        </div>
+
+        <article class="modulo-bi-tabela">
+          <div class="modulo-bi-tabela-topo">
+            <div><h3>Histórico das carteiras</h3></div>
+            <span id="bi-carteira-contagem" class="modulo-bi-badge">0 registros</span>
+          </div>
+          <div class="modulo-bi-tabela-scroll">
+            <table>
+              <thead><tr>
+                <th>Referência</th><th>Subsede</th><th>Angariador</th>
+                <th>Faturamento</th><th>Jovens ativos</th><th>TKM</th>
+                <th>Crescimento</th><th>Data de início</th>
+              </tr></thead>
+              <tbody id="bi-carteira-tabela"></tbody>
+            </table>
+          </div>
+          <div class="modulo-bi-paginacao">
+            <span id="bi-carteira-pagina-info">Página 1</span>
+            <div>
+              <button id="bi-carteira-anterior" type="button">← Anterior</button>
+              <button id="bi-carteira-proxima" type="button">Próxima →</button>
+            </div>
+          </div>
+        </article>
+      </section>
+    `;
+
+    main.insertBefore(secao, footer);
+    moduloBIState.inicializado = true;
+
+    moduloBIConfigurarEventos();
+  }
+
+  // ========================================================
+  // EVENTOS E NAVEGAÇÃO
+  // ========================================================
+
+  function moduloBIConfigurarEventos() {
+    const navegacao = [
+      ["bi-aprendiz-nav", "bi-aprendiz-section"],
+      ["bi-estagio-nav", "bi-estagio-section"],
+      ["bi-carteiras-nav", "bi-carteiras-section"]
+    ];
+
+    navegacao.forEach(([linkId, secaoId]) => {
+      moduloBI$(linkId)?.addEventListener("click", evento => {
+        evento.preventDefault();
+
+        const secao = moduloBI$(secaoId);
+        if (!secao) return;
+
+        secao.hidden = false;
+
+        document.querySelectorAll(
+          "#bi-aprendiz-section, #bi-estagio-section, #bi-carteiras-section"
+        ).forEach(item => {
+          if (item !== secao) item.hidden = true;
+        });
+
+        document.querySelectorAll("#modulos-bi-nav .nav-link").forEach(link => {
+          link.classList.toggle("active", link.id === linkId);
+        });
+
+        secao.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        if (window.Chart) {
+          setTimeout(() => {
+            Object.values(moduloBIState.graficos).forEach(grafico => {
+              if (grafico && typeof grafico.resize === "function") {
+                grafico.resize();
+              }
+            });
+          }, 150);
+        }
+      });
+    });
+
+    const eventosFiltro = {
+      "bi-aprendiz-ano": ["aprendizAno", renderizarAprendiz],
+      "bi-aprendiz-mes": ["aprendizMes", renderizarAprendiz],
+      "bi-aprendiz-subsede": ["aprendizSubsede", renderizarAprendiz],
+      "bi-detalhado-busca": ["detalheBusca", renderizarDetalhado],
+      "bi-detalhado-subsede": ["detalheSubsede", renderizarDetalhado],
+      "bi-detalhado-cartao": ["detalheCartao", renderizarDetalhado],
+      "bi-estagio-ano": ["estagioAno", renderizarEstagio],
+      "bi-estagio-mes": ["estagioMes", renderizarEstagio],
+      "bi-estagio-subsede": ["estagioSubsede", renderizarEstagio],
+      "bi-carteira-ano": ["carteiraAno", renderizarCarteiras],
+      "bi-carteira-mes": ["carteiraMes", renderizarCarteiras],
+      "bi-carteira-subsede": ["carteiraSubsede", renderizarCarteiras],
+      "bi-carteira-angariador": ["aprendizAngariador", renderizarCarteiras]
+    };
+
+    Object.entries(eventosFiltro).forEach(([id, [chave, renderizar]]) => {
+      moduloBI$(id)?.addEventListener("input", evento => {
+        moduloBIState.filtros[chave] = evento.target.value;
+        moduloBIState.paginas.detalhado = 1;
+        moduloBIState.paginas.aprendiz = 1;
+        moduloBIState.paginas.carteira = 1;
+        moduloBIState.paginas.estagio = 1;
+        renderizar();
+      });
+
+      moduloBI$(id)?.addEventListener("change", evento => {
+        moduloBIState.filtros[chave] = evento.target.value;
+        moduloBIState.paginas.detalhado = 1;
+        moduloBIState.paginas.aprendiz = 1;
+        moduloBIState.paginas.carteira = 1;
+        moduloBIState.paginas.estagio = 1;
+        renderizar();
+      });
+    });
+
+    const botoesAtualizar = [
+      ["bi-aprendiz-atualizar", carregarModulosBI],
+      ["bi-estagio-atualizar", carregarModulosBI],
+      ["bi-carteiras-atualizar", carregarModulosBI]
+    ];
+
+    botoesAtualizar.forEach(([id, callback]) => {
+      moduloBI$(id)?.addEventListener("click", callback);
+    });
+
+    moduloBIConfigurarPaginacao(
+      "aprendiz",
+      "bi-aprendiz-anterior",
+      "bi-aprendiz-proxima",
+      renderizarAprendiz
+    );
+
+    moduloBIConfigurarPaginacao(
+      "detalhado",
+      "bi-detalhado-anterior",
+      "bi-detalhado-proxima",
+      renderizarDetalhado
+    );
+
+    moduloBIConfigurarPaginacao(
+      "estagio",
+      "bi-estagio-anterior",
+      "bi-estagio-proxima",
+      renderizarEstagio
+    );
+
+    moduloBIConfigurarPaginacao(
+      "carteira",
+      "bi-carteira-anterior",
+      "bi-carteira-proxima",
+      renderizarCarteiras
+    );
+  }
+
+  function moduloBIConfigurarPaginacao(chave, idAnterior, idProxima, renderizar) {
+    moduloBI$(idAnterior)?.addEventListener("click", () => {
+      if (moduloBIState.paginas[chave] > 1) {
+        moduloBIState.paginas[chave]--;
+        renderizar();
+      }
+    });
+
+    moduloBI$(idProxima)?.addEventListener("click", () => {
+      moduloBIState.paginas[chave]++;
+      renderizar();
+    });
+  }
+
+  // ========================================================
+  // CONSULTA E CARREGAMENTO DOS DADOS
+  // ========================================================
+
+  async function carregarModulosBI() {
+    if (moduloBIState.carregando) return;
+
+    if (typeof sb === "undefined" || !sb) {
+      moduloBIMensagem(
+        "A conexão com o Supabase não está disponível. Confira o config.js.",
+        true
+      );
+      return;
+    }
+
+    moduloBIState.carregando = true;
+    moduloBIMensagem("Consultando as tabelas do Supabase...");
+
+    [
+      "bi-aprendiz-atualizar",
+      "bi-estagio-atualizar",
+      "bi-carteiras-atualizar"
+    ].forEach(id => {
+      const botao = moduloBI$(id);
+      if (botao) botao.disabled = true;
+    });
+
+    try {
+      const resultados = await Promise.all([
+        moduloBIBuscarTabela(MODULOS_BI.aprendizHistorico),
+        moduloBIBuscarTabela(MODULOS_BI.aprendizCarteira),
+        moduloBIBuscarTabela(MODULOS_BI.aprendizDetalhado),
+        moduloBIBuscarTabela(MODULOS_BI.estagioHistorico)
+      ]);
+
+      moduloBIState.aprendizHistorico = resultados[0];
+      moduloBIState.aprendizCarteira = resultados[1];
+      moduloBIState.aprendizDetalhado = resultados[2];
+      moduloBIState.estagioHistorico = resultados[3];
+
+      moduloBIPreencherFiltros();
+
+      renderizarAprendiz();
+      renderizarDetalhado();
+      renderizarEstagio();
+      renderizarCarteiras();
+
+      moduloBIMensagem(
+        "Dados carregados. Os indicadores refletem os registros disponíveis nas tabelas do Supabase."
+      );
+    } catch (erro) {
+      console.error("Erro ao carregar os módulos BI:", erro);
+
+      moduloBIMensagem(
+        erro?.message ||
+          "Não foi possível carregar os dados. Verifique as tabelas, as permissões RLS e a conexão com o Supabase.",
+        true
+      );
+    } finally {
+      moduloBIState.carregando = false;
+
+      [
+        "bi-aprendiz-atualizar",
+        "bi-estagio-atualizar",
+        "bi-carteiras-atualizar"
+      ].forEach(id => {
+        const botao = moduloBI$(id);
+        if (botao) botao.disabled = false;
+      });
+    }
+  }
+
+  function moduloBIPreencherFiltros() {
+    const aprendiz = moduloBIState.aprendizHistorico;
+    const carteira = moduloBIState.aprendizCarteira;
+    const detalhado = moduloBIState.aprendizDetalhado;
+    const estagio = moduloBIState.estagioHistorico;
+
+    moduloBIOptions(
+      "bi-aprendiz-ano",
+      moduloBIUnicos(aprendiz.map(moduloBIAno)),
+      "Todos os anos"
+    );
+
+    moduloBIOptions(
+      "bi-aprendiz-mes",
+      [...new Set(aprendiz.map(moduloBIMes).filter(Boolean))]
+        .sort((a, b) => a - b)
+        .map(String),
+      "Todos os meses"
+    );
+
+    moduloBIOptions(
+      "bi-aprendiz-subsede",
+      moduloBIUnicos(aprendiz.map(r => r.subsede)),
+      "Todas as subsedes"
+    );
+
+    moduloBIOptions(
+      "bi-detalhado-subsede",
+      moduloBIUnicos(detalhado.map(r => r.subsede)),
+      "Todas as subsedes"
+    );
+
+    moduloBIOptions(
+      "bi-estagio-ano",
+      moduloBIUnicos(estagio.map(moduloBIAno)),
+      "Todos os anos"
+    );
+
+    moduloBIOptions(
+      "bi-estagio-mes",
+      [...new Set(estagio.map(moduloBIMes).filter(Boolean))]
+        .sort((a, b) => a - b)
+        .map(String),
+      "Todos os meses"
+    );
+
+    moduloBIOptions(
+      "bi-estagio-subsede",
+      moduloBIUnicos(estagio.map(r => r.subsede)),
+      "Todas as subsedes"
+    );
+
+    moduloBIOptions(
+      "bi-carteira-ano",
+      moduloBIUnicos(carteira.map(moduloBIAno)),
+      "Todos os anos"
+    );
+
+    moduloBIOptions(
+      "bi-carteira-mes",
+      [...new Set(carteira.map(moduloBIMes).filter(Boolean))]
+        .sort((a, b) => a - b)
+        .map(String),
+      "Todos os meses"
+    );
+
+    moduloBIOptions(
+      "bi-carteira-subsede",
+      moduloBIUnicos(carteira.map(r => r.subsede)),
+      "Todas as subsedes"
+    );
+
+    moduloBIOptions(
+      "bi-carteira-angariador",
+      moduloBIUnicos(carteira.map(r => r.angariador)),
+      "Todos os angariadores"
+    );
+  }
+
+  function moduloBIFiltrarHistorico(registros, prefixo) {
+    const ano = moduloBIState.filtros[`${prefixo}Ano`];
+    const mes = moduloBIState.filtros[`${prefixo}Mes`];
+    const subsede = moduloBIState.filtros[`${prefixo}Subsede`];
+
+    return registros.filter(r => {
+      if (ano && moduloBIAno(r) !== ano) return false;
+      if (mes && String(moduloBIMes(r)) !== mes) return false;
+      if (subsede && String(r.subsede || "") !== subsede) return false;
+      return true;
+    });
+  }
+
+  // Linhas consolidadas podem coexistir com linhas por unidade.
+  // Para KPIs, gráficos e somas, removemos as linhas explicitamente
+  // identificadas como TOTAL/CONSOLIDADO para evitar somá-las novamente.
+  function moduloBIRegistrosParaSomar(registros) {
+    return registros.filter(r => !moduloBIRegistroAgregado(r));
+  }
+
+  // ========================================================
+  // GRÁFICOS
+  // ========================================================
+
+  function moduloBIRenderizarGrafico(idCanvas, chave, labels, datasets, tipo = "bar") {
+    const canvas = moduloBI$(idCanvas);
+    if (!canvas || !window.Chart) return;
+
+    if (moduloBIState.graficos[chave]) {
+      moduloBIState.graficos[chave].destroy();
+    }
+
+    moduloBIState.graficos[chave] = new Chart(canvas, {
+      type: tipo,
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: { display: datasets.length > 1 },
+          tooltip: {
+            callbacks: {
+              label(contexto) {
+                const valor = contexto.parsed?.y ?? contexto.parsed;
+                const titulo = contexto.dataset?.label || "";
+
+                return `${titulo}: ${
+                  typeof valor === "number"
+                    ? valor.toLocaleString("pt-BR", {
+                        maximumFractionDigits: 2
+                      })
+                    : valor
+                }`;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback(valor) {
+                return Number(valor).toLocaleString("pt-BR");
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function moduloBIAgruparPorMes(registros, campo) {
+    const mapa = new Map();
+
+    registros.forEach(r => {
+      const ano = moduloBIAno(r);
+      const mes = moduloBIMes(r);
+
+      if (!ano || !mes) return;
+
+      const chave = `${ano}-${String(mes).padStart(2, "0")}`;
+      mapa.set(chave, (mapa.get(chave) || 0) + moduloBINumero(r[campo]));
+    });
+
+    const entradas = [...mapa.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0])
+    );
+
+    return {
+      labels: entradas.map(([chave]) => {
+        const [ano, mes] = chave.split("-");
+        return `${moduloBIMesNome(mes).slice(0, 3)}/${ano}`;
+      }),
+      valores: entradas.map(([, valor]) => valor)
+    };
+  }
+
+  function moduloBIAtualizarTexto(id, valor) {
+    const el = moduloBI$(id);
+    if (el) el.textContent = valor;
+  }
+
+  function moduloBITotal(registros, campo) {
+    return registros.reduce((total, r) => total + moduloBINumero(r[campo]), 0);
+  }
+
+  function moduloBITKM(faturamento, jovens) {
+    return jovens > 0 ? faturamento / jovens : 0;
+  }
+
+  function moduloBIPaginar(registros, chave, idInfo, idAnterior, idProxima) {
+    const total = registros.length;
+    const paginas = Math.max(1, Math.ceil(total / MODULO_TABELA_PAGE_SIZE));
+
+    moduloBIState.paginas[chave] = Math.min(
+      Math.max(1, moduloBIState.paginas[chave]),
+      paginas
+    );
+
+    const pagina = moduloBIState.paginas[chave];
+    const inicio = (pagina - 1) * MODULO_TABELA_PAGE_SIZE;
+    const fim = Math.min(inicio + MODULO_TABELA_PAGE_SIZE, total);
+
+    moduloBIAtualizarTexto(
+      idInfo,
+      total
+        ? `Exibindo ${inicio + 1}–${fim} de ${total.toLocaleString("pt-BR")} · Página ${pagina} de ${paginas}`
+        : "Nenhum registro para exibir."
+    );
+
+    const anterior = moduloBI$(idAnterior);
+    const proxima = moduloBI$(idProxima);
+
+    if (anterior) anterior.disabled = pagina <= 1;
+    if (proxima) proxima.disabled = pagina >= paginas;
+
+    return registros.slice(inicio, fim);
+  }
+
+  // ========================================================
+  // BI APRENDIZ — HISTÓRICO
+  // ========================================================
+
+  function renderizarAprendiz() {
+    const filtrados = moduloBIFiltrarHistorico(
+      moduloBIState.aprendizHistorico,
+      "aprendiz"
+    );
+
+    const paraSomar = moduloBIRegistrosParaSomar(filtrados);
+
+    const faturamento = moduloBITotal(paraSomar, "faturado");
+    const jovens = moduloBITotal(paraSomar, "numero_jovens");
+    const empresas = moduloBITotal(paraSomar, "quantidade_empresas");
+
+    moduloBIAtualizarTexto("bi-aprendiz-faturamento", moduloBIMoeda(faturamento));
+    moduloBIAtualizarTexto("bi-aprendiz-jovens", moduloBINumeroFormatado(jovens));
+    moduloBIAtualizarTexto(
+      "bi-aprendiz-tkm",
+      moduloBIMoeda(moduloBITKM(faturamento, jovens))
+    );
+    moduloBIAtualizarTexto(
+      "bi-aprendiz-empresas",
+      moduloBINumeroFormatado(empresas)
+    );
+    moduloBIAtualizarTexto(
+      "bi-aprendiz-contagem",
+      `${filtrados.length.toLocaleString("pt-BR")} registros`
+    );
+
+    const graficoFaturamento = moduloBIAgruparPorMes(
+      paraSomar,
+      "faturado"
+    );
+
+    const graficoJovens = moduloBIAgruparPorMes(
+      paraSomar,
+      "numero_jovens"
+    );
+
+    moduloBIRenderizarGrafico(
+      "bi-aprendiz-grafico-faturamento",
+      "aprendizFaturamento",
+      graficoFaturamento.labels,
+      [{
+        label: "Faturamento",
+        data: graficoFaturamento.valores,
+        backgroundColor: "#2474c7"
+      }]
+    );
+
+    moduloBIRenderizarGrafico(
+      "bi-aprendiz-grafico-jovens",
+      "aprendizJovens",
+      graficoJovens.labels,
+      [{
+        label: "Jovens",
+        data: graficoJovens.valores,
+        backgroundColor: "#16835b"
+      }]
+    );
+
+    const pagina = moduloBIPaginar(
+      filtrados,
+      "aprendiz",
+      "bi-aprendiz-pagina-info",
+      "bi-aprendiz-anterior",
+      "bi-aprendiz-proxima"
+    );
+
+    const tbody = moduloBI$("bi-aprendiz-tabela");
+    if (!tbody) return;
+
+    tbody.innerHTML = pagina.map(r => `
+      <tr>
+        <td>${moduloBIEscapar(moduloBIMesNome(moduloBIMes(r)) + "/" + moduloBIAno(r))}</td>
+        <td>${moduloBIEscapar(r.local_atendimento || "—")}</td>
+        <td>${moduloBIEscapar(r.subsede || "—")}</td>
+        <td>${moduloBIEscapar(r.tipo || "—")}</td>
+        <td>${moduloBIEscapar(moduloBIMoeda(r.faturado))}</td>
+        <td>${moduloBIEscapar(moduloBINumeroFormatado(r.numero_jovens))}</td>
+        <td>${moduloBIEscapar(moduloBIMoeda(r.ticket_medio))}</td>
+        <td>${moduloBIEscapar(moduloBINumeroFormatado(r.quantidade_empresas))}</td>
+        <td>${moduloBIEscapar(moduloBINumeroFormatado(r.meta_numero_jovens))}</td>
+        <td>${moduloBIEscapar(moduloBIMoeda(r.meta_faturamento))}</td>
+      </tr>
+    `).join("");
+
+    if (!pagina.length) {
+      tbody.innerHTML = `<tr><td colspan="10">Nenhum registro encontrado.</td></tr>`;
+    }
+  }
+
+  // ========================================================
+  // BI APRENDIZ — RELATÓRIO DETALHADO
+  // ========================================================
+
+  function renderizarDetalhado() {
+    const busca = String(moduloBIState.filtros.detalheBusca || "")
+      .trim()
+      .toLowerCase();
+
+    const subsede = moduloBIState.filtros.detalheSubsede;
+    const cartao = moduloBIState.filtros.detalheCartao;
+
+    const filtrados = moduloBIState.aprendizDetalhado.filter(r => {
+      if (subsede && String(r.subsede || "") !== subsede) return false;
+
+      const ehCartao = moduloBIEhCartaoFuturo(r);
+
+      if (cartao === "sim" && !ehCartao) return false;
+      if (cartao === "nao" && ehCartao) return false;
+
+      if (busca) {
+        const texto = [
+          r.empresa, r.cnpj, r.aprendiz, r.angariador,
+          r.cidade, r.subsede, r.tipo, r.periodo
+        ].join(" ").toLowerCase();
+
+        if (!texto.includes(busca)) return false;
+      }
+
+      return true;
+    });
+
+    const cartoesFuturos = filtrados.filter(m => moduloBIEhCartaoFuturo(m));
+    const demais = filtrados.filter(m => !moduloBIEhCartaoFuturo(m));
+
+    moduloBIAtualizarTexto(
+      "bi-detalhado-contagem",
+      `${filtrados.length.toLocaleString("pt-BR")} registros`
+    );
+
+    moduloBIAtualizarTexto(
+      "bi-detalhado-resumo",
+      `${filtrados.length.toLocaleString("pt-BR")} registros filtrados · ` +
+      `${demais.length.toLocaleString("pt-BR")} sem identificação de Cartão Futuro · ` +
+      `${cartoesFuturos.length.toLocaleString("pt-BR")} identificados como Cartão Futuro. ` +
+      "Essas categorias são exibidas separadamente e não são adicionadas ao faturamento histórico."
+    );
+
+    const pagina = moduloBIPaginar(
+      filtrados,
+      "detalhado",
+      "bi-detalhado-pagina-info",
+      "bi-detalhado-anterior",
+      "bi-detalhado-proxima"
+    );
+
+    const tbody = moduloBI$("bi-detalhado-tabela");
+    if (!tbody) return;
+
+    tbody.innerHTML = pagina.map(r => `
+      <tr>
+        <td>${moduloBIEscapar(r.periodo || "—")}</td>
+        <td>${moduloBIEscapar(r.empresa || "—")}</td>
+        <td>${moduloBIEscapar(r.cnpj || "—")}</td>
+        <td>${moduloBIEscapar(r.aprendiz || "—")}</td>
+        <td>${moduloBIEscapar(r.angariador || "—")}</td>
+        <td>${moduloBIEscapar(r.cidade || "—")}</td>
+        <td>${moduloBIEscapar(r.subsede || "—")}</td>
+        <td>${moduloBIEscapar(moduloBIDataTexto(r.data_inicio))}</td>
+        <td>${moduloBIEscapar(moduloBIDataTexto(r.data_fim))}</td>
+        <td>${moduloBIEscapar(r.tipo || "—")}</td>
+        <td>${moduloBIEhCartaoFuturo(r) ? "Sim" : "Não identificado"}</td>
+      </tr>
+    `).join("");
+
+    if (!pagina.length) {
+      tbody.innerHTML = `<tr><td colspan="11">Nenhum registro encontrado.</td></tr>`;
+    }
+  }
+
+  // ========================================================
+  // BI ESTÁGIO
+  // ========================================================
+
+  function renderizarEstagio() {
+    const filtrados = moduloBIFiltrarHistorico(
+      moduloBIState.estagioHistorico,
+      "estagio"
+    );
+
+    const paraSomar = moduloBIRegistrosParaSomar(filtrados);
+
+    const faturamento = moduloBITotal(paraSomar, "faturado");
+    const jovens = moduloBITotal(paraSomar, "numero_jovens");
+    const metaFaturamento = moduloBITotal(paraSomar, "meta_faturamento");
+    const metaJovens = moduloBITotal(paraSomar, "meta_numero_jovens");
+
+    const atingimento = metaFaturamento > 0
+      ? faturamento / metaFaturamento * 100
+      : 0;
+
+    moduloBIAtualizarTexto("bi-estagio-faturamento", moduloBIMoeda(faturamento));
+    moduloBIAtualizarTexto("bi-estagio-jovens", moduloBINumeroFormatado(jovens));
+    moduloBIAtualizarTexto(
+      "bi-estagio-tkm",
+      moduloBIMoeda(moduloBITKM(faturamento, jovens))
+    );
+    moduloBIAtualizarTexto(
+      "bi-estagio-atingimento",
+      metaFaturamento > 0 ? `${moduloBINumeroFormatado(atingimento, 1)}%` : "Sem meta"
+    );
+    moduloBIAtualizarTexto(
+      "bi-estagio-contagem",
+      `${filtrados.length.toLocaleString("pt-BR")} registros`
+    );
+
+    const faturamentoMes = moduloBIAgruparPorMes(paraSomar, "faturado");
+    const jovensMes = moduloBIAgruparPorMes(paraSomar, "numero_jovens");
+
+    moduloBIRenderizarGrafico(
+      "bi-estagio-grafico-faturamento",
+      "estagioFaturamento",
+      faturamentoMes.labels,
+      [{
+        label: "Faturamento",
+        data: faturamentoMes.valores,
+        backgroundColor: "#2474c7"
+      }]
+    );
+
+    moduloBIRenderizarGrafico(
+      "bi-estagio-grafico-jovens",
+      "estagioJovens",
+      jovensMes.labels,
+      [{
+        label: "Jovens",
+        data: jovensMes.valores,
+        backgroundColor: "#16835b"
+      }]
+    );
+
+    const pagina = moduloBIPaginar(
+      filtrados,
+      "estagio",
+      "bi-estagio-pagina-info",
+      "bi-estagio-anterior",
+      "bi-estagio-proxima"
+    );
+
+    const tbody = moduloBI$("bi-estagio-tabela");
+    if (!tbody) return;
+
+    tbody.innerHTML = pagina.map(r => {
+      const meta = moduloBINumero(r.meta_faturamento);
+      const atual = moduloBINumero(r.faturado);
+      const percentual = meta > 0 ? atual / meta * 100 : null;
+
+      return `
+        <tr>
+          <td>${moduloBIEscapar(moduloBIMesNome(moduloBIMes(r)) + "/" + moduloBIAno(r))}</td>
+          <td>${moduloBIEscapar(r.subsede || "—")}</td>
+          <td>${moduloBIEscapar(moduloBIMoeda(r.faturado))}</td>
+          <td>${moduloBIEscapar(moduloBIMoeda(meta))}</td>
+          <td>${percentual === null ? "Sem meta" : `${moduloBINumeroFormatado(percentual, 1)}%`}</td>
+          <td>${moduloBIEscapar(moduloBINumeroFormatado(r.numero_jovens))}</td>
+          <td>${moduloBIEscapar(moduloBINumeroFormatado(r.meta_numero_jovens))}</td>
+          <td>${moduloBIEscapar(moduloBIMoeda(r.ticket_medio))}</td>
+        </tr>
+      `;
+    }).join("");
+
+    if (!pagina.length) {
+      tbody.innerHTML = `<tr><td colspan="8">Nenhum registro encontrado.</td></tr>`;
+    }
+  }
+
+  // ========================================================
+  // CARTEIRAS DOS CONSULTORES
+  // ========================================================
+
+  function renderizarCarteiras() {
+    const ano = moduloBIState.filtros.carteiraAno;
+    const mes = moduloBIState.filtros.carteiraMes;
+    const subsede = moduloBIState.filtros.carteiraSubsede;
+    const angariador = moduloBIState.filtros.aprendizAngariador;
+
+    const filtrados = moduloBIState.aprendizCarteira.filter(r => {
+      if (ano && moduloBIAno(r) !== ano) return false;
+      if (mes && String(moduloBIMes(r)) !== mes) return false;
+      if (subsede && String(r.subsede || "") !== subsede) return false;
+      if (angariador && String(r.angariador || "") !== angariador) return false;
+      return true;
+    });
+
+    const paraSomar = moduloBIRegistrosParaSomar(filtrados);
+
+    const faturamento = moduloBITotal(paraSomar, "faturamento");
+    const jovens = moduloBITotal(paraSomar, "jovens_ativos");
+
+    const tkmMedio = moduloBITKM(faturamento, jovens);
+
+    const crescimentoValores = paraSomar
+      .map(r => r.crescimento_percentual)
+      .filter(v => v !== null && v !== undefined && v !== "")
+      .map(moduloBINumero);
+
+    const crescimentoMedio = crescimentoValores.length
+      ? crescimentoValores.reduce((soma, valor) => soma + valor, 0) /
+        crescimentoValores.length
+      : null;
+
+    moduloBIAtualizarTexto("bi-carteira-faturamento", moduloBIMoeda(faturamento));
+    moduloBIAtualizarTexto("bi-carteira-jovens", moduloBINumeroFormatado(jovens));
+    moduloBIAtualizarTexto("bi-carteira-tkm", moduloBIMoeda(tkmMedio));
+    moduloBIAtualizarTexto(
+      "bi-carteira-crescimento",
+      crescimentoMedio === null
+        ? "—"
+        : `${moduloBINumeroFormatado(crescimentoMedio, 2)}%`
+    );
+
+    moduloBIAtualizarTexto(
+      "bi-carteira-contagem",
+      `${filtrados.length.toLocaleString("pt-BR")} registros`
+    );
+
+    const mensal = moduloBIAgruparPorMes(paraSomar, "faturamento");
+
+    moduloBIRenderizarGrafico(
+      "bi-carteira-grafico-faturamento",
+      "carteiraFaturamento",
+      mensal.labels,
+      [{
+        label: "Faturamento",
+        data: mensal.valores,
+        backgroundColor: "#2474c7"
+      }]
+    );
+
+    const rankingMap = new Map();
+
+    paraSomar.forEach(r => {
+      const nome = String(r.angariador || "Não informado");
+      rankingMap.set(
+        nome,
+        (rankingMap.get(nome) || 0) + moduloBINumero(r.faturamento)
+      );
+    });
+
+    const ranking = [...rankingMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15);
+
+    moduloBIRenderizarGrafico(
+      "bi-carteira-grafico-ranking",
+      "carteiraRanking",
+      ranking.map(([nome]) => nome),
+      [{
+        label: "Faturamento",
+        data: ranking.map(([, valor]) => valor),
+        backgroundColor: "#16835b"
+      }],
+      "bar"
+    );
+
+    const pagina = moduloBIPaginar(
+      filtrados,
+      "carteira",
+      "bi-carteira-pagina-info",
+      "bi-carteira-anterior",
+      "bi-carteira-proxima"
+    );
+
+    const tbody = moduloBI$("bi-carteira-tabela");
+    if (!tbody) return;
+
+    tbody.innerHTML = pagina.map(r => `
+      <tr>
+        <td>${moduloBIEscapar(moduloBIMesNome(moduloBIMes(r)) + "/" + moduloBIAno(r))}</td>
+        <td>${moduloBIEscapar(r.subsede || "—")}</td>
+        <td>${moduloBIEscapar(r.angariador || "—")}</td>
+        <td>${moduloBIEscapar(moduloBIMoeda(r.faturamento))}</td>
+        <td>${moduloBIEscapar(moduloBINumeroFormatado(r.jovens_ativos))}</td>
+        <td>${moduloBIEscapar(moduloBIMoeda(r.tkm))}</td>
+        <td>${r.crescimento_percentual === null || r.crescimento_percentual === undefined
+          ? "—"
+          : `${moduloBIEscapar(moduloBINumeroFormatado(r.crescimento_percentual, 2))}%`}</td>
+        <td>${moduloBIEscapar(moduloBIDataTexto(r.data_inicio))}</td>
+      </tr>
+    `).join("");
+
+    if (!pagina.length) {
+      tbody.innerHTML = `<tr><td colspan="8">Nenhum registro encontrado.</td></tr>`;
+    }
+  }
+
+  // ========================================================
+  // INICIALIZAÇÃO APÓS O LOGIN
+  // ========================================================
+
+  function moduloBIObservarPortal() {
+    moduloBICriarInterface();
+
+    const portal = moduloBI$("portal-section");
+
+    if (!portal) {
+      moduloBIMensagem("Não foi encontrado o contêiner do portal.");
+      return;
+    }
+
+    const observarVisibilidade = () => {
+      if (!portal.hidden && !moduloBIState.inicializado) {
+        moduloBICriarInterface();
+        carregarModulosBI();
+      }
+    };
+
+    observarVisibilidade();
+
+    const observador = new MutationObserver(observarVisibilidade);
+    observador.observe(portal, {
+      attributes: true,
+      attributeFilter: ["hidden", "class", "style"]
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", moduloBIObservarPortal, {
+      once: true
+    });
+  } else {
+    moduloBIObservarPortal();
+  }
+})();
