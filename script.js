@@ -3147,7 +3147,10 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     const style = document.createElement("style");
     style.id = "modulos-bi-estilos";
     style.textContent = `
-      .modulo-bi-section { margin: 24px 0; }
+      .modulo-bi-section { margin: 24px 0; color:#182538; }
+      .modulo-bi-section .section-heading { gap:18px; align-items:center; }
+      .modulo-bi-section .section-kicker { letter-spacing:.12em; font-size:11px; font-weight:800; color:#4776b8; }
+      .modulo-bi-section h2 { letter-spacing:-.025em; }
       .modulo-bi-filtros {
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -3162,24 +3165,25 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       .modulo-bi-filtros select {
         box-sizing:border-box; width:100%; min-width:0;
         padding:10px 12px; border:1px solid #dce3ec;
-        border-radius:8px; background:#fff; color:#182538;
-        font:inherit;
+        border-radius:10px; background:#fff; color:#182538;
+        font:inherit; min-height:42px; transition:border-color .15s,box-shadow .15s;
       }
+      .modulo-bi-filtros input:focus,.modulo-bi-filtros select:focus { outline:none; border-color:#4776b8; box-shadow:0 0 0 3px rgba(71,118,184,.13); }
       .modulo-bi-kpis {
         display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
         gap:14px; margin:18px 0;
       }
       .modulo-bi-card {
         min-width:0; padding:18px; border:1px solid #e3e8f0;
-        border-radius:12px; background:#fff;
-        box-shadow:0 5px 20px rgba(20,42,72,.04);
+        border-radius:14px; background:linear-gradient(145deg,#fff 0%,#f8faff 100%);
+        box-shadow:0 8px 24px rgba(20,42,72,.055); border-top:3px solid #4776b8;
       }
       .modulo-bi-card span {
-        display:block; color:#778397; font-size:12px; line-height:1.5;
+        display:block; color:#68778d; font-size:12px; line-height:1.5; font-weight:650;
       }
       .modulo-bi-card strong {
-        display:block; margin-top:8px; color:#17365d;
-        font-size:clamp(20px,2.3vw,29px); overflow-wrap:anywhere;
+        display:block; margin-top:8px; color:#183b66;
+        font-size:clamp(20px,2.3vw,29px); line-height:1.2; overflow-wrap:anywhere; font-variant-numeric:tabular-nums;
       }
       .modulo-bi-paineis {
         display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
@@ -3187,10 +3191,19 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       }
       .modulo-bi-grafico {
         min-width:0; padding:18px; border:1px solid #e3e8f0;
-        border-radius:12px; background:#fff;
+        border-radius:14px; background:#fff; box-shadow:0 8px 24px rgba(20,42,72,.045);
       }
-      .modulo-bi-grafico h3 { margin:0 0 14px; font-size:15px; }
-      .modulo-bi-grafico canvas { max-height:310px; }
+      .modulo-bi-grafico h3 { margin:0 0 16px; font-size:14px; font-weight:750; color:#233b5b; }
+      .modulo-bi-grafico canvas { width:100% !important; height:300px !important; max-height:320px; }
+      @media (max-width: 600px) { .modulo-bi-kpis { grid-template-columns:1fr; } .modulo-bi-grafico canvas { height:260px !important; } }
+      #modulos-bi-nav .nav-link { border-radius:10px; transition:background .15s,color .15s; }
+      #modulos-bi-nav .nav-link.active { background:#eaf2ff; color:#194d8f; font-weight:750; box-shadow:inset 3px 0 #4776b8; }
+      .modulo-bi-badge { font-variant-numeric:tabular-nums; }
+      .modulo-bi-tabela table { border-collapse:separate; border-spacing:0; }
+      .modulo-bi-tabela th { background:#f4f7fb; color:#50627a; font-size:11px; text-transform:uppercase; letter-spacing:.045em; }
+      .modulo-bi-tabela td,.modulo-bi-tabela th { padding:11px 12px; }
+      .modulo-bi-tabela tbody tr:nth-child(even) { background:#fafcff; }
+      .modulo-bi-tabela tbody tr:hover { background:#f0f6ff; }
       .modulo-bi-tabela {
         padding:18px; margin-top:20px; border:1px solid #e3e8f0;
         border-radius:12px; background:#fff; min-width:0;
@@ -3438,9 +3451,6 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
         </div>
 
         <div class="modulo-bi-filtros">
-          <label>Pesquisar empresa, angariador ou subsede
-            <input id="bi-carteira-busca" type="search" placeholder="Digite o nome da empresa, angariador ou subsede..." autocomplete="off">
-          </label>
           <label>Ano
             <select id="bi-carteira-ano"><option value="">Todos os anos</option></select>
           </label>
@@ -3453,13 +3463,16 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <label>Angariador
             <select id="bi-carteira-angariador"><option value="">Todos os angariadores</option></select>
           </label>
+          <label>Buscar empresa, angariador ou subsede
+            <input id="bi-carteira-busca" type="search" placeholder="Digite o nome para filtrar..." autocomplete="off">
+          </label>
         </div>
 
         <div class="modulo-bi-kpis">
           <article class="modulo-bi-card"><span>Faturamento da carteira</span><strong id="bi-carteira-faturamento">—</strong></article>
           <article class="modulo-bi-card"><span>Jovens ativos registrados</span><strong id="bi-carteira-jovens">—</strong></article>
           <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-carteira-tkm">—</strong></article>
-          <article class="modulo-bi-card"><span>Crescimento médio registrado</span><strong id="bi-carteira-crescimento">—</strong></article>
+          <article class="modulo-bi-card"><span>Variação do faturamento</span><strong id="bi-carteira-crescimento">—</strong></article>
         </div>
         <div id="bi-carteira-extras" class="modulo-bi-paineis"></div>
 
@@ -3471,6 +3484,10 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <article class="modulo-bi-grafico">
             <h3>Ranking de faturamento por angariador</h3>
             <canvas id="bi-carteira-grafico-ranking"></canvas>
+          </article>
+          <article class="modulo-bi-grafico">
+            <h3>Maiores empresas por faturamento</h3>
+            <canvas id="bi-carteira-grafico-empresas"></canvas>
           </article>
         </div>
 
@@ -3516,6 +3533,18 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       ["bi-estagio-nav", "bi-estagio-section"],
       ["bi-carteiras-nav", "bi-carteiras-section"]
     ];
+    // Mantém o estado ativo sincronizado também nos links dos módulos existentes.
+    document.querySelectorAll(".sidebar .nav-link[href^='#']").forEach(link => {
+      if (link.dataset.activeSync === "1") return;
+      link.dataset.activeSync = "1";
+      link.addEventListener("click", () => {
+        const href = link.getAttribute("href");
+        if (!href) return;
+        document.querySelectorAll(".sidebar .nav-link").forEach(item => {
+          item.classList.toggle("active", item === link);
+        });
+      });
+    });
 
     navegacao.forEach(([linkId, secaoId]) => {
       moduloBI$(linkId)?.addEventListener("click", evento => {
@@ -3547,16 +3576,6 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
             });
           }, 150);
         }
-      });
-    });
-
-    // Mantém o destaque visual sincronizado com a seção aberta em toda a navegação lateral.
-    document.querySelectorAll(".sidebar .nav-link").forEach(link => {
-      if (link.dataset.activeSyncBound === "true") return;
-      link.dataset.activeSyncBound = "true";
-      link.addEventListener("click", () => {
-        document.querySelectorAll(".sidebar .nav-link").forEach(item => item.classList.remove("active"));
-        link.classList.add("active");
       });
     });
 
@@ -3829,42 +3848,77 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     const canvas = moduloBI$(idCanvas);
     if (!canvas || !window.Chart) return;
 
-    if (moduloBIState.graficos[chave]) {
-      moduloBIState.graficos[chave].destroy();
-    }
+    if (moduloBIState.graficos[chave]) moduloBIState.graficos[chave].destroy();
+    const ehMoeda = /faturamento|ranking/i.test(chave);
+    const horizontal = chave === "carteiraRanking";
+    const cores = ["#356fbd", "#e4a642", "#239a78", "#8a72c6"];
+    const preparados = datasets.map((dataset, i) => ({
+      ...dataset,
+      backgroundColor: dataset.backgroundColor || cores[i % cores.length],
+      borderColor: dataset.borderColor || cores[i % cores.length],
+      borderWidth: dataset.borderWidth ?? 1,
+      borderRadius: tipo === "bar" ? 6 : 0,
+      maxBarThickness: 34,
+      barPercentage: .72,
+      categoryPercentage: .78
+    }));
 
     moduloBIState.graficos[chave] = new Chart(canvas, {
       type: tipo,
-      data: { labels, datasets },
+      data: { labels, datasets: preparados },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
+        aspectRatio: horizontal ? 1.7 : 2.1,
+        indexAxis: horizontal ? "y" : "x",
         interaction: { intersect: false, mode: "index" },
+        animation: { duration: 350 },
+        layout: { padding: { top: 6, right: 10, bottom: 2, left: 2 } },
         plugins: {
-          legend: { display: datasets.length > 1 },
+          legend: {
+            display: datasets.length > 1,
+            position: "bottom",
+            labels: { usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: 18, color: "#52647a", font: { size: 11, weight: "600" } }
+          },
           tooltip: {
+            backgroundColor: "#172b46", padding: 12, cornerRadius: 8,
+            titleFont: { size: 12, weight: "700" }, bodyFont: { size: 12 },
             callbacks: {
               label(contexto) {
-                const valor = contexto.parsed?.y ?? contexto.parsed;
+                const valor = contexto.parsed?.x ?? contexto.parsed?.y ?? contexto.parsed;
                 const titulo = contexto.dataset?.label || "";
-
-                return `${titulo}: ${
-                  typeof valor === "number"
-                    ? valor.toLocaleString("pt-BR", {
-                        maximumFractionDigits: 2
-                      })
-                    : valor
-                }`;
+                const formatado = typeof valor === "number"
+                  ? (ehMoeda ? valor.toLocaleString("pt-BR", {style:"currency",currency:"BRL",maximumFractionDigits:0}) : valor.toLocaleString("pt-BR", {maximumFractionDigits:1}))
+                  : valor;
+                return `${titulo}: ${formatado}`;
               }
             }
           }
         },
         scales: {
-          y: {
+          x: {
             beginAtZero: true,
+            grid: { display: !horizontal, color: "rgba(148,163,184,.16)" },
+            border: { display: false },
             ticks: {
+              color: "#6b7b90", maxRotation: 0, autoSkip: true,
               callback(valor) {
-                return Number(valor).toLocaleString("pt-BR");
+                const n = Number(valor);
+                if (horizontal && ehMoeda) return n.toLocaleString("pt-BR", {notation:"compact",maximumFractionDigits:1});
+                return n.toLocaleString("pt-BR", {maximumFractionDigits:0});
+              }, font: { size: 10 }
+            }
+          },
+          y: {
+            beginAtZero: !horizontal,
+            grid: { display: horizontal, color: "rgba(148,163,184,.16)" },
+            border: { display: false },
+            ticks: {
+              color: "#6b7b90", font: { size: 10 },
+              callback(valor) {
+                const n = Number(valor);
+                if (!horizontal && ehMoeda) return n.toLocaleString("pt-BR", {notation:"compact",maximumFractionDigits:1});
+                return this.getLabelForValue ? this.getLabelForValue(valor) : n.toLocaleString("pt-BR");
               }
             }
           }
@@ -4309,12 +4363,12 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       if (subsede && String(r.subsede || "") !== subsede) return false;
       if (angariador && String(r.angariador || "") !== angariador) return false;
       if (busca) {
-        const textoPesquisa = [
-          moduloBILerCampo(r, ["empresa", "razao_social", "nome_empresa", "empresa_contratante", "nome_fantasia", "cnpj"]),
-          moduloBILerCampo(r, ["angariador", "consultor", "nome_angariador", "responsavel"]),
-          moduloBILerCampo(r, ["subsede", "nome_subsede", "unidade"])
+        const textoBusca = [
+          moduloBILerCampo(r, ["empresa", "razao_social", "nome_fantasia", "nome_empresa", "empresa_contratante"]),
+          r.angariador,
+          r.subsede
         ].join(" ").toLocaleLowerCase("pt-BR");
-        if (!textoPesquisa.includes(busca)) return false;
+        if (!textoBusca.includes(busca)) return false;
       }
       return true;
     });
@@ -4326,14 +4380,13 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 
     const tkmMedio = moduloBITKM(faturamento, jovens);
 
-    const crescimentoValores = paraSomar
-      .map(r => r.crescimento_percentual)
-      .filter(v => v !== null && v !== undefined && v !== "")
-      .map(moduloBINumero);
-
-    const crescimentoMedio = crescimentoValores.length
-      ? crescimentoValores.reduce((soma, valor) => soma + valor, 0) /
-        crescimentoValores.length
+    // Crescimento do KPI é calculado pela variação do faturamento agregado entre
+    // o primeiro e o último mês disponível, evitando média simples de percentuais.
+    const serieCrescimentoKPI = moduloBIAgruparPorMes(paraSomar, "faturamento");
+    const primeiroFaturamento = serieCrescimentoKPI.valores[0];
+    const ultimoFaturamento = serieCrescimentoKPI.valores[serieCrescimentoKPI.valores.length - 1];
+    const crescimentoMedio = serieCrescimentoKPI.valores.length > 1 && primeiroFaturamento !== 0
+      ? (ultimoFaturamento - primeiroFaturamento) / Math.abs(primeiroFaturamento) * 100
       : null;
 
     moduloBIAtualizarTexto("bi-carteira-faturamento", moduloBIMoeda(faturamento));
@@ -4425,7 +4478,19 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       [{
         label: "Faturamento",
         data: ranking.map(([, valor]) => valor),
-        backgroundColor: "#16835b"
+        backgroundColor: "#239a78"
+      }],
+      "bar"
+    );
+
+    moduloBIRenderizarGrafico(
+      "bi-carteira-grafico-empresas",
+      "carteiraEmpresasRanking",
+      rankingEmpresas.map(([nome]) => nome),
+      [{
+        label: "Faturamento",
+        data: rankingEmpresas.map(([, valor]) => valor),
+        backgroundColor: "#356fbd"
       }],
       "bar"
     );
