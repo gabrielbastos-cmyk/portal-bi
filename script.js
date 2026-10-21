@@ -2787,7 +2787,12 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       detalheCartao: "",
       estagioAno: "",
       estagioMes: "",
-      estagioSubsede: ""
+      estagioSubsede: "",
+      carteiraAno: "",
+      carteiraMes: "",
+      carteiraSubsede: "",
+      carteiraBusca: "",
+      aprendizAngariador: ""
     },
     paginas: {
       aprendiz: 1,
@@ -3051,7 +3056,9 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       meta_numero_jovens: ["meta_jovens", "meta_de_jovens", "meta_qtd_jovens"],
       meta_faturamento: ["meta_de_faturamento", "meta_receita", "meta_valor_faturamento"],
       aprendiz: ["nome_aprendiz", "jovem", "nome_jovem", "aluno"],
-      empresa: ["razao_social", "razão_social", "nome_empresa"],
+      empresa: ["razao_social", "razão_social", "nome_empresa", "empresa_contratante"],
+      carga_horaria: ["jornada", "horas_dia", "horas_trabalho", "carga_horaria_diaria", "horas"],
+      meta_tkm: ["meta_ticket_medio", "meta_tkm"],
       cnpj: ["CNPJ", "cnpj_empresa"],
       angariador: ["consultor", "nome_angariador", "responsavel_comercial", "responsável_comercial"],
       cidade: ["municipio", "município", "localidade"],
@@ -3266,6 +3273,7 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-aprendiz-tkm">—</strong></article>
           <article class="modulo-bi-card"><span>Empresas registradas</span><strong id="bi-aprendiz-empresas">—</strong></article>
         </div>
+        <div id="bi-aprendiz-extras" class="modulo-bi-paineis"></div>
 
         <div class="modulo-bi-paineis">
           <article class="modulo-bi-grafico">
@@ -3379,6 +3387,7 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-estagio-tkm">—</strong></article>
           <article class="modulo-bi-card"><span>Atingimento da meta de faturamento</span><strong id="bi-estagio-atingimento">—</strong></article>
         </div>
+        <div id="bi-estagio-extras" class="modulo-bi-paineis"></div>
 
         <div class="modulo-bi-paineis">
           <article class="modulo-bi-grafico">
@@ -3421,7 +3430,7 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <div>
             <p class="section-kicker">DESEMPENHO COMERCIAL</p>
             <h2>Carteiras dos Consultores</h2>
-            <p class="muted">Histórico de janeiro a agosto, faturamento, jovens ativos, TKM e crescimento.</p>
+            <p class="muted">Empresas, angariadores, subsedes, faturamento, TKM e evolução mensal.</p>
           </div>
           <button type="button" class="modulo-bi-acao" id="bi-carteiras-atualizar">
             ↻ Atualizar dados
@@ -3429,6 +3438,9 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
         </div>
 
         <div class="modulo-bi-filtros">
+          <label>Pesquisar empresa, angariador ou subsede
+            <input id="bi-carteira-busca" type="search" placeholder="Digite o nome da empresa, angariador ou subsede..." autocomplete="off">
+          </label>
           <label>Ano
             <select id="bi-carteira-ano"><option value="">Todos os anos</option></select>
           </label>
@@ -3449,6 +3461,7 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
           <article class="modulo-bi-card"><span>TKM médio calculado</span><strong id="bi-carteira-tkm">—</strong></article>
           <article class="modulo-bi-card"><span>Crescimento médio registrado</span><strong id="bi-carteira-crescimento">—</strong></article>
         </div>
+        <div id="bi-carteira-extras" class="modulo-bi-paineis"></div>
 
         <div class="modulo-bi-paineis">
           <article class="modulo-bi-grafico">
@@ -3537,6 +3550,16 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       });
     });
 
+    // Mantém o destaque visual sincronizado com a seção aberta em toda a navegação lateral.
+    document.querySelectorAll(".sidebar .nav-link").forEach(link => {
+      if (link.dataset.activeSyncBound === "true") return;
+      link.dataset.activeSyncBound = "true";
+      link.addEventListener("click", () => {
+        document.querySelectorAll(".sidebar .nav-link").forEach(item => item.classList.remove("active"));
+        link.classList.add("active");
+      });
+    });
+
     const eventosFiltro = {
       "bi-aprendiz-ano": ["aprendizAno", renderizarAprendiz],
       "bi-aprendiz-mes": ["aprendizMes", renderizarAprendiz],
@@ -3550,7 +3573,8 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       "bi-carteira-ano": ["carteiraAno", renderizarCarteiras],
       "bi-carteira-mes": ["carteiraMes", renderizarCarteiras],
       "bi-carteira-subsede": ["carteiraSubsede", renderizarCarteiras],
-      "bi-carteira-angariador": ["aprendizAngariador", renderizarCarteiras]
+      "bi-carteira-angariador": ["aprendizAngariador", renderizarCarteiras],
+      "bi-carteira-busca": ["carteiraBusca", renderizarCarteiras]
     };
 
     Object.entries(eventosFiltro).forEach(([id, [chave, renderizar]]) => {
@@ -3875,6 +3899,25 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     };
   }
 
+  function moduloBIAgruparAtualMeta(registros, campoAtual, campoMeta) {
+    const mapa = new Map();
+    moduloBIRegistrosParaSomar(registros).forEach(r => {
+      const ano = moduloBIAno(r), mes = moduloBIMes(r);
+      if (!ano || !mes) return;
+      const chave = `${ano}-${String(mes).padStart(2, "0")}`;
+      const item = mapa.get(chave) || { atual: 0, meta: 0 };
+      item.atual += moduloBINumero(r[campoAtual]);
+      item.meta += moduloBINumero(r[campoMeta]);
+      mapa.set(chave, item);
+    });
+    const entradas = [...mapa.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+    return {
+      labels: entradas.map(([chave]) => { const [ano, mes] = chave.split("-"); return `${moduloBIMesNome(mes).slice(0,3)}/${ano}`; }),
+      atual: entradas.map(([,v]) => v.atual),
+      meta: entradas.map(([,v]) => v.meta)
+    };
+  }
+
   function moduloBIAtualizarTexto(id, valor) {
     const el = moduloBI$(id);
     if (el) el.textContent = valor;
@@ -3917,6 +3960,36 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     return registros.slice(inicio, fim);
   }
 
+  function moduloBIRenderizarExtras(id, blocos) {
+    const raiz = moduloBI$(id);
+    if (!raiz) return;
+    raiz.innerHTML = blocos.map(bloco => `
+      <article class="modulo-bi-grafico">
+        <h3>${moduloBIEscapar(bloco.titulo)}</h3>
+        ${bloco.descricao ? `<p class="modulo-bi-aviso">${moduloBIEscapar(bloco.descricao)}</p>` : ""}
+        <div class="modulo-bi-tabela-scroll">
+          <table style="min-width:0">
+            <thead><tr>${bloco.colunas.map(c => `<th>${moduloBIEscapar(c)}</th>`).join("")}</tr></thead>
+            <tbody>${bloco.linhas.length ? bloco.linhas.map(l => `<tr>${l.map(v => `<td>${moduloBIEscapar(v)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${bloco.colunas.length}">Sem dados para os filtros selecionados.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>`).join("");
+  }
+
+  function moduloBIRankingSubsede(registros, campoValor, campoMeta) {
+    const mapa = new Map();
+    moduloBIRegistrosParaSomar(registros).forEach(r => {
+      const nome = String(r.subsede || r.local_atendimento || "Não informada");
+      const item = mapa.get(nome) || { valor: 0, meta: 0, jovens: 0, faturamento: 0 };
+      item.valor += moduloBINumero(r[campoValor]);
+      item.meta += moduloBINumero(r[campoMeta]);
+      item.jovens += moduloBINumero(r.numero_jovens);
+      item.faturamento += moduloBINumero(r.faturado);
+      mapa.set(nome, item);
+    });
+    return [...mapa.entries()].map(([nome, x]) => ({ nome, ...x, tkm: x.jovens > 0 ? x.faturamento / x.jovens : 0, atingimento: x.meta > 0 ? x.valor / x.meta * 100 : null, falta: Math.max(0, x.meta - x.valor) }));
+  }
+
   // ========================================================
   // BI APRENDIZ — HISTÓRICO
   // ========================================================
@@ -3948,24 +4021,34 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       `${filtrados.length.toLocaleString("pt-BR")} registros`
     );
 
-    const graficoFaturamento = moduloBIAgruparPorMes(
-      paraSomar,
-      "faturado"
-    );
+    const metaFaturamento = moduloBITotal(paraSomar, "meta_faturamento");
+    const metaJovens = moduloBITotal(paraSomar, "meta_numero_jovens");
+    const faltaFaturamento = Math.max(0, metaFaturamento - faturamento);
+    const faltaJovens = Math.max(0, metaJovens - jovens);
+    const atingFaturamento = metaFaturamento > 0 ? faturamento / metaFaturamento * 100 : null;
+    const atingJovens = metaJovens > 0 ? jovens / metaJovens * 100 : null;
+    const rankingSubsedes = moduloBIRankingSubsede(filtrados, "faturado", "meta_faturamento");
+    moduloBIRenderizarExtras("bi-aprendiz-extras", [
+      { titulo: "Meta e saldo de faturamento", descricao: "O saldo mostra quanto falta para atingir a meta agregada; quando a meta não está cadastrada, o resultado aparece como sem meta.", colunas: ["Indicador", "Realizado", "Meta", "Atingimento", "Falta para a meta"], linhas: [["Faturamento", moduloBIMoeda(faturamento), metaFaturamento > 0 ? moduloBIMoeda(metaFaturamento) : "Sem meta", atingFaturamento === null ? "Sem meta" : moduloBINumeroFormatado(atingFaturamento, 1) + "%", metaFaturamento > 0 ? moduloBIMoeda(faltaFaturamento) : "—"], ["Jovens", moduloBINumeroFormatado(jovens), metaJovens > 0 ? moduloBINumeroFormatado(metaJovens) : "Sem meta", atingJovens === null ? "Sem meta" : moduloBINumeroFormatado(atingJovens, 1) + "%", metaJovens > 0 ? moduloBINumeroFormatado(faltaJovens) : "—"]] },
+      { titulo: "Ranking de subsedes por TKM", colunas: ["Posição", "Subsede", "TKM", "Jovens"], linhas: rankingSubsedes.sort((a,b) => b.tkm-a.tkm).slice(0,10).map((r,i) => [i+1, r.nome, moduloBIMoeda(r.tkm), moduloBINumeroFormatado(r.jovens)]) },
+      { titulo: "Ranking de atingimento da meta", colunas: ["Posição", "Subsede", "Atingimento", "Falta para meta"], linhas: rankingSubsedes.filter(r => r.atingimento !== null).sort((a,b) => b.atingimento-a.atingimento).slice(0,10).map((r,i) => [i+1, r.nome, moduloBINumeroFormatado(r.atingimento,1)+"%", moduloBIMoeda(r.falta)]) }
+    ]);
 
-    const graficoJovens = moduloBIAgruparPorMes(
-      paraSomar,
-      "numero_jovens"
-    );
+    const graficoFaturamento = moduloBIAgruparAtualMeta(paraSomar, "faturado", "meta_faturamento");
+    const graficoJovens = moduloBIAgruparAtualMeta(paraSomar, "numero_jovens", "meta_numero_jovens");
 
     moduloBIRenderizarGrafico(
       "bi-aprendiz-grafico-faturamento",
       "aprendizFaturamento",
       graficoFaturamento.labels,
       [{
-        label: "Faturamento",
-        data: graficoFaturamento.valores,
+        label: "Faturamento realizado",
+        data: graficoFaturamento.atual,
         backgroundColor: "#2474c7"
+      }, {
+        label: "Meta de faturamento",
+        data: graficoFaturamento.meta,
+        backgroundColor: "#e0a02b"
       }]
     );
 
@@ -3974,9 +4057,13 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       "aprendizJovens",
       graficoJovens.labels,
       [{
-        label: "Jovens",
-        data: graficoJovens.valores,
+        label: "Jovens realizados",
+        data: graficoJovens.atual,
         backgroundColor: "#16835b"
+      }, {
+        label: "Meta de jovens",
+        data: graficoJovens.meta,
+        backgroundColor: "#e0a02b"
       }]
     );
 
@@ -4127,17 +4214,31 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       `${filtrados.length.toLocaleString("pt-BR")} registros`
     );
 
-    const faturamentoMes = moduloBIAgruparPorMes(paraSomar, "faturado");
-    const jovensMes = moduloBIAgruparPorMes(paraSomar, "numero_jovens");
+    const faltaFaturamento = Math.max(0, metaFaturamento - faturamento);
+    const faltaJovens = Math.max(0, metaJovens - jovens);
+    const atingJovens = metaJovens > 0 ? jovens / metaJovens * 100 : null;
+    const rankingSubsedes = moduloBIRankingSubsede(filtrados, "faturado", "meta_faturamento");
+    moduloBIRenderizarExtras("bi-estagio-extras", [
+      { titulo: "Meta e saldo", colunas: ["Indicador", "Realizado", "Meta", "Atingimento", "Falta para a meta"], linhas: [["Faturamento", moduloBIMoeda(faturamento), metaFaturamento > 0 ? moduloBIMoeda(metaFaturamento) : "Sem meta", metaFaturamento > 0 ? moduloBINumeroFormatado(atingimento,1)+"%" : "Sem meta", metaFaturamento > 0 ? moduloBIMoeda(faltaFaturamento) : "—"], ["Jovens", moduloBINumeroFormatado(jovens), metaJovens > 0 ? moduloBINumeroFormatado(metaJovens) : "Sem meta", atingJovens === null ? "Sem meta" : moduloBINumeroFormatado(atingJovens,1)+"%", metaJovens > 0 ? moduloBINumeroFormatado(faltaJovens) : "—"]] },
+      { titulo: "Ranking de subsedes por TKM", colunas: ["Posição", "Subsede", "TKM", "Jovens"], linhas: rankingSubsedes.sort((a,b) => b.tkm-a.tkm).slice(0,10).map((r,i) => [i+1, r.nome, moduloBIMoeda(r.tkm), moduloBINumeroFormatado(r.jovens)]) },
+      { titulo: "Ranking de atingimento da meta", colunas: ["Posição", "Subsede", "Atingimento", "Falta para meta"], linhas: rankingSubsedes.filter(r => r.atingimento !== null).sort((a,b) => b.atingimento-a.atingimento).slice(0,10).map((r,i) => [i+1, r.nome, moduloBINumeroFormatado(r.atingimento,1)+"%", moduloBIMoeda(r.falta)]) }
+    ]);
+
+    const faturamentoMes = moduloBIAgruparAtualMeta(paraSomar, "faturado", "meta_faturamento");
+    const jovensMes = moduloBIAgruparAtualMeta(paraSomar, "numero_jovens", "meta_numero_jovens");
 
     moduloBIRenderizarGrafico(
       "bi-estagio-grafico-faturamento",
       "estagioFaturamento",
       faturamentoMes.labels,
       [{
-        label: "Faturamento",
-        data: faturamentoMes.valores,
+        label: "Faturamento realizado",
+        data: faturamentoMes.atual,
         backgroundColor: "#2474c7"
+      }, {
+        label: "Meta de faturamento",
+        data: faturamentoMes.meta,
+        backgroundColor: "#e0a02b"
       }]
     );
 
@@ -4146,9 +4247,13 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       "estagioJovens",
       jovensMes.labels,
       [{
-        label: "Jovens",
-        data: jovensMes.valores,
+        label: "Jovens realizados",
+        data: jovensMes.atual,
         backgroundColor: "#16835b"
+      }, {
+        label: "Meta de jovens",
+        data: jovensMes.meta,
+        backgroundColor: "#e0a02b"
       }]
     );
 
@@ -4196,12 +4301,21 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     const mes = moduloBIState.filtros.carteiraMes;
     const subsede = moduloBIState.filtros.carteiraSubsede;
     const angariador = moduloBIState.filtros.aprendizAngariador;
+    const busca = String(moduloBIState.filtros.carteiraBusca || "").trim().toLocaleLowerCase("pt-BR");
 
     const filtrados = moduloBIState.aprendizCarteira.filter(r => {
       if (ano && moduloBIAno(r) !== ano) return false;
       if (mes && String(moduloBIMes(r)) !== mes) return false;
       if (subsede && String(r.subsede || "") !== subsede) return false;
       if (angariador && String(r.angariador || "") !== angariador) return false;
+      if (busca) {
+        const textoPesquisa = [
+          moduloBILerCampo(r, ["empresa", "razao_social", "nome_empresa", "empresa_contratante", "nome_fantasia", "cnpj"]),
+          moduloBILerCampo(r, ["angariador", "consultor", "nome_angariador", "responsavel"]),
+          moduloBILerCampo(r, ["subsede", "nome_subsede", "unidade"])
+        ].join(" ").toLocaleLowerCase("pt-BR");
+        if (!textoPesquisa.includes(busca)) return false;
+      }
       return true;
     });
 
@@ -4236,6 +4350,46 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       "bi-carteira-contagem",
       `${filtrados.length.toLocaleString("pt-BR")} registros`
     );
+
+    const tkmPorJornada = jornada => {
+      const grupo = paraSomar.filter(r => {
+        const h = String(moduloBILerCampo(r, ["carga_horaria", "jornada", "horas_dia", "horas_trabalho", "carga_horaria_diaria", "horas"])).toLowerCase().replace(/\s/g, "");
+        return jornada === 4 ? /(^|[^0-9])4(h|horas)?([^0-9]|$)/.test(h) : /(^|[^0-9])6(h|horas)?([^0-9]|$)/.test(h);
+      });
+      return { tkm: moduloBITKM(moduloBITotal(grupo, "faturamento"), moduloBITotal(grupo, "jovens_ativos")), count: grupo.length };
+    };
+    const tkm4 = tkmPorJornada(4), tkm6 = tkmPorJornada(6);
+    const empresasMap = new Map();
+    paraSomar.forEach(r => {
+      const empresa = String(moduloBILerCampo(r, ["empresa", "razao_social", "nome_empresa", "empresa_contratante"]) || "Empresa não informada");
+      empresasMap.set(empresa, (empresasMap.get(empresa) || 0) + moduloBINumero(r.faturamento));
+    });
+    const rankingEmpresas = [...empresasMap.entries()].sort((a,b) => b[1]-a[1]).slice(0,10);
+    const rankingAngariadores = new Map();
+    paraSomar.forEach(r => {
+      const nome = String(r.angariador || "Não informado");
+      const item = rankingAngariadores.get(nome) || { faturamento: 0, jovens: 0 };
+      item.faturamento += moduloBINumero(r.faturamento);
+      item.jovens += moduloBINumero(r.jovens_ativos);
+      rankingAngariadores.set(nome, item);
+    });
+    const quantidadeEmpresasCarteira = new Set(paraSomar.map(r => String(moduloBILerCampo(r, ["empresa", "razao_social", "nome_empresa", "empresa_contratante"])).trim()).filter(Boolean)).size;
+    const quantidadeAngariadores = new Set(paraSomar.map(r => String(r.angariador || "").trim()).filter(Boolean)).size;
+    const quantidadeSubsedes = new Set(paraSomar.map(r => String(r.subsede || "").trim()).filter(Boolean)).size;
+    const crescimentoMensal = moduloBIAgruparPorMes(paraSomar, "faturamento");
+    const linhasCrescimento = crescimentoMensal.labels.map((mesNome, i) => {
+      const atual = crescimentoMensal.valores[i];
+      const anterior = i > 0 ? crescimentoMensal.valores[i-1] : null;
+      const pct = anterior !== null && anterior !== 0 ? (atual-anterior)/Math.abs(anterior)*100 : null;
+      return [mesNome, moduloBIMoeda(atual), anterior === null ? "—" : moduloBIMoeda(anterior), pct === null ? "—" : `${moduloBINumeroFormatado(pct,1)}%`];
+    });
+    moduloBIRenderizarExtras("bi-carteira-extras", [
+      { titulo: "Resumo da carteira", colunas: ["Indicador", "Quantidade"], linhas: [["Empresas identificadas", quantidadeEmpresasCarteira], ["Angariadores identificados", quantidadeAngariadores], ["Subsedes identificadas", quantidadeSubsedes]] },
+      { titulo: "Crescimento mensal do faturamento", descricao: "Variação percentual em relação ao mês anterior dentro do período filtrado. O primeiro mês ou mês anterior zerado não gera percentual.", colunas: ["Mês", "Faturamento", "Mês anterior", "Variação"], linhas: linhasCrescimento },
+      { titulo: "TKM médio por jornada", descricao: "Calculado a partir dos registros cuja carga horária identifica 4h ou 6h. Confira se a tabela possui esse campo preenchido.", colunas: ["Jornada", "TKM médio", "Registros identificados"], linhas: [["4 horas", tkm4.count ? moduloBIMoeda(tkm4.tkm) : "Sem dados", tkm4.count], ["6 horas", tkm6.count ? moduloBIMoeda(tkm6.tkm) : "Sem dados", tkm6.count]] },
+      { titulo: "Ranking de angariadores", colunas: ["Posição", "Angariador", "Faturamento", "TKM médio"], linhas: [...rankingAngariadores.entries()].sort((a,b) => b[1].faturamento-a[1].faturamento).slice(0,10).map(([nome,x],i) => [i+1, nome, moduloBIMoeda(x.faturamento), moduloBIMoeda(moduloBITKM(x.faturamento,x.jovens))]) },
+      { titulo: "Maiores empresas por faturamento", colunas: ["Posição", "Empresa", "Faturamento"], linhas: rankingEmpresas.map(([nome,valor],i) => [i+1, nome, moduloBIMoeda(valor)]) }
+    ]);
 
     const mensal = moduloBIAgruparPorMes(paraSomar, "faturamento");
 
