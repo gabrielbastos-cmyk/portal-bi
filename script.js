@@ -271,7 +271,15 @@ async function atualizarPortal() {
     const isAdmin = profile.role === "admin";
 
     if ($("admin-section")) $("admin-section").hidden = !isAdmin;
-    if ($("admin-nav-link")) $("admin-nav-link").hidden = !isAdmin;
+    if ($("admin-nav-link")) {
+      const adminLink = $("admin-nav-link");
+      adminLink.hidden = !isAdmin;
+      // Mantém Administração como o último item do menu principal.
+      // O link continua dentro do mesmo contêiner de navegação.
+      if (adminLink.parentElement) {
+        adminLink.parentElement.appendChild(adminLink);
+      }
+    }
 
     await carregarDashboards();
     if (isAdmin) await carregarAdministracao();
@@ -2749,11 +2757,14 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 (() => {
   "use strict";
 
+  // Tabelas principais e nomes alternativos comuns usados em importações.
+  // A rotina tenta a tabela principal primeiro e só procura alternativas
+  // quando ela não existe ou não contém registros.
   const MODULOS_BI = {
-    aprendizHistorico: "bi_aprendiz_historico",
-    aprendizCarteira: "bi_aprendiz_carteira",
-    aprendizDetalhado: "bi_aprendiz_detalhado",
-    estagioHistorico: "bi_estagio_historico"
+    aprendizHistorico: ["bi_aprendiz_historico", "aprendiz_historico", "historico_aprendiz"],
+    aprendizCarteira: ["bi_aprendiz_carteira", "bi_carteiras_consultores", "carteiras_consultores", "aprendiz_carteira"],
+    aprendizDetalhado: ["bi_aprendiz_detalhado", "aprendiz_detalhado", "relatorio_aprendiz", "aprendizes_detalhados"],
+    estagioHistorico: ["bi_estagio_historico", "estagio_historico", "historico_estagio"]
   };
 
   const MODULO_PAGE_SIZE = 1000;
@@ -2805,12 +2816,15 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     let texto = String(valor)
       .replace(/R\$/gi, "")
       .replace(/\s/g, "")
-      .replace(/%/g, "");
+      .replace(/%/g, "")
+      .replace(/[^0-9,.-]/g, "");
 
     if (texto.includes(",") && texto.includes(".")) {
-      texto = texto.replace(/\./g, "").replace(",", ".");
+      texto = texto.lastIndexOf(",") > texto.lastIndexOf(".")
+        ? texto.replace(/\./g, "").replace(",", ".")
+        : texto.replace(/,/g, "");
     } else if (texto.includes(",")) {
-      texto = texto.replace(",", ".");
+      texto = texto.replace(/\./g, "").replace(",", ".");
     }
 
     const n = Number(texto);
@@ -2977,30 +2991,114 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     }
   }
 
-  async function moduloBIBuscarTabela(nomeTabela) {
-    const todos = [];
+  async function moduloBIBuscarTabela(nomesTabela) {
+    const candidatos = Array.isArray(nomesTabela) ? nomesTabela : [nomesTabela];
+    const erros = [];
 
-    for (let inicio = 0; ; inicio += MODULO_PAGE_SIZE) {
-      const fim = inicio + MODULO_PAGE_SIZE - 1;
+    for (const nomeTabela of candidatos) {
+      const todos = [];
+      let tabelaComErro = false;
 
-      const { data, error } = await sb
-        .from(nomeTabela)
-        .select("*")
-        .range(inicio, fim);
+      for (let inicio = 0; ; inicio += MODULO_PAGE_SIZE) {
+        const fim = inicio + MODULO_PAGE_SIZE - 1;
+        const { data, error } = await sb
+          .from(nomeTabela)
+          .select("*")
+          .range(inicio, fim);
 
-      if (error) {
-        throw new Error(
-          `Erro ao consultar ${nomeTabela}: ${error.message}`
-        );
+        if (error) {
+          erros.push(`${nomeTabela}: ${error.message}`);
+          tabelaComErro = true;
+          break;
+        }
+
+        const lote = data || [];
+        todos.push(...lote);
+        if (lote.length < MODULO_PAGE_SIZE) break;
       }
 
-      const lote = data || [];
-      todos.push(...lote);
+      if (!tabelaComErro && todos.length > 0) {
+        console.info(`[Portal BI] ${nomeTabela}: ${todos.length} registros carregados.`);
+        return todos.map(moduloBINormalizarCampos);
+      }
 
-      if (lote.length < MODULO_PAGE_SIZE) break;
+      // Uma tabela existente, mas vazia, não impede testar o próximo nome.
     }
 
-    return todos;
+    if (erros.length === candidatos.length) {
+      throw new Error(`Não foi possível consultar as tabelas do módulo. ${erros.join(" | ")}`);
+    }
+
+    console.warn(`[Portal BI] Nenhum registro encontrado nas tabelas testadas: ${candidatos.join(", ")}`);
+    return [];
+  }
+
+  // Normaliza nomes de colunas que variam entre planilhas/importações.
+  // Os campos originais são mantidos; os nomes esperados pelo painel são preenchidos
+  // somente quando estão vazios, para não sobrescrever dados já padronizados.
+  function moduloBINormalizarCampos(registro) {
+    const aliases = {
+      ano: ["ano_referencia", "ano_ref", "exercicio", "ano"],
+      mes: ["mes_referencia", "mes_ref", "numero_mes", "mês", "mes"],
+      data_referencia: ["referencia", "data_ref", "competencia", "competência", "periodo", "período"],
+      subsede: ["subsede_responsavel", "unidade", "nome_subsede", "sub_sede"],
+      local_atendimento: ["local", "local_de_atendimento", "municipio", "município", "cidade"],
+      tipo: ["modalidade", "programa", "tipo_programa"],
+      faturado: ["faturamento", "valor_faturado", "valor_faturamento", "receita", "valor_receita", "total_faturamento"],
+      numero_jovens: ["jovens", "quantidade_jovens", "qtd_jovens", "jovens_registrados", "numero_de_jovens"],
+      ticket_medio: ["tkm", "ticket_medio_calculado", "ticket_médio"],
+      quantidade_empresas: ["empresas", "numero_empresas", "qtd_empresas", "empresas_registradas"],
+      meta_numero_jovens: ["meta_jovens", "meta_de_jovens", "meta_qtd_jovens"],
+      meta_faturamento: ["meta_de_faturamento", "meta_receita", "meta_valor_faturamento"],
+      aprendiz: ["nome_aprendiz", "jovem", "nome_jovem", "aluno"],
+      empresa: ["razao_social", "razão_social", "nome_empresa"],
+      cnpj: ["CNPJ", "cnpj_empresa"],
+      angariador: ["consultor", "nome_angariador", "responsavel_comercial", "responsável_comercial"],
+      cidade: ["municipio", "município", "localidade"],
+      data_inicio: ["inicio", "data_admissao", "data_de_inicio", "início"],
+      data_fim: ["fim", "data_desligamento", "data_de_fim"],
+      cartao_futuro: ["cartao futuro", "cartao_futuro_status", "possui_cartao_futuro"],
+      faturamento: ["faturado", "valor_faturamento", "receita", "valor_receita"],
+      jovens_ativos: ["numero_jovens_ativos", "jovens", "numero_jovens", "quantidade_jovens"],
+      crescimento_percentual: ["crescimento", "crescimento_pct", "percentual_crescimento"],
+      data_inicio: ["data_inicio_carteira", "inicio_carteira", "data_de_inicio"],
+      data_inicio_carteira: ["data_inicio", "inicio_carteira"]
+    };
+
+    const resultado = { ...registro };
+    const chaves = Object.keys(registro || {});
+    const porNormalizado = new Map(chaves.map(chave => [
+      String(chave).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, ""),
+      chave
+    ]));
+
+    for (const [destino, opcoes] of Object.entries(aliases)) {
+      if (resultado[destino] !== null && resultado[destino] !== undefined && String(resultado[destino]).trim() !== "") continue;
+      for (const opcao of opcoes) {
+        const chave = porNormalizado.get(String(opcao).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+        if (chave && registro[chave] !== null && registro[chave] !== undefined && String(registro[chave]).trim() !== "") {
+          resultado[destino] = registro[chave];
+          break;
+        }
+      }
+    }
+
+    // Se a referência vier como texto MM/AAAA ou AAAA-MM, extrai ano e mês.
+    const referencia = String(resultado.data_referencia || resultado.periodo || resultado.referencia || "").trim();
+    if ((!resultado.ano || !resultado.mes) && referencia) {
+      let match = referencia.match(/^(\d{4})[-/](\d{1,2})/);
+      if (match) {
+        if (!resultado.ano) resultado.ano = match[1];
+        if (!resultado.mes) resultado.mes = Number(match[2]);
+      } else {
+        match = referencia.match(/^(\d{1,2})[-/](\d{4})$/);
+        if (match) {
+          if (!resultado.mes) resultado.mes = Number(match[1]);
+          if (!resultado.ano) resultado.ano = match[2];
+        }
+      }
+    }
+    return resultado;
   }
 
   function moduloBIMensagem(texto, erro = false) {
