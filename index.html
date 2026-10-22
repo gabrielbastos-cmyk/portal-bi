@@ -18,21 +18,6 @@
   <script src="./script.js" defer></script>
 
   <style>
-    .vagas-embed-container {
-      width: 100%;
-      min-width: 0;
-      overflow: hidden;
-    }
-
-    #vagas-aprendiz-frame {
-      display: block;
-      width: 100%;
-      height: 800px;
-      min-height: 300px;
-      border: 0;
-      overflow: hidden;
-      background: transparent;
-    }
 
     /* Filtros do BI de Substituições */
     .substituicoes-filtros {
@@ -240,12 +225,7 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
-
     @media (max-width: 700px) {
-      #vagas-aprendiz-frame {
-        width: 100%;
-      }
-
       .substituicoes-filtros,
       .ead-filtros {
         grid-template-columns: 1fr;
@@ -512,27 +492,40 @@
             </p>
           </div>
 
-          <a
-            href="./vagas-aprendiz.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="access-pill"
-          >
-            Abrir painel completo ↗
-          </a>
+          <button type="button" class="access-pill" id="vagas-atualizar-topo">Atualizar dados ↻</button>
         </div>
 
-        <div class="vagas-embed-container">
-          <iframe
-            id="vagas-aprendiz-frame"
-            src="./vagas-aprendiz.html"
-            title="Painel de Controle de Vagas Aprendiz"
-            loading="lazy"
-            width="100%"
-            height="800"
-            scrolling="no"
-          ></iframe>
-        </div>
+        
+<div class="vagas-panel-root">
+  <div id="vagas-mensagem" class="vagas-message" role="status" aria-live="polite">Carregando informações...</div>
+  <section class="vagas-filters" aria-label="Filtros das vagas">
+    <div class="vagas-field"><label for="vagas-busca">Pesquisar</label><input id="vagas-busca" type="search" placeholder="Vaga, empresa, cidade ou solicitante..." autocomplete="off"></div>
+    <div class="vagas-field"><label for="vagas-filtroSubsede">Subsede</label><select id="vagas-filtroSubsede"><option value="">Todas as subsedes</option></select></div>
+    <div class="vagas-field"><label for="vagas-filtroStatus">Status</label><select id="vagas-filtroStatus"><option value="">Todos os status</option></select></div>
+    <div class="vagas-field"><label for="vagas-filtroCurso">Curso / área</label><select id="vagas-filtroCurso"><option value="">Todas as áreas</option></select></div>
+    <div class="vagas-field"><label for="vagas-filtroEmpresa">Empresa</label><select id="vagas-filtroEmpresa"><option value="">Todas as empresas</option></select></div>
+    <div class="vagas-field"><label for="vagas-filtroSolicitante">Solicitado por</label><select id="vagas-filtroSolicitante"><option value="">Todos os solicitantes</option></select></div>
+    <div class="vagas-field"><label for="vagas-dataInicial">Data inicial da solicitação</label><input id="vagas-dataInicial" type="date"></div>
+    <div class="vagas-field"><label for="vagas-dataFinal">Data final da solicitação</label><input id="vagas-dataFinal" type="date"></div>
+    <button id="vagas-btnLimpar" class="vagas-btn-secondary" type="button">Limpar filtros</button>
+  </section>
+  <section class="vagas-kpis" aria-label="Indicadores das vagas">
+    <article class="vagas-kpi"><span>Total de vagas</span><strong id="vagas-totalVagas">0</strong></article>
+    <article class="vagas-kpi"><span>Vagas em aberto</span><strong id="vagas-vagasAbertas">0</strong></article>
+    <article class="vagas-kpi"><span>Em andamento</span><strong id="vagas-vagasAndamento">0</strong></article>
+    <article class="vagas-kpi"><span>Subsedes identificadas</span><strong id="vagas-totalUnidades">0</strong></article>
+  </section>
+  <section class="vagas-charts" aria-label="Gráficos das vagas">
+    <article class="vagas-panel"><h3>Vagas por status</h3><div class="vagas-chart-area"><canvas id="vagas-graficoStatus" role="img" aria-label="Distribuição de vagas por status"></canvas></div></article>
+    <article class="vagas-panel"><h3>Vagas por subsede</h3><div class="vagas-chart-area"><canvas id="vagas-graficoSubsede" role="img" aria-label="Quantidade de vagas por subsede"></canvas></div></article>
+    <article class="vagas-panel vagas-panel-wide"><h3>Evolução mensal das solicitações</h3><p class="vagas-subtitle">Quantidade de vagas solicitadas ao longo do tempo.</p><div class="vagas-chart-area vagas-chart-tall"><canvas id="vagas-graficoMensal" role="img" aria-label="Evolução mensal das vagas solicitadas"></canvas></div></article>
+  </section>
+  <section class="vagas-panel vagas-table-panel">
+    <div class="vagas-table-heading"><div><h3>Detalhamento das vagas</h3><p id="vagas-contadorTabela">0 registros</p></div><button id="vagas-btnExportar" class="vagas-btn-secondary" type="button">Exportar CSV</button></div>
+    <div class="vagas-table-scroll"><table><thead><tr><th>ID</th><th>Empresa</th><th>Subsede</th><th>Vaga / Curso</th><th>Status</th><th>Data de solicitação</th><th>Período</th></tr></thead><tbody id="vagas-corpoTabela"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div>
+  </section>
+</div>
+
       </section>
 
       <!-- BI DE SUBSTITUIÇÕES -->
@@ -984,28 +977,5 @@
       </footer>
     </main>
   </div>
-
-  <!-- AJUSTE AUTOMÁTICO DA ALTURA DO PAINEL DE VAGAS -->
-  <script>
-    (() => {
-      "use strict";
-
-      const iframe = document.getElementById("vagas-aprendiz-frame");
-      if (!iframe) return;
-
-      window.addEventListener("message", (event) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.source !== iframe.contentWindow) return;
-
-        const data = event.data;
-        if (!data || data.type !== "vagas-aprendiz-height") return;
-
-        const altura = Number(data.height);
-        if (!Number.isFinite(altura) || altura < 300 || altura > 20000) return;
-
-        iframe.style.height = `${Math.ceil(altura)}px`;
-      });
-    })();
-  </script>
 </body>
 </html>
