@@ -266,9 +266,21 @@
       padding: 22px;
       overflow: visible;
     }
+    .metas-ranking-principal .metas-ranking-cabecalho {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      width: 100%;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e6edf5;
+    }
     .metas-ranking-principal h3 {
       margin: 0;
       line-height: 1.35;
+      flex: 1 1 360px;
+      min-width: 0;
     }
     .metas-ranking-principal .metas-ranking-botoes {
       display: flex;
@@ -277,8 +289,9 @@
       gap: 8px;
       width: fit-content;
       max-width: 100%;
-      margin: 0;
-      padding: 5px;
+      margin: 0 0 0 auto;
+      padding: 4px;
+      flex: 0 0 auto;
       border: 1px solid #e0e7f0;
       border-radius: 12px;
       background: #f4f7fb;
@@ -324,7 +337,8 @@
       .metas-ranking-principal { padding: 16px; }
       .metas-ranking-principal th,
       .metas-ranking-principal td { padding: 10px 8px; white-space: nowrap; }
-      .metas-ranking-principal .metas-ranking-botoes { width: 100%; }
+      .metas-ranking-principal .metas-ranking-cabecalho { align-items: stretch; gap: 12px; }
+      .metas-ranking-principal .metas-ranking-botoes { width: 100%; margin-left: 0; }
       .metas-ranking-principal .metas-ranking-botoes button { flex: 1; padding: 10px; }
     }
 
@@ -950,10 +964,12 @@
         </div>
         <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="metas-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="metas-grafico-jovens"></canvas></div></article></div>
         <div class="metas-graficos metas-ranking-layout"><article class="metas-panel metas-ranking-principal">
-          <h3 id="metas-ranking-titulo">Ranking de subsedes — atingimento de faturamento</h3>
-          <div class="metas-ranking-botoes" role="group" aria-label="Selecionar indicador do ranking">
-            <button type="button" data-modo-ranking="faturamento" class="ativo" aria-pressed="true">Faturamento</button>
-            <button type="button" data-modo-ranking="aprendiz" aria-pressed="false">Aprendiz</button>
+          <div class="metas-ranking-cabecalho">
+            <h3 id="metas-ranking-titulo">Ranking de subsedes — atingimento de faturamento</h3>
+            <div class="metas-ranking-botoes" role="group" aria-label="Selecionar indicador do ranking">
+              <button type="button" data-modo-ranking="faturamento" class="ativo" aria-pressed="true">Faturamento</button>
+              <button type="button" data-modo-ranking="aprendiz" aria-pressed="false">Aprendiz</button>
+            </div>
           </div>
           <input type="hidden" id="metas-ranking-modo" value="faturamento">
           <div class="metas-table-scroll">
