@@ -2064,3 +2064,13 @@ textarea:focus {
     padding: 14px;
   }
 }
+/* Navegação lateral: mantém o estado selecionado acessível e visível. */
+.sidebar .nav-link[aria-current="page"] {
+  color: #fff;
+  background: rgba(255,255,255,.1);
+  box-shadow: inset 3px 0 #8db8ed;
+}
+.sidebar .nav-link:focus-visible {
+  outline: 2px solid #b9d4f7;
+  outline-offset: 2px;
+}
