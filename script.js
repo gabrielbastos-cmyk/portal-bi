@@ -3935,19 +3935,137 @@ function metasAtualizarFiltroUnidade() {
   sel.value = unidades.includes(anterior) ? anterior : "";
 }
 
+// No painel Matriz, o registro "Polos Curitiba" compõe o consolidado de Curitiba.
+// Ao filtrar Curitiba, considera os dois registros; no total geral, cada registro
+// entra uma única vez. No ranking da Matriz, os dois ficam agrupados em Curitiba.
+function metasRegistroNaSubsede(r, subsede, tipo) {
+  if (!subsede) return true;
+
+  const subsedeRegistro = normalize(r?.subsede || "");
+  const subsedeFiltro = normalize(subsede);
+
+  if (tipo === "Matriz" && subsedeFiltro === "curitiba") {
+    return subsedeRegistro === "curitiba" || subsedeRegistro === "polos curitiba";
+  }
+
+  return r?.subsede === subsede;
+}
+
 function renderizarMetasAprendiz() {
-  const mes=$("metas-mes")?.value||""; const subsede=$("metas-subsede")?.value||""; const unidade=$("metas-unidade")?.value||"";
-  const tipo=$("metas-tipo")?.value||"Matriz";
-  const doMes=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===mes && (!subsede||r.subsede===subsede) && (!unidade||r.local_atendimento===unidade));
-  const agregado=doMes.reduce((a,r)=>{a.faturado+=Number(r.faturado)||0;a.jovens+=Number(r.numero_jovens)||0;a.empresas+=Number(r.qt_empresas)||0;a.metaF+=Number(r.meta_faturamento)||0;a.metaJ+=Number(r.meta_numero_jovens)||0;a.ticketNumerador+=(Number(r.ticket_medio)||0);a.n++;return a;},{faturado:0,jovens:0,empresas:0,metaF:0,metaJ:0,ticketNumerador:0,n:0});
-  const ticket=agregado.n?agregado.ticketNumerador/agregado.n:0;
-  const set=(id,v)=>{const e=$(id);if(e)e.textContent=v;};
-  set("metas-faturado",metasMoeda(agregado.faturado));set("metas-faturamento-meta","Meta: "+metasMoeda(agregado.metaF));set("metas-jovens",metasNumero(agregado.jovens));set("metas-jovens-meta","Meta: "+metasNumero(agregado.metaJ));set("metas-empresas",metasNumero(agregado.empresas));set("metas-ticket",metasMoeda(ticket));
-  const pF=metasPercentual(agregado.faturado,agregado.metaF),pJ=metasPercentual(agregado.jovens,agregado.metaJ);set("metas-faturamento-percentual",pF.toFixed(1)+"% da meta"+(agregado.metaF>0?" · faltam "+metasMoeda(Math.max(0,agregado.metaF-agregado.faturado)):""));set("metas-jovens-percentual",pJ.toFixed(1)+"% da meta"+(agregado.metaJ>0?" · faltam "+metasNumero(Math.max(0,agregado.metaJ-agregado.jovens)):""));[ ["metas-faturamento-barra",pF],["metas-jovens-barra",pJ] ].forEach(([id,p])=>{const e=$(id);if(e)e.style.width=Math.min(100,Math.max(0,p))+"%";});
-  const meses=[...new Set(metasAprendizRegistros.map(r=>String(r.data_referencia).slice(0,10)))].sort(); const historico=meses.map(m=>{const rows=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===m&&(!subsede||r.subsede===subsede)&&(!unidade||r.local_atendimento===unidade));return {m,f:rows.reduce((s,r)=>s+(Number(r.faturado)||0),0),mf:rows.reduce((s,r)=>s+(Number(r.meta_faturamento)||0),0),j:rows.reduce((s,r)=>s+(Number(r.numero_jovens)||0),0),mj:rows.reduce((s,r)=>s+(Number(r.meta_numero_jovens)||0),0)};});
-  metasDesenharGrafico("metas-grafico-faturamento", "faturamento",historico.map(x=>x.m),[{label:"Faturado",data:historico.map(x=>x.f)},{label:"Meta",data:historico.map(x=>x.mf)}],true); metasDesenharGrafico("metas-grafico-jovens","jovens",historico.map(x=>x.m),[{label:"Jovens",data:historico.map(x=>x.j)},{label:"Meta",data:historico.map(x=>x.mj)}],false);
-  const thRanking=$("metas-ranking-dimensao"); if(thRanking) thRanking.textContent=tipo==="Polos"?"Unidade / Polo":"Subsede"; const thTicket=$("metas-ranking-ticket-dimensao"); if(thTicket) thTicket.textContent=tipo==="Polos"?"Unidade / Polo":"Subsede";
-  const porSubsede={}; doMes.forEach(r=>{const k=(tipo==="Polos"?r.local_atendimento:r.subsede)||"Sem identificação";const a=porSubsede[k]||(porSubsede[k]={s:k,f:0,mf:0,j:0,t:0,n:0});a.f+=Number(r.faturado)||0;a.mf+=Number(r.meta_faturamento)||0;a.j+=Number(r.numero_jovens)||0;a.t+=Number(r.ticket_medio)||0;a.n++;}); const ranking=Object.values(porSubsede);ranking.sort((a,b)=>metasPercentual(b.f,b.mf)-metasPercentual(a.f,a.mf));const rf=$("metas-ranking-faturamento");if(rf)rf.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f,r.mf).toFixed(1)}%</td></tr>`).join("")||'<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>'; ranking.sort((a,b)=>(b.t/Math.max(1,b.n))-(a.t/Math.max(1,a.n)));const rt=$("metas-ranking-ticket");if(rt)rt.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.t/Math.max(1,r.n))}</td><td>${metasNumero(r.j)}</td></tr>`).join("")||'<tr><td colspan="3">Sem dados para os filtros selecionados.</td></tr>';
+  const mes = $("metas-mes")?.value || "";
+  const subsede = $("metas-subsede")?.value || "";
+  const unidade = $("metas-unidade")?.value || "";
+  const tipo = $("metas-tipo")?.value || "Matriz";
+
+  const registrosDoMes = metasAprendizRegistros.filter(r =>
+    String(r.data_referencia).slice(0, 10) === mes &&
+    metasRegistroNaSubsede(r, subsede, tipo) &&
+    (!unidade || r.local_atendimento === unidade)
+  );
+
+  const agregado = registrosDoMes.reduce((a, r) => {
+    a.faturado += Number(r.faturado) || 0;
+    a.jovens += Number(r.numero_jovens) || 0;
+    a.empresas += Number(r.qt_empresas) || 0;
+    a.metaF += Number(r.meta_faturamento) || 0;
+    a.metaJ += Number(r.meta_numero_jovens) || 0;
+    a.ticketNumerador += Number(r.ticket_medio) || 0;
+    a.n++;
+    return a;
+  }, { faturado: 0, jovens: 0, empresas: 0, metaF: 0, metaJ: 0, ticketNumerador: 0, n: 0 });
+
+  const ticket = agregado.n ? agregado.ticketNumerador / agregado.n : 0;
+  const set = (id, v) => {
+    const e = $(id);
+    if (e) e.textContent = v;
+  };
+
+  set("metas-faturado", metasMoeda(agregado.faturado));
+  set("metas-faturamento-meta", "Meta: " + metasMoeda(agregado.metaF));
+  set("metas-jovens", metasNumero(agregado.jovens));
+  set("metas-jovens-meta", "Meta: " + metasNumero(agregado.metaJ));
+  set("metas-empresas", metasNumero(agregado.empresas));
+  set("metas-ticket", metasMoeda(ticket));
+
+  const pF = metasPercentual(agregado.faturado, agregado.metaF);
+  const pJ = metasPercentual(agregado.jovens, agregado.metaJ);
+  set("metas-faturamento-percentual", pF.toFixed(1) + "% da meta" + (agregado.metaF > 0 ? " · faltam " + metasMoeda(Math.max(0, agregado.metaF - agregado.faturado)) : ""));
+  set("metas-jovens-percentual", pJ.toFixed(1) + "% da meta" + (agregado.metaJ > 0 ? " · faltam " + metasNumero(Math.max(0, agregado.metaJ - agregado.jovens)) : ""));
+
+  [["metas-faturamento-barra", pF], ["metas-jovens-barra", pJ]].forEach(([id, p]) => {
+    const e = $(id);
+    if (e) e.style.width = Math.min(100, Math.max(0, p)) + "%";
+  });
+
+  // Os gráficos usam a mesma regra do cartão: Curitiba Matriz inclui Polos Curitiba.
+  const meses = [...new Set(metasAprendizRegistros.map(r => String(r.data_referencia).slice(0, 10)))].sort();
+  const historico = meses.map(m => {
+    const rows = metasAprendizRegistros.filter(r =>
+      String(r.data_referencia).slice(0, 10) === m &&
+      metasRegistroNaSubsede(r, subsede, tipo) &&
+      (!unidade || r.local_atendimento === unidade)
+    );
+    return {
+      m,
+      f: rows.reduce((s, r) => s + (Number(r.faturado) || 0), 0),
+      mf: rows.reduce((s, r) => s + (Number(r.meta_faturamento) || 0), 0),
+      j: rows.reduce((s, r) => s + (Number(r.numero_jovens) || 0), 0),
+      mj: rows.reduce((s, r) => s + (Number(r.meta_numero_jovens) || 0), 0)
+    };
+  });
+
+  metasDesenharGrafico(
+    "metas-grafico-faturamento",
+    "faturamento",
+    historico.map(x => x.m),
+    [{ label: "Faturado", data: historico.map(x => x.f) }, { label: "Meta", data: historico.map(x => x.mf) }],
+    true
+  );
+  metasDesenharGrafico(
+    "metas-grafico-jovens",
+    "jovens",
+    historico.map(x => x.m),
+    [{ label: "Jovens", data: historico.map(x => x.j) }, { label: "Meta", data: historico.map(x => x.mj) }],
+    false
+  );
+
+  const thRanking = $("metas-ranking-dimensao");
+  if (thRanking) thRanking.textContent = tipo === "Polos" ? "Unidade / Polo" : "Subsede";
+  const thTicket = $("metas-ranking-ticket-dimensao");
+  if (thTicket) thTicket.textContent = tipo === "Polos" ? "Unidade / Polo" : "Subsede";
+
+  // Agrupa "Polos Curitiba" dentro de "Curitiba" apenas na visão Matriz.
+  // Assim, o total geral continua somando cada linha original uma única vez.
+  const porSubsede = {};
+  registrosDoMes.forEach(r => {
+    let chave = (tipo === "Polos" ? r.local_atendimento : r.subsede) || "Sem identificação";
+    if (tipo === "Matriz" && normalize(chave) === "polos curitiba") chave = "Curitiba";
+
+    const a = porSubsede[chave] || (porSubsede[chave] = { s: chave, f: 0, mf: 0, j: 0, mj: 0, t: 0, n: 0 });
+    a.f += Number(r.faturado) || 0;
+    a.mf += Number(r.meta_faturamento) || 0;
+    a.j += Number(r.numero_jovens) || 0;
+    a.mj += Number(r.meta_numero_jovens) || 0;
+    a.t += Number(r.ticket_medio) || 0;
+    a.n++;
+  });
+
+  const ranking = Object.values(porSubsede);
+  ranking.sort((a, b) => metasPercentual(b.f, b.mf) - metasPercentual(a.f, a.mf));
+  const rf = $("metas-ranking-faturamento");
+  if (rf) {
+    rf.innerHTML = ranking.map(r =>
+      `<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f, r.mf).toFixed(1)}%</td></tr>`
+    ).join("") || '<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>';
+  }
+
+  ranking.sort((a, b) => (b.t / Math.max(1, b.n)) - (a.t / Math.max(1, a.n)));
+  const rt = $("metas-ranking-ticket");
+  if (rt) {
+    rt.innerHTML = ranking.map(r =>
+      `<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.t / Math.max(1, r.n))}</td><td>${metasNumero(r.j)}</td></tr>`
+    ).join("") || '<tr><td colspan="3">Sem dados para os filtros selecionados.</td></tr>';
+  }
 }
 
 function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
