@@ -3743,8 +3743,8 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 
   function moduloBIPreencherFiltros() {
     const aprendiz = moduloBIState.aprendizHistorico;
-    const carteira = moduloBIState.aprendizCarteira;
     const detalhado = moduloBIState.aprendizDetalhado;
+    const carteira = moduloBICriarCarteiraDoDetalhado(detalhado);
     const estagio = moduloBIState.estagioHistorico;
 
     moduloBIOptions(
@@ -3847,81 +3847,79 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
   function moduloBIRenderizarGrafico(idCanvas, chave, labels, datasets, tipo = "bar") {
     const canvas = moduloBI$(idCanvas);
     if (!canvas || !window.Chart) return;
-
     if (moduloBIState.graficos[chave]) moduloBIState.graficos[chave].destroy();
-    const ehMoeda = /faturamento|ranking/i.test(chave);
-    const horizontal = chave === "carteiraRanking";
-    const cores = ["#356fbd", "#e4a642", "#239a78", "#8a72c6"];
-    const preparados = datasets.map((dataset, i) => ({
-      ...dataset,
-      backgroundColor: dataset.backgroundColor || cores[i % cores.length],
-      borderColor: dataset.borderColor || cores[i % cores.length],
-      borderWidth: dataset.borderWidth ?? 1,
-      borderRadius: tipo === "bar" ? 6 : 0,
-      maxBarThickness: 34,
-      barPercentage: .72,
-      categoryPercentage: .78
-    }));
+
+    const horizontal = /ranking/i.test(chave);
+    const formatarValorGrafico = (valor, dataset) => {
+      const nome = String(dataset?.label || "").toLowerCase();
+      if (nome.includes("faturamento") || nome.includes("ticket") || nome.includes("tkm")) {
+        return moduloBIMoeda(valor);
+      }
+      if (nome.includes("atingimento") || nome.includes("crescimento") || nome.includes("percent")) {
+        return `${moduloBINumeroFormatado(valor, 1)}%`;
+      }
+      return moduloBINumeroFormatado(valor, 0);
+    };
+
+    const rotulosValores = {
+      id: "portalBiValorNoGrafico",
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.font = "600 11px Inter, system-ui, sans-serif";
+        ctx.fillStyle = "#344054";
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+          const meta = chart.getDatasetMeta(datasetIndex);
+          if (meta.hidden) return;
+          meta.data.forEach((element, index) => {
+            const raw = dataset.data[index];
+            if (raw === null || raw === undefined || !Number.isFinite(Number(raw))) return;
+            const pos = element.tooltipPosition();
+            const label = formatarValorGrafico(Number(raw), dataset);
+            if (chart.options.indexAxis === "y") {
+              ctx.textAlign = "left";
+              ctx.textBaseline = "middle";
+              ctx.fillText(label, pos.x + 7, pos.y);
+            } else {
+              ctx.textAlign = "center";
+              ctx.textBaseline = "bottom";
+              ctx.fillText(label, pos.x, pos.y - 5);
+            }
+          });
+        });
+        ctx.restore();
+      }
+    };
 
     moduloBIState.graficos[chave] = new Chart(canvas, {
       type: tipo,
-      data: { labels, datasets: preparados },
+      data: { labels, datasets: datasets.map(d => ({
+        borderRadius: tipo === "bar" ? 6 : undefined,
+        borderWidth: 0,
+        maxBarThickness: 34,
+        ...d
+      })) },
+      plugins: [rotulosValores],
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        aspectRatio: horizontal ? 1.7 : 2.1,
         indexAxis: horizontal ? "y" : "x",
+        layout: { padding: { top: 18, right: horizontal ? 82 : 12, bottom: 8, left: 8 } },
         interaction: { intersect: false, mode: "index" },
-        animation: { duration: 350 },
-        layout: { padding: { top: 6, right: 10, bottom: 2, left: 2 } },
         plugins: {
           legend: {
             display: datasets.length > 1,
             position: "bottom",
-            labels: { usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: 18, color: "#52647a", font: { size: 11, weight: "600" } }
+            labels: { usePointStyle: true, pointStyle: "circle", boxWidth: 8, padding: 18, color: "#475467", font: { size: 11, weight: "600" } }
           },
           tooltip: {
-            backgroundColor: "#172b46", padding: 12, cornerRadius: 8,
-            titleFont: { size: 12, weight: "700" }, bodyFont: { size: 12 },
-            callbacks: {
-              label(contexto) {
-                const valor = contexto.parsed?.x ?? contexto.parsed?.y ?? contexto.parsed;
-                const titulo = contexto.dataset?.label || "";
-                const formatado = typeof valor === "number"
-                  ? (ehMoeda ? valor.toLocaleString("pt-BR", {style:"currency",currency:"BRL",maximumFractionDigits:0}) : valor.toLocaleString("pt-BR", {maximumFractionDigits:1}))
-                  : valor;
-                return `${titulo}: ${formatado}`;
-              }
-            }
+            backgroundColor: "#101828", padding: 12, cornerRadius: 8,
+            callbacks: { label(context) { return `${context.dataset?.label || "Valor"}: ${formatarValorGrafico(context.parsed?.x ?? context.parsed?.y ?? context.raw, context.dataset)}`; } }
           }
         },
         scales: {
-          x: {
-            beginAtZero: true,
-            grid: { display: !horizontal, color: "rgba(148,163,184,.16)" },
-            border: { display: false },
-            ticks: {
-              color: "#6b7b90", maxRotation: 0, autoSkip: true,
-              callback(valor) {
-                const n = Number(valor);
-                if (horizontal && ehMoeda) return n.toLocaleString("pt-BR", {notation:"compact",maximumFractionDigits:1});
-                return n.toLocaleString("pt-BR", {maximumFractionDigits:0});
-              }, font: { size: 10 }
-            }
-          },
-          y: {
-            beginAtZero: !horizontal,
-            grid: { display: horizontal, color: "rgba(148,163,184,.16)" },
-            border: { display: false },
-            ticks: {
-              color: "#6b7b90", font: { size: 10 },
-              callback(valor) {
-                const n = Number(valor);
-                if (!horizontal && ehMoeda) return n.toLocaleString("pt-BR", {notation:"compact",maximumFractionDigits:1});
-                return this.getLabelForValue ? this.getLabelForValue(valor) : n.toLocaleString("pt-BR");
-              }
-            }
-          }
+          x: { beginAtZero: true, grid: { display: horizontal, color: "#eef1f5" }, border: { display: false }, ticks: { color: "#667085", font: { size: 10 }, callback(value) { return horizontal ? Number(value).toLocaleString("pt-BR") : (Math.abs(Number(value)) >= 1000 ? `${(Number(value)/1000).toLocaleString("pt-BR")} mil` : Number(value).toLocaleString("pt-BR")); } } },
+          y: { beginAtZero: true, grid: { display: !horizontal, color: "#eef1f5" }, border: { display: false }, ticks: { color: "#475467", autoSkip: false, font: { size: 10, weight: horizontal ? "500" : "400" }, maxRotation: 0 } }
         }
       }
     });
@@ -4030,6 +4028,15 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       </article>`).join("");
   }
 
+  // Indicadores de resumo usam uma única competência (a mais recente do filtro),
+  // evitando somar snapshots de vários meses. Séries e tabelas continuam históricas.
+  function moduloBILinhasUltimaCompetencia(registros) {
+    const validos = (registros || []).filter(r => moduloBIAno(r) && moduloBIMes(r));
+    if (!validos.length) return registros || [];
+    const ultima = validos.map(moduloBIChaveMes).sort().at(-1);
+    return validos.filter(r => moduloBIChaveMes(r) === ultima);
+  }
+
   function moduloBIRankingSubsede(registros, campoValor, campoMeta) {
     const mapa = new Map();
     moduloBIRegistrosParaSomar(registros).forEach(r => {
@@ -4055,10 +4062,11 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     );
 
     const paraSomar = moduloBIRegistrosParaSomar(filtrados);
+    const paraIndicadores = moduloBILinhasUltimaCompetencia(paraSomar);
 
-    const faturamento = moduloBITotal(paraSomar, "faturado");
-    const jovens = moduloBITotal(paraSomar, "numero_jovens");
-    const empresas = moduloBITotal(paraSomar, "quantidade_empresas");
+    const faturamento = moduloBITotal(paraIndicadores, "faturado");
+    const jovens = moduloBITotal(paraIndicadores, "numero_jovens");
+    const empresas = moduloBITotal(paraIndicadores, "quantidade_empresas");
 
     moduloBIAtualizarTexto("bi-aprendiz-faturamento", moduloBIMoeda(faturamento));
     moduloBIAtualizarTexto("bi-aprendiz-jovens", moduloBINumeroFormatado(jovens));
@@ -4072,16 +4080,16 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     );
     moduloBIAtualizarTexto(
       "bi-aprendiz-contagem",
-      `${filtrados.length.toLocaleString("pt-BR")} registros`
+      `${filtrados.length.toLocaleString("pt-BR")} registros · indicadores do último mês disponível no filtro`
     );
 
-    const metaFaturamento = moduloBITotal(paraSomar, "meta_faturamento");
-    const metaJovens = moduloBITotal(paraSomar, "meta_numero_jovens");
+    const metaFaturamento = moduloBITotal(paraIndicadores, "meta_faturamento");
+    const metaJovens = moduloBITotal(paraIndicadores, "meta_numero_jovens");
     const faltaFaturamento = Math.max(0, metaFaturamento - faturamento);
     const faltaJovens = Math.max(0, metaJovens - jovens);
     const atingFaturamento = metaFaturamento > 0 ? faturamento / metaFaturamento * 100 : null;
     const atingJovens = metaJovens > 0 ? jovens / metaJovens * 100 : null;
-    const rankingSubsedes = moduloBIRankingSubsede(filtrados, "faturado", "meta_faturamento");
+    const rankingSubsedes = moduloBIRankingSubsede(paraIndicadores, "faturado", "meta_faturamento");
     moduloBIRenderizarExtras("bi-aprendiz-extras", [
       { titulo: "Meta e saldo de faturamento", descricao: "O saldo mostra quanto falta para atingir a meta agregada; quando a meta não está cadastrada, o resultado aparece como sem meta.", colunas: ["Indicador", "Realizado", "Meta", "Atingimento", "Falta para a meta"], linhas: [["Faturamento", moduloBIMoeda(faturamento), metaFaturamento > 0 ? moduloBIMoeda(metaFaturamento) : "Sem meta", atingFaturamento === null ? "Sem meta" : moduloBINumeroFormatado(atingFaturamento, 1) + "%", metaFaturamento > 0 ? moduloBIMoeda(faltaFaturamento) : "—"], ["Jovens", moduloBINumeroFormatado(jovens), metaJovens > 0 ? moduloBINumeroFormatado(metaJovens) : "Sem meta", atingJovens === null ? "Sem meta" : moduloBINumeroFormatado(atingJovens, 1) + "%", metaJovens > 0 ? moduloBINumeroFormatado(faltaJovens) : "—"]] },
       { titulo: "Ranking de subsedes por TKM", colunas: ["Posição", "Subsede", "TKM", "Jovens"], linhas: rankingSubsedes.sort((a,b) => b.tkm-a.tkm).slice(0,10).map((r,i) => [i+1, r.nome, moduloBIMoeda(r.tkm), moduloBINumeroFormatado(r.jovens)]) },
@@ -4243,11 +4251,12 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     );
 
     const paraSomar = moduloBIRegistrosParaSomar(filtrados);
+    const paraIndicadores = moduloBILinhasUltimaCompetencia(paraSomar);
 
-    const faturamento = moduloBITotal(paraSomar, "faturado");
-    const jovens = moduloBITotal(paraSomar, "numero_jovens");
-    const metaFaturamento = moduloBITotal(paraSomar, "meta_faturamento");
-    const metaJovens = moduloBITotal(paraSomar, "meta_numero_jovens");
+    const faturamento = moduloBITotal(paraIndicadores, "faturado");
+    const jovens = moduloBITotal(paraIndicadores, "numero_jovens");
+    const metaFaturamento = moduloBITotal(paraIndicadores, "meta_faturamento");
+    const metaJovens = moduloBITotal(paraIndicadores, "meta_numero_jovens");
 
     const atingimento = metaFaturamento > 0
       ? faturamento / metaFaturamento * 100
@@ -4265,13 +4274,13 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     );
     moduloBIAtualizarTexto(
       "bi-estagio-contagem",
-      `${filtrados.length.toLocaleString("pt-BR")} registros`
+      `${filtrados.length.toLocaleString("pt-BR")} registros · indicadores do último mês disponível no filtro`
     );
 
     const faltaFaturamento = Math.max(0, metaFaturamento - faturamento);
     const faltaJovens = Math.max(0, metaJovens - jovens);
     const atingJovens = metaJovens > 0 ? jovens / metaJovens * 100 : null;
-    const rankingSubsedes = moduloBIRankingSubsede(filtrados, "faturado", "meta_faturamento");
+    const rankingSubsedes = moduloBIRankingSubsede(paraIndicadores, "faturado", "meta_faturamento");
     moduloBIRenderizarExtras("bi-estagio-extras", [
       { titulo: "Meta e saldo", colunas: ["Indicador", "Realizado", "Meta", "Atingimento", "Falta para a meta"], linhas: [["Faturamento", moduloBIMoeda(faturamento), metaFaturamento > 0 ? moduloBIMoeda(metaFaturamento) : "Sem meta", metaFaturamento > 0 ? moduloBINumeroFormatado(atingimento,1)+"%" : "Sem meta", metaFaturamento > 0 ? moduloBIMoeda(faltaFaturamento) : "—"], ["Jovens", moduloBINumeroFormatado(jovens), metaJovens > 0 ? moduloBINumeroFormatado(metaJovens) : "Sem meta", atingJovens === null ? "Sem meta" : moduloBINumeroFormatado(atingJovens,1)+"%", metaJovens > 0 ? moduloBINumeroFormatado(faltaJovens) : "—"]] },
       { titulo: "Ranking de subsedes por TKM", colunas: ["Posição", "Subsede", "TKM", "Jovens"], linhas: rankingSubsedes.sort((a,b) => b.tkm-a.tkm).slice(0,10).map((r,i) => [i+1, r.nome, moduloBIMoeda(r.tkm), moduloBINumeroFormatado(r.jovens)]) },
@@ -4346,6 +4355,43 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
     }
   }
 
+  // Carteiras é derivada do relatório individual de aprendizes, que contém empresa,
+  // angariador, subsede e datas. A tabela bi_aprendiz_carteira não é fonte deste painel.
+  function moduloBICriarCarteiraDoDetalhado(registros) {
+    return (registros || []).map((r, index) => {
+      const dataBase = moduloBILerCampo(r, ["data_referencia", "competencia", "periodo", "data_inicio", "data_inicio_carteira", "inicio"]);
+      const anoExistente = moduloBIAno(r);
+      const mesExistente = moduloBIMes(r);
+      let ano = anoExistente, mes = mesExistente;
+      const textoData = String(dataBase || "").trim();
+      let m = textoData.match(/^(\d{4})[-/](\d{1,2})/);
+      if (m) { if (!ano) ano = m[1]; if (!mes) mes = Number(m[2]); }
+      if (!m) {
+        m = textoData.match(/^(\d{1,2})[-/](\d{4})$/);
+        if (m) { if (!mes) mes = Number(m[1]); if (!ano) ano = m[2]; }
+      }
+      const empresa = String(moduloBILerCampo(r, ["empresa", "razao_social", "nome_fantasia", "nome_empresa", "empresa_contratante"]) || "").trim();
+      const faturamentoRaw = moduloBILerCampo(r, ["faturamento", "faturado", "valor_faturamento", "valor_faturado", "receita"]);
+      const temFaturamento = faturamentoRaw !== "";
+      const jovensRaw = moduloBILerCampo(r, ["jovens_ativos", "numero_jovens", "quantidade_jovens"]);
+      return {
+        ...r,
+        _carteiraId: r.id ?? `${empresa}|${r.cnpj || ""}|${r.aprendiz || ""}|${index}`,
+        ano: ano ? String(ano) : "",
+        mes: mes ? Number(mes) : 0,
+        data_referencia: textoData || (ano && mes ? `${ano}-${String(mes).padStart(2,"0")}-01` : ""),
+        empresa,
+        subsede: String(r.subsede || "").trim(),
+        angariador: String(r.angariador || "").trim(),
+        faturamento: temFaturamento ? moduloBINumero(faturamentoRaw) : 0,
+        _temFaturamento: temFaturamento,
+        jovens_ativos: jovensRaw !== "" ? moduloBINumero(jovensRaw) : 1,
+        crescimento_percentual: moduloBILerCampo(r, ["crescimento_percentual", "crescimento_pct", "crescimento"]) || null,
+        data_inicio: r.data_inicio || r.data_inicio_carteira || ""
+      };
+    });
+  }
+
   // ========================================================
   // CARTEIRAS DOS CONSULTORES
   // ========================================================
@@ -4375,10 +4421,10 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
 
     const paraSomar = moduloBIRegistrosParaSomar(filtrados);
 
-    const faturamento = moduloBITotal(paraSomar, "faturamento");
-    const jovens = moduloBITotal(paraSomar, "jovens_ativos");
-
-    const tkmMedio = moduloBITKM(faturamento, jovens);
+    const temFaturamentoDetalhado = paraSomar.some(r => r._temFaturamento);
+    const faturamento = temFaturamentoDetalhado ? moduloBITotal(paraSomar, "faturamento") : 0;
+    const jovens = paraSomar.length;
+    const tkmMedio = temFaturamentoDetalhado ? moduloBITKM(faturamento, jovens) : null;
 
     // Crescimento do KPI é calculado pela variação do faturamento agregado entre
     // o primeiro e o último mês disponível, evitando média simples de percentuais.
@@ -4389,9 +4435,9 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       ? (ultimoFaturamento - primeiroFaturamento) / Math.abs(primeiroFaturamento) * 100
       : null;
 
-    moduloBIAtualizarTexto("bi-carteira-faturamento", moduloBIMoeda(faturamento));
+    moduloBIAtualizarTexto("bi-carteira-faturamento", temFaturamentoDetalhado ? moduloBIMoeda(faturamento) : "Não disponível no detalhado");
     moduloBIAtualizarTexto("bi-carteira-jovens", moduloBINumeroFormatado(jovens));
-    moduloBIAtualizarTexto("bi-carteira-tkm", moduloBIMoeda(tkmMedio));
+    moduloBIAtualizarTexto("bi-carteira-tkm", tkmMedio === null ? "Não disponível" : moduloBIMoeda(tkmMedio));
     moduloBIAtualizarTexto(
       "bi-carteira-crescimento",
       crescimentoMedio === null
@@ -4441,31 +4487,33 @@ function atualizarPaginacaoEaD(total, primeiro, ultimo, totalPaginas) {
       { titulo: "Crescimento mensal do faturamento", descricao: "Variação percentual em relação ao mês anterior dentro do período filtrado. O primeiro mês ou mês anterior zerado não gera percentual.", colunas: ["Mês", "Faturamento", "Mês anterior", "Variação"], linhas: linhasCrescimento },
       { titulo: "TKM médio por jornada", descricao: "Calculado a partir dos registros cuja carga horária identifica 4h ou 6h. Confira se a tabela possui esse campo preenchido.", colunas: ["Jornada", "TKM médio", "Registros identificados"], linhas: [["4 horas", tkm4.count ? moduloBIMoeda(tkm4.tkm) : "Sem dados", tkm4.count], ["6 horas", tkm6.count ? moduloBIMoeda(tkm6.tkm) : "Sem dados", tkm6.count]] },
       { titulo: "Ranking de angariadores", colunas: ["Posição", "Angariador", "Faturamento", "TKM médio"], linhas: [...rankingAngariadores.entries()].sort((a,b) => b[1].faturamento-a[1].faturamento).slice(0,10).map(([nome,x],i) => [i+1, nome, moduloBIMoeda(x.faturamento), moduloBIMoeda(moduloBITKM(x.faturamento,x.jovens))]) },
-      { titulo: "Maiores empresas por faturamento", colunas: ["Posição", "Empresa", "Faturamento"], linhas: rankingEmpresas.map(([nome,valor],i) => [i+1, nome, moduloBIMoeda(valor)]) }
+      { titulo: temFaturamentoDetalhado ? "Maiores empresas por faturamento" : "Empresas com mais aprendizes", colunas: ["Posição", "Empresa", temFaturamentoDetalhado ? "Faturamento" : "Aprendizes"], linhas: rankingEmpresas.map(([nome,valor],i) => [i+1, nome, temFaturamentoDetalhado ? moduloBIMoeda(valor) : moduloBINumeroFormatado(paraSomar.filter(r => String(r.empresa || "Empresa não informada") === nome).length)]) }
     ]);
 
-    const mensal = moduloBIAgruparPorMes(paraSomar, "faturamento");
-
+    const mensal = temFaturamentoDetalhado
+      ? moduloBIAgruparPorMes(paraSomar, "faturamento")
+      : (() => {
+          const mapa = new Map();
+          paraSomar.forEach(r => { const chave = moduloBIChaveMes(r); if (moduloBIAno(r) && moduloBIMes(r)) mapa.set(chave, (mapa.get(chave) || 0) + 1); });
+          const itens = [...mapa.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+          return { labels: itens.map(([k]) => { const [a,m] = k.split("-"); return `${moduloBIMesNome(m).slice(0,3)}/${a}`; }), valores: itens.map(([,v]) => v) };
+        })();
+    const tituloGraficoCarteira = moduloBI$("bi-carteira-grafico-faturamento")?.closest("article")?.querySelector("h3");
+    if (tituloGraficoCarteira) tituloGraficoCarteira.textContent = temFaturamentoDetalhado ? "Faturamento por mês de referência" : "Aprendizes por mês de início";
     moduloBIRenderizarGrafico(
       "bi-carteira-grafico-faturamento",
       "carteiraFaturamento",
       mensal.labels,
-      [{
-        label: "Faturamento",
-        data: mensal.valores,
-        backgroundColor: "#2474c7"
-      }]
+      [{ label: temFaturamentoDetalhado ? "Faturamento" : "Aprendizes", data: mensal.valores, backgroundColor: "#3478f6" }]
     );
 
     const rankingMap = new Map();
-
     paraSomar.forEach(r => {
       const nome = String(r.angariador || "Não informado");
-      rankingMap.set(
-        nome,
-        (rankingMap.get(nome) || 0) + moduloBINumero(r.faturamento)
-      );
+      rankingMap.set(nome, (rankingMap.get(nome) || 0) + (temFaturamentoDetalhado ? moduloBINumero(r.faturamento) : 1));
     });
+    const tituloGraficoRanking = moduloBI$("bi-carteira-grafico-ranking")?.closest("article")?.querySelector("h3");
+    if (tituloGraficoRanking) tituloGraficoRanking.textContent = temFaturamentoDetalhado ? "Ranking de faturamento por angariador" : "Ranking de aprendizes por angariador";
 
     const ranking = [...rankingMap.entries()]
       .sort((a, b) => b[1] - a[1])
