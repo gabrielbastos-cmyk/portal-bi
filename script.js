@@ -3876,7 +3876,8 @@ function configurarAcessoMetasAprendiz() {
     metasAprendizInicializado = true;
     $("metas-tipo")?.addEventListener("change", carregarMetasAprendiz);
     $("metas-mes")?.addEventListener("change", renderizarMetasAprendiz);
-    $("metas-subsede")?.addEventListener("change", renderizarMetasAprendiz);
+    $("metas-subsede")?.addEventListener("change", () => { metasAtualizarFiltroUnidade(); renderizarMetasAprendiz(); });
+    $("metas-unidade")?.addEventListener("change", renderizarMetasAprendiz);
     $("metas-aprendiz-atualizar")?.addEventListener("click", carregarMetasAprendiz);
     carregarMetasAprendiz();
   }
@@ -3902,6 +3903,7 @@ async function carregarMetasAprendiz() {
     const meses=[...new Set(todos.map(r=>String(r.data_referencia).slice(0,10)))].sort();
     const sel=$("metas-mes"); if(sel){const anterior=sel.value;sel.replaceChildren();meses.slice().reverse().forEach(m=>{const o=document.createElement("option");o.value=m;o.textContent=new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});sel.appendChild(o);});if(meses.includes(anterior))sel.value=anterior;else if(meses.length)sel.value=meses[meses.length-1];}
     const subsedes=[...new Set(todos.map(r=>r.subsede).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR")); const sub=$("metas-subsede"); if(sub){const old=sub.value;sub.replaceChildren(new Option("Todas as subsedes",""));subsedes.forEach(s=>sub.add(new Option(s,s)));sub.value=subsedes.includes(old)?old:"";}
+    metasAtualizarFiltroUnidade();
     renderizarMetasAprendiz();
     if (todos.length === 0) {
       metasMostrarMensagem(
@@ -3918,17 +3920,34 @@ async function carregarMetasAprendiz() {
   finally {if(btn)btn.disabled=false;}
 }
 
+function metasAtualizarFiltroUnidade() {
+  const tipo = $("metas-tipo")?.value || "Matriz";
+  const wrap = $("metas-unidade-wrap"), sel = $("metas-unidade");
+  if (!wrap || !sel) return;
+  const ehPolo = tipo === "Polos";
+  wrap.hidden = !ehPolo;
+  if (!ehPolo) { sel.replaceChildren(new Option("Todas as unidades da subsede", "")); return; }
+  const subsede = $("metas-subsede")?.value || "";
+  const unidades = [...new Set(metasAprendizRegistros.filter(r => !subsede || r.subsede === subsede).map(r => r.local_atendimento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  const anterior = sel.value;
+  sel.replaceChildren(new Option("Todas as unidades da subsede", ""));
+  unidades.forEach(u => sel.add(new Option(u, u)));
+  sel.value = unidades.includes(anterior) ? anterior : "";
+}
+
 function renderizarMetasAprendiz() {
-  const mes=$("metas-mes")?.value||""; const subsede=$("metas-subsede")?.value||"";
-  const doMes=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===mes && (!subsede||r.subsede===subsede));
+  const mes=$("metas-mes")?.value||""; const subsede=$("metas-subsede")?.value||""; const unidade=$("metas-unidade")?.value||"";
+  const tipo=$("metas-tipo")?.value||"Matriz";
+  const doMes=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===mes && (!subsede||r.subsede===subsede) && (!unidade||r.local_atendimento===unidade));
   const agregado=doMes.reduce((a,r)=>{a.faturado+=Number(r.faturado)||0;a.jovens+=Number(r.numero_jovens)||0;a.empresas+=Number(r.qt_empresas)||0;a.metaF+=Number(r.meta_faturamento)||0;a.metaJ+=Number(r.meta_numero_jovens)||0;a.ticketNumerador+=(Number(r.ticket_medio)||0);a.n++;return a;},{faturado:0,jovens:0,empresas:0,metaF:0,metaJ:0,ticketNumerador:0,n:0});
   const ticket=agregado.n?agregado.ticketNumerador/agregado.n:0;
   const set=(id,v)=>{const e=$(id);if(e)e.textContent=v;};
   set("metas-faturado",metasMoeda(agregado.faturado));set("metas-faturamento-meta","Meta: "+metasMoeda(agregado.metaF));set("metas-jovens",metasNumero(agregado.jovens));set("metas-jovens-meta","Meta: "+metasNumero(agregado.metaJ));set("metas-empresas",metasNumero(agregado.empresas));set("metas-ticket",metasMoeda(ticket));
   const pF=metasPercentual(agregado.faturado,agregado.metaF),pJ=metasPercentual(agregado.jovens,agregado.metaJ);set("metas-faturamento-percentual",pF.toFixed(1)+"% da meta"+(agregado.metaF>0?" · faltam "+metasMoeda(Math.max(0,agregado.metaF-agregado.faturado)):""));set("metas-jovens-percentual",pJ.toFixed(1)+"% da meta"+(agregado.metaJ>0?" · faltam "+metasNumero(Math.max(0,agregado.metaJ-agregado.jovens)):""));[ ["metas-faturamento-barra",pF],["metas-jovens-barra",pJ] ].forEach(([id,p])=>{const e=$(id);if(e)e.style.width=Math.min(100,Math.max(0,p))+"%";});
-  const meses=[...new Set(metasAprendizRegistros.map(r=>String(r.data_referencia).slice(0,10)))].sort(); const historico=meses.map(m=>{const rows=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===m&&(!subsede||r.subsede===subsede));return {m,f:rows.reduce((s,r)=>s+(Number(r.faturado)||0),0),mf:rows.reduce((s,r)=>s+(Number(r.meta_faturamento)||0),0),j:rows.reduce((s,r)=>s+(Number(r.numero_jovens)||0),0),mj:rows.reduce((s,r)=>s+(Number(r.meta_numero_jovens)||0),0)};});
+  const meses=[...new Set(metasAprendizRegistros.map(r=>String(r.data_referencia).slice(0,10)))].sort(); const historico=meses.map(m=>{const rows=metasAprendizRegistros.filter(r=>String(r.data_referencia).slice(0,10)===m&&(!subsede||r.subsede===subsede)&&(!unidade||r.local_atendimento===unidade));return {m,f:rows.reduce((s,r)=>s+(Number(r.faturado)||0),0),mf:rows.reduce((s,r)=>s+(Number(r.meta_faturamento)||0),0),j:rows.reduce((s,r)=>s+(Number(r.numero_jovens)||0),0),mj:rows.reduce((s,r)=>s+(Number(r.meta_numero_jovens)||0),0)};});
   metasDesenharGrafico("metas-grafico-faturamento", "faturamento",historico.map(x=>x.m),[{label:"Faturado",data:historico.map(x=>x.f)},{label:"Meta",data:historico.map(x=>x.mf)}],true); metasDesenharGrafico("metas-grafico-jovens","jovens",historico.map(x=>x.m),[{label:"Jovens",data:historico.map(x=>x.j)},{label:"Meta",data:historico.map(x=>x.mj)}],false);
-  const porSubsede={}; doMes.forEach(r=>{const k=r.subsede||"Sem subsede";const a=porSubsede[k]||(porSubsede[k]={s:k,f:0,mf:0,j:0,t:0,n:0});a.f+=Number(r.faturado)||0;a.mf+=Number(r.meta_faturamento)||0;a.j+=Number(r.numero_jovens)||0;a.t+=Number(r.ticket_medio)||0;a.n++;}); const ranking=Object.values(porSubsede);ranking.sort((a,b)=>metasPercentual(b.f,b.mf)-metasPercentual(a.f,a.mf));const rf=$("metas-ranking-faturamento");if(rf)rf.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f,r.mf).toFixed(1)}%</td></tr>`).join("")||'<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>'; ranking.sort((a,b)=>(b.t/Math.max(1,b.n))-(a.t/Math.max(1,a.n)));const rt=$("metas-ranking-ticket");if(rt)rt.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.t/Math.max(1,r.n))}</td><td>${metasNumero(r.j)}</td></tr>`).join("")||'<tr><td colspan="3">Sem dados para os filtros selecionados.</td></tr>';
+  const thRanking=$("metas-ranking-dimensao"); if(thRanking) thRanking.textContent=tipo==="Polos"?"Unidade / Polo":"Subsede";
+  const porSubsede={}; doMes.forEach(r=>{const k=(tipo==="Polos"?r.local_atendimento:r.subsede)||"Sem identificação";const a=porSubsede[k]||(porSubsede[k]={s:k,f:0,mf:0,j:0,t:0,n:0});a.f+=Number(r.faturado)||0;a.mf+=Number(r.meta_faturamento)||0;a.j+=Number(r.numero_jovens)||0;a.t+=Number(r.ticket_medio)||0;a.n++;}); const ranking=Object.values(porSubsede);ranking.sort((a,b)=>metasPercentual(b.f,b.mf)-metasPercentual(a.f,a.mf));const rf=$("metas-ranking-faturamento");if(rf)rf.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f,r.mf).toFixed(1)}%</td></tr>`).join("")||'<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>'; ranking.sort((a,b)=>(b.t/Math.max(1,b.n))-(a.t/Math.max(1,a.n)));const rt=$("metas-ranking-ticket");if(rt)rt.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.t/Math.max(1,r.n))}</td><td>${metasNumero(r.j)}</td></tr>`).join("")||'<tr><td colspan="3">Sem dados para os filtros selecionados.</td></tr>';
 }
 
 function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
