@@ -1858,3 +1858,50 @@ textarea:focus {
     font-size: 10px;
   }
 }
+
+
+/* CONTROLE DE VAGAS APRENDIZ — estilos isolados para não interferir no portal */
+.vagas-panel-root { --v-primary:#145c37; --v-primary-hover:#10482b; --v-background:#f6f8f7; --v-surface:#fff; --v-text:#202b25; --v-muted:#707b74; --v-border:#e5eae6; --v-danger:#b42318; --v-success:#067647; color:var(--v-text); font-family:Inter,"Segoe UI",Arial,Helvetica,sans-serif; font-size:13px; line-height:1.45; width:100%; min-width:0; }
+.vagas-panel-root * { box-sizing:border-box; }
+.vagas-panel-root button,.vagas-panel-root input,.vagas-panel-root select { font:inherit; }
+.vagas-panel-root button { cursor:pointer; }
+.vagas-panel-root canvas { max-width:100%; }
+.vagas-panel-root .vagas-subtitle { margin:0; color:var(--v-muted); font-size:12px; }
+.vagas-panel-root .vagas-message { margin-bottom:14px; padding:9px 12px; color:var(--v-muted); background:var(--v-surface); border:1px solid var(--v-border); border-radius:8px; font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
+.vagas-panel-root .vagas-message.success { color:var(--v-success); background:#f0faf4; border-color:#c7e9d2; }
+.vagas-panel-root .vagas-message.error { color:var(--v-danger); background:#fff5f4; border-color:#f4d0cc; }
+.vagas-panel-root .vagas-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:11px; align-items:end; margin-bottom:15px; padding:15px; background:var(--v-surface); border:1px solid var(--v-border); border-radius:10px; }
+.vagas-panel-root .vagas-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.vagas-panel-root .vagas-field label { color:#46534a; font-size:10px; font-weight:700; }
+.vagas-panel-root .vagas-field input,.vagas-panel-root .vagas-field select { width:100%; min-width:0; min-height:35px; padding:7px 9px; color:var(--v-text); background:#fff; border:1px solid #dce3de; border-radius:6px; outline:none; font-size:11px; }
+.vagas-panel-root .vagas-field input:focus,.vagas-panel-root .vagas-field select:focus { border-color:var(--v-primary); box-shadow:0 0 0 2px rgb(20 92 55 / 8%); }
+.vagas-panel-root .vagas-btn-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:35px; padding:7px 12px; color:#34443a; background:#fff; border:1px solid #dce4de; border-radius:7px; font-size:11px; font-weight:700; white-space:nowrap; }
+.vagas-panel-root .vagas-btn-secondary:hover { background:#f7faf8; border-color:#b8c9bd; }
+.vagas-panel-root button:disabled { cursor:wait; opacity:.6; }
+.vagas-panel-root .vagas-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:15px; }
+.vagas-panel-root .vagas-kpi { display:flex; flex-direction:column; justify-content:space-between; gap:7px; min-width:0; min-height:88px; padding:14px 16px; background:#fff; border:1px solid var(--v-border); border-radius:10px; box-shadow:0 1px 3px rgb(24 39 29 / 2%); }
+.vagas-panel-root .vagas-kpi span { color:var(--v-muted); font-size:11px; font-weight:600; }
+.vagas-panel-root .vagas-kpi strong { color:var(--v-primary); font-size:clamp(23px,2.2vw,28px); line-height:1.1; font-weight:750; letter-spacing:-.6px; overflow-wrap:anywhere; }
+.vagas-panel-root .vagas-charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; margin-bottom:15px; }
+.vagas-panel-root .vagas-panel { min-width:0; padding:16px; background:#fff; border:1px solid var(--v-border); border-radius:10px; box-shadow:0 1px 3px rgb(24 39 29 / 2%); }
+.vagas-panel-root .vagas-panel h3 { margin:0 0 10px; color:#26352b; font-size:13px; line-height:1.4; font-weight:700; }
+.vagas-panel-root .vagas-panel-wide { grid-column:1 / -1; }
+.vagas-panel-root .vagas-chart-area { position:relative; width:100%; height:190px; min-width:0; }
+.vagas-panel-root .vagas-chart-area canvas { display:block; width:100% !important; max-width:100%; max-height:100%; }
+.vagas-panel-root .vagas-chart-tall { height:220px; }
+.vagas-panel-root .vagas-table-panel { margin-bottom:12px; }
+.vagas-panel-root .vagas-table-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.vagas-panel-root .vagas-table-heading h3 { margin:0 0 4px; }
+.vagas-panel-root .vagas-table-heading p { margin:0; color:var(--v-muted); font-size:10px; }
+.vagas-panel-root .vagas-table-scroll { width:100%; max-width:100%; overflow-x:auto; border:1px solid #edf0ed; border-radius:7px; }
+.vagas-panel-root table { width:100%; border-collapse:separate; border-spacing:0; white-space:nowrap; font-size:11px; }
+.vagas-panel-root thead { background:#f7f9f7; }
+.vagas-panel-root th,.vagas-panel-root td { padding:9px 11px; text-align:left; border-bottom:1px solid #edf0ed; }
+.vagas-panel-root th { color:#657168; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+.vagas-panel-root td { color:#354239; background:#fff; }
+.vagas-panel-root tbody tr:hover td { background:#f7faf8; }
+.vagas-panel-root tbody tr:last-child td { border-bottom:0; }
+@media(max-width:1050px) { .vagas-panel-root .vagas-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .vagas-panel-root .vagas-kpis { gap:10px; } .vagas-panel-root .vagas-kpi { padding:13px; } }
+@media(max-width:700px) { .vagas-panel-root .vagas-filters { grid-template-columns:minmax(0,1fr); gap:10px; padding:13px; } .vagas-panel-root .vagas-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; } .vagas-panel-root .vagas-kpi { min-height:80px; padding:12px; } .vagas-panel-root .vagas-kpi span { font-size:10px; } .vagas-panel-root .vagas-kpi strong { font-size:23px; } .vagas-panel-root .vagas-charts { grid-template-columns:minmax(0,1fr); gap:11px; } .vagas-panel-root .vagas-panel-wide { grid-column:auto; } .vagas-panel-root .vagas-panel { padding:13px; } .vagas-panel-root .vagas-chart-area { height:180px; } .vagas-panel-root .vagas-chart-tall { height:200px; } .vagas-panel-root .vagas-table-heading { align-items:flex-start; } }
+@media(prefers-reduced-motion:reduce) { .vagas-panel-root * { transition-duration:.01ms !important; } }
+
