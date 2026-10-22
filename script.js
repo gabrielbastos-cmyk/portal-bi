@@ -3902,8 +3902,19 @@ async function carregarMetasAprendiz() {
     const meses=[...new Set(todos.map(r=>String(r.data_referencia).slice(0,10)))].sort();
     const sel=$("metas-mes"); if(sel){const anterior=sel.value;sel.replaceChildren();meses.slice().reverse().forEach(m=>{const o=document.createElement("option");o.value=m;o.textContent=new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});sel.appendChild(o);});if(meses.includes(anterior))sel.value=anterior;else if(meses.length)sel.value=meses[meses.length-1];}
     const subsedes=[...new Set(todos.map(r=>r.subsede).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR")); const sub=$("metas-subsede"); if(sub){const old=sub.value;sub.replaceChildren(new Option("Todas as subsedes",""));subsedes.forEach(s=>sub.add(new Option(s,s)));sub.value=subsedes.includes(old)?old:"";}
-    renderizarMetasAprendiz(); metasMostrarMensagem(todos.length+" registros carregados.");
-  } catch(e) { console.error("Metas do Aprendiz:",e); metasMostrarMensagem("Não foi possível carregar os dados. Confira a política de leitura (RLS) da tabela bi_aprendiz_historico e as permissões do usuário. "+(e.message||""),true); }
+    renderizarMetasAprendiz();
+    if (todos.length === 0) {
+      metasMostrarMensagem(
+        "Nenhum registro foi retornado pelo Supabase. Verifique se há dados em public.bi_aprendiz_historico e se existe uma política SELECT (RLS) permitindo a leitura para este usuário autenticado. Se os dados existem no Table Editor, a causa mais provável é a política de leitura.",
+        true
+      );
+    } else {
+      metasMostrarMensagem(`${todos.length} registros carregados para ${$("metas-tipo")?.value || "Matriz"}.`);
+    }
+  } catch(e) {
+    console.error("Metas do Aprendiz:",e);
+    metasMostrarMensagem("Falha ao consultar bi_aprendiz_historico: "+(e.message||"erro desconhecido")+". Confira a conexão, a política SELECT (RLS) e as permissões do usuário.",true);
+  }
   finally {if(btn)btn.disabled=false;}
 }
 
@@ -3920,4 +3931,20 @@ function renderizarMetasAprendiz() {
   const porSubsede={}; doMes.forEach(r=>{const k=r.subsede||"Sem subsede";const a=porSubsede[k]||(porSubsede[k]={s:k,f:0,mf:0,j:0,t:0,n:0});a.f+=Number(r.faturado)||0;a.mf+=Number(r.meta_faturamento)||0;a.j+=Number(r.numero_jovens)||0;a.t+=Number(r.ticket_medio)||0;a.n++;}); const ranking=Object.values(porSubsede);ranking.sort((a,b)=>metasPercentual(b.f,b.mf)-metasPercentual(a.f,a.mf));const rf=$("metas-ranking-faturamento");if(rf)rf.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f,r.mf).toFixed(1)}%</td></tr>`).join("")||'<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>'; ranking.sort((a,b)=>(b.t/Math.max(1,b.n))-(a.t/Math.max(1,a.n)));const rt=$("metas-ranking-ticket");if(rt)rt.innerHTML=ranking.map(r=>`<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.t/Math.max(1,r.n))}</td><td>${metasNumero(r.j)}</td></tr>`).join("")||'<tr><td colspan="3">Sem dados para os filtros selecionados.</td></tr>';
 }
 
-function metasDesenharGrafico(id,chave,labels,datasets,moeda) {const canvas=$(id);if(!canvas||!window.Chart)return;if(metasGraficos[chave])metasGraficos[chave].destroy();metasGraficos[chave]=new Chart(canvas,{type:"bar",data:{labels:labels.map(m=>new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),datasets:datasets.map((d,i)=>({...d,backgroundColor:i===0?"#17365d":"#8db6df",borderRadius:4}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c=>c.dataset.label+": "+(moeda?metasMoeda(c.raw):metasNumero(c.raw))}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>moeda?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):metasNumero(v)}}}}});}
+function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
+  const canvas=$(id); if(!canvas||!window.Chart)return;
+  if(metasGraficos[chave])metasGraficos[chave].destroy();
+  const rotulosVisiveis={id:"metasRotulosVisiveis",afterDatasetsDraw(chart){
+    const ctx=chart.ctx;ctx.save();
+    chart.data.datasets.forEach((dataset,di)=>{const meta=chart.getDatasetMeta(di);if(meta.hidden)return;
+      meta.data.forEach((bar,i)=>{const valor=Number(dataset.data[i]);if(!Number.isFinite(valor))return;
+        const texto=moeda?metasMoeda(valor):metasNumero(valor);const pos=bar.tooltipPosition();
+        ctx.font="700 11px Manrope, Arial, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";
+        const largura=ctx.measureText(texto).width+10;const x=pos.x-largura/2;const y=pos.y-9;
+        ctx.fillStyle="rgba(255,255,255,.94)";ctx.beginPath();ctx.roundRect(x,y-14,largura,18,5);ctx.fill();
+        ctx.fillStyle=di===0?"#17365d":"#527ba7";ctx.fillText(texto,pos.x,y+1);
+      });
+    });ctx.restore();
+  }};
+  metasGraficos[chave]=new Chart(canvas,{type:"bar",data:{labels:labels.map(m=>new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),datasets:datasets.map((d,i)=>({...d,backgroundColor:i===0?"#17365d":"#8db6df",borderColor:i===0?"#102744":"#6f9bc8",borderWidth:1,borderRadius:7,maxBarThickness:42,categoryPercentage:.72,barPercentage:.82}))},plugins:[rotulosVisiveis],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:26,right:8,left:4,bottom:0}},plugins:{legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle",padding:20,boxWidth:8,font:{family:"Manrope",size:12,weight:"600"},color:"#34445a"}},tooltip:{backgroundColor:"#102744",titleFont:{family:"Manrope",weight:"700"},bodyFont:{family:"DM Sans"},padding:12,cornerRadius:8,callbacks:{label:c=>c.dataset.label+": "+(moeda?metasMoeda(c.raw):metasNumero(c.raw))}}},scales:{x:{grid:{display:false},ticks:{color:"#66758a",font:{family:"DM Sans",size:11,weight:"600"}}},y:{beginAtZero:true,grace:"15%",grid:{color:"#edf1f6",drawBorder:false},border:{display:false},ticks:{color:"#778397",padding:8,font:{family:"DM Sans",size:10},callback:v=>moeda?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL",maximumFractionDigits:1}).format(v):metasNumero(v)}}}}});
+}
