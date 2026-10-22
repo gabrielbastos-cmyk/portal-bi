@@ -949,7 +949,20 @@
           <article class="metas-card"><span>Ticket médio</span><strong id="metas-ticket">—</strong><small>Conforme registros da base</small></article>
         </div>
         <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="metas-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="metas-grafico-jovens"></canvas></div></article></div>
-        <div class="metas-graficos metas-ranking-layout"><article class="metas-panel metas-ranking-principal"><h3>Ranking de subsedes — atingimento de faturamento</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-dimensao">Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead><tbody id="metas-ranking-faturamento"></tbody></table></div></article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
+        <div class="metas-graficos metas-ranking-layout"><article class="metas-panel metas-ranking-principal">
+          <h3 id="metas-ranking-titulo">Ranking de subsedes — atingimento de faturamento</h3>
+          <div class="metas-ranking-botoes" role="group" aria-label="Selecionar indicador do ranking">
+            <button type="button" data-modo-ranking="faturamento" class="ativo" aria-pressed="true">Faturamento</button>
+            <button type="button" data-modo-ranking="aprendiz" aria-pressed="false">Aprendiz</button>
+          </div>
+          <input type="hidden" id="metas-ranking-modo" value="faturamento">
+          <div class="metas-table-scroll">
+            <table>
+              <thead><tr id="metas-ranking-cabecalho"><th id="metas-ranking-dimensao">Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead>
+              <tbody id="metas-ranking-faturamento"></tbody>
+            </table>
+          </div>
+        </article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
         <p class="metas-nota">Os cartões representam o mês selecionado. Os gráficos apresentam o histórico mensal disponível na tabela bi_aprendiz_historico.</p>
       </section>
 
