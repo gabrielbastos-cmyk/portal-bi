@@ -3212,6 +3212,24 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (_event, elementos) => {
+        if (!elementos?.length) return;
+        const indice = elementos[0].index;
+        const rotulo = labels[indice];
+        const filtroPorGrafico = {
+          "vagas-graficoStatus": ["vagas-filtroStatus", rotulo],
+          "vagas-graficoSubsede": ["vagas-filtroSubsede", rotulo]
+        };
+        const destino = filtroPorGrafico[id];
+        if (!destino) return;
+        const select = $(destino[0]);
+        if (!select) return;
+        const opcao = [...select.options].find(o => o.value === rotulo || o.textContent === rotulo);
+        if (!opcao) return;
+        select.value = opcao.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        $( "vagas-aprendiz-section" )?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
 
       /*
        * Os números já ficam visíveis.
@@ -4085,3 +4103,59 @@ function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
   }};
   metasGraficos[chave]=new Chart(canvas,{type:"bar",data:{labels:labels.map(m=>new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),datasets:datasets.map((d,i)=>({...d,backgroundColor:i===0?"#17365d":"#8db6df",borderColor:i===0?"#102744":"#6f9bc8",borderWidth:1,borderRadius:7,maxBarThickness:42,categoryPercentage:.72,barPercentage:.82}))},plugins:[rotulosVisiveis],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:26,right:8,left:4,bottom:0}},plugins:{legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle",padding:20,boxWidth:8,font:{family:"Manrope",size:12,weight:"600"},color:"#34445a"}},tooltip:{backgroundColor:"#102744",titleFont:{family:"Manrope",weight:"700"},bodyFont:{family:"DM Sans"},padding:12,cornerRadius:8,callbacks:{label:c=>c.dataset.label+": "+(moeda?metasMoeda(c.raw):metasNumero(c.raw))}}},scales:{x:{grid:{display:false},ticks:{color:"#66758a",font:{family:"DM Sans",size:11,weight:"600"}}},y:{beginAtZero:true,grace:"15%",grid:{color:"#edf1f6",drawBorder:false},border:{display:false},ticks:{color:"#778397",padding:8,font:{family:"DM Sans",size:10},callback:v=>moeda?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL",maximumFractionDigits:1}).format(v):metasNumero(v)}}}}});
 }
+
+// ==================================================
+// NAVEGAÇÃO LATERAL — item ativo em todas as seções
+// ==================================================
+function configurarNavegacaoLateral() {
+  const links = [...document.querySelectorAll(".sidebar .nav-link")];
+  if (!links.length) return;
+
+  const normalizarHash = value => {
+    const hash = String(value || "").replace(/^#/, "");
+    if (!hash) return "inicio";
+    // O link "Meus dashboards" aponta para uma seção dentro da visão geral.
+    return hash;
+  };
+
+  const definirAtivo = hash => {
+    const alvo = normalizarHash(hash);
+    links.forEach(link => {
+      const ativo = normalizarHash(link.getAttribute("href")) === alvo ||
+        (alvo === "dashboards" && link.getAttribute("href") === "#inicio");
+      link.classList.toggle("active", ativo);
+      if (ativo) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+  };
+
+  links.forEach(link => link.addEventListener("click", () => {
+    const href = link.getAttribute("href");
+    if (href?.startsWith("#")) definirAtivo(href);
+  }));
+
+  window.addEventListener("hashchange", () => definirAtivo(location.hash));
+
+  // Também atualiza o menu conforme a seção visível durante a rolagem.
+  if ("IntersectionObserver" in window) {
+    const ids = links.map(link => normalizarHash(link.getAttribute("href")))
+      .filter(id => id && id !== "inicio")
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    const observer = new IntersectionObserver(entries => {
+      const visiveis = entries.filter(e => e.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      if (visiveis[0]?.target?.id) definirAtivo("#" + visiveis[0].target.id);
+    }, { rootMargin: "-15% 0px -65% 0px", threshold: [0, .15, .35, .6] });
+    [...new Set(ids)].forEach(el => observer.observe(el));
+  }
+
+  definirAtivo(location.hash || "#inicio");
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", configurarNavegacaoLateral, { once: true });
+} else {
+  configurarNavegacaoLateral();
+}
+
