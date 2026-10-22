@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -344,6 +343,10 @@
         hidden
       >
         <span class="nav-icon">⌖</span> Análise Geográfica EaD
+      </a>
+
+      <a class="nav-link" href="#metas-aprendiz-section" id="metas-aprendiz-nav-link" hidden>
+        <span class="nav-icon">▤</span> Metas do Aprendiz
       </a>
 
       <a
@@ -843,6 +846,27 @@
           atendimento EaD. Casos que exijam análise adicional devem ser
           avaliados pela equipe responsável.
         </p>
+      </section>
+
+
+      <!-- METAS DO APRENDIZ -->
+      <section id="metas-aprendiz-section" class="dashboard-section" hidden>
+        <div class="section-heading"><div><p class="section-kicker">DESEMPENHO E RESULTADOS</p><h2>Metas do Aprendiz</h2><p class="muted">Acompanhe o realizado, as metas e a evolução mensal por unidade.</p></div><button type="button" id="metas-aprendiz-atualizar" class="access-pill">↻ Atualizar dados</button></div>
+        <p id="metas-aprendiz-message" role="status" aria-live="polite"></p>
+        <div class="metas-filtros">
+          <label>Tipo de unidade<select id="metas-tipo"><option value="Matriz">Matriz</option><option value="Polos">Polos</option></select></label>
+          <label>Mês de referência<select id="metas-mes"><option value="">Carregando meses...</option></select></label>
+          <label>Subsede<select id="metas-subsede"><option value="">Todas as subsedes</option></select></label>
+        </div>
+        <div class="metas-kpis">
+          <article class="metas-card"><span>Faturamento realizado</span><strong id="metas-faturado">—</strong><small id="metas-faturamento-meta">Meta: —</small><div class="metas-progress"><i id="metas-faturamento-barra"></i></div><small id="metas-faturamento-percentual">—</small></article>
+          <article class="metas-card"><span>Jovens ativos</span><strong id="metas-jovens">—</strong><small id="metas-jovens-meta">Meta: —</small><div class="metas-progress"><i id="metas-jovens-barra"></i></div><small id="metas-jovens-percentual">—</small></article>
+          <article class="metas-card"><span>Empresas</span><strong id="metas-empresas">—</strong><small>Quantidade no período selecionado</small></article>
+          <article class="metas-card"><span>Ticket médio</span><strong id="metas-ticket">—</strong><small>Conforme registros da base</small></article>
+        </div>
+        <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="metas-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="metas-grafico-jovens"></canvas></div></article></div>
+        <div class="metas-graficos"><article class="metas-panel"><h3>Ranking de subsedes — atingimento de faturamento</h3><div class="metas-table-scroll"><table><thead><tr><th>Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead><tbody id="metas-ranking-faturamento"></tbody></table></div></article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th>Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
+        <p class="metas-nota">Os cartões representam o mês selecionado. Os gráficos apresentam o histórico mensal disponível na tabela bi_aprendiz_historico.</p>
       </section>
 
       <!-- ADMINISTRAÇÃO -->
