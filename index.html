@@ -247,47 +247,88 @@
       }
     }
 
-
-    /* Botões do ranking alternável: Faturamento / Aprendiz */
-    .metas-ranking-topo {
+    /* Ajuste visual do ranking: evita o grande espaço vazio e melhora a leitura */
+    .metas-graficos.metas-ranking-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 18px;
+      margin-top: 22px;
+    }
+    .metas-ranking-principal {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      align-self: start;
+      height: auto !important;
+      min-height: 0 !important;
+      gap: 16px;
+      padding: 22px;
+      overflow: visible;
+    }
+    .metas-ranking-principal h3 {
+      margin: 0;
+      line-height: 1.35;
+    }
+    .metas-ranking-principal .metas-ranking-botoes {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
       flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 14px;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0;
+      padding: 5px;
+      border: 1px solid #e0e7f0;
+      border-radius: 12px;
+      background: #f4f7fb;
     }
-    .metas-ranking-topo h3 { margin: 0; }
-    .metas-ranking-botoes {
-      display: inline-flex;
-      gap: 6px;
-      padding: 4px;
-      border: 1px solid var(--border, #e3e8f0);
-      border-radius: 10px;
-      background: #f4f6fa;
-    }
-    .metas-ranking-botao {
-      border: 0;
-      border-radius: 7px;
-      padding: 9px 13px;
+    .metas-ranking-principal .metas-ranking-botoes button {
+      min-height: 42px;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-radius: 8px;
       background: transparent;
-      color: var(--navy, #17365d);
+      color: #17365d;
       font: inherit;
-      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
+      transition: background .18s ease, color .18s ease, box-shadow .18s ease;
     }
-    .metas-ranking-botao.ativo,
-    .metas-ranking-botao[aria-pressed="true"] {
-      color: #fff;
+    .metas-ranking-principal .metas-ranking-botoes button.active,
+    .metas-ranking-principal .metas-ranking-botoes button[aria-pressed="true"] {
       background: #17365d;
-      box-shadow: 0 2px 7px rgba(16, 44, 76, .18);
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(16, 44, 76, .18);
     }
-    .metas-ranking-botao:focus-visible {
-      outline: 3px solid #8db6df;
-      outline-offset: 2px;
+    .metas-ranking-principal .metas-table-scroll {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      margin: 0;
     }
-\n  </style>
+    .metas-ranking-principal table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .metas-ranking-principal th,
+    .metas-ranking-principal td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .metas-ranking-principal tbody tr:hover {
+      background: #f5f8fc;
+    }
+    @media (max-width: 700px) {
+      .metas-ranking-principal { padding: 16px; }
+      .metas-ranking-principal th,
+      .metas-ranking-principal td { padding: 10px 8px; white-space: nowrap; }
+      .metas-ranking-principal .metas-ranking-botoes { width: 100%; }
+      .metas-ranking-principal .metas-ranking-botoes button { flex: 1; padding: 10px; }
+    }
+
+  </style>
 </head>
 
 <body>
@@ -908,7 +949,7 @@
           <article class="metas-card"><span>Ticket médio</span><strong id="metas-ticket">—</strong><small>Conforme registros da base</small></article>
         </div>
         <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="metas-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="metas-grafico-jovens"></canvas></div></article></div>
-        <div class="metas-graficos"><article class="metas-panel"><div class="metas-ranking-topo"><h3 id="metas-ranking-titulo">Ranking de subsedes — atingimento de faturamento</h3><div class="metas-ranking-botoes" role="group" aria-label="Indicador do ranking"><button type="button" class="metas-ranking-botao ativo" data-modo-ranking="faturamento" aria-pressed="true">Faturamento</button><button type="button" class="metas-ranking-botao" data-modo-ranking="aprendiz" aria-pressed="false">Aprendiz</button></div><input type="hidden" id="metas-ranking-modo" value="faturamento"></div><div class="metas-table-scroll"><table><thead><tr id="metas-ranking-cabecalho"><th id="metas-ranking-dimensao">Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead><tbody id="metas-ranking-faturamento"></tbody></table></div></article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
+        <div class="metas-graficos metas-ranking-layout"><article class="metas-panel metas-ranking-principal"><h3>Ranking de subsedes — atingimento de faturamento</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-dimensao">Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead><tbody id="metas-ranking-faturamento"></tbody></table></div></article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
         <p class="metas-nota">Os cartões representam o mês selecionado. Os gráficos apresentam o histórico mensal disponível na tabela bi_aprendiz_historico.</p>
       </section>
 
