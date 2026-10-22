@@ -3897,6 +3897,20 @@ function configurarAcessoMetasAprendiz() {
     $("metas-subsede")?.addEventListener("change", () => { metasAtualizarFiltroUnidade(); renderizarMetasAprendiz(); });
     $("metas-unidade")?.addEventListener("change", renderizarMetasAprendiz);
     $("metas-aprendiz-atualizar")?.addEventListener("click", carregarMetasAprendiz);
+    $("metas-ranking-modo")?.addEventListener("change", renderizarMetasAprendiz);
+    document.querySelectorAll("[data-modo-ranking]").forEach(botao => {
+      botao.addEventListener("click", () => {
+        const modo = botao.dataset.modoRanking || "faturamento";
+        const campo = $("metas-ranking-modo");
+        if (campo) campo.value = modo;
+        document.querySelectorAll("[data-modo-ranking]").forEach(outro => {
+          const ativo = outro === botao;
+          outro.classList.toggle("ativo", ativo);
+          outro.setAttribute("aria-pressed", String(ativo));
+        });
+        renderizarMetasAprendiz();
+      });
+    });
     carregarMetasAprendiz();
   }
 }
@@ -4047,10 +4061,27 @@ function renderizarMetasAprendiz() {
     false
   );
 
+  const dimensaoRanking = tipo === "Polos" ? "Unidade / Polo" : "Subsede";
   const thRanking = $("metas-ranking-dimensao");
-  if (thRanking) thRanking.textContent = tipo === "Polos" ? "Unidade / Polo" : "Subsede";
+  if (thRanking) thRanking.textContent = dimensaoRanking;
   const thTicket = $("metas-ranking-ticket-dimensao");
-  if (thTicket) thTicket.textContent = tipo === "Polos" ? "Unidade / Polo" : "Subsede";
+  if (thTicket) thTicket.textContent = dimensaoRanking;
+
+  // O botão alterna o mesmo ranking entre faturamento e atingimento de jovens.
+  const modoRanking = $("metas-ranking-modo")?.value || "faturamento";
+  const tituloRanking = $("metas-ranking-titulo");
+  const tabelaRanking = $("metas-ranking-faturamento");
+  const cabecalhoRanking = $("metas-ranking-cabecalho");
+  if (tituloRanking) {
+    tituloRanking.textContent = modoRanking === "aprendiz"
+      ? "Ranking de subsedes — atingimento de aprendizes"
+      : "Ranking de subsedes — atingimento de faturamento";
+  }
+  if (cabecalhoRanking) {
+    cabecalhoRanking.innerHTML = modoRanking === "aprendiz"
+      ? `<th id="metas-ranking-dimensao">${dimensaoRanking}</th><th>Jovens realizados</th><th>Meta de jovens</th><th>Atingimento</th>`
+      : `<th id="metas-ranking-dimensao">${dimensaoRanking}</th><th>Faturado</th><th>Meta</th><th>Atingimento</th>`;
+  }
 
   // Agrupa "Polos Curitiba" dentro de "Curitiba" apenas na visão Matriz.
   // Assim, o total geral continua somando cada linha original uma única vez.
@@ -4069,12 +4100,19 @@ function renderizarMetasAprendiz() {
   });
 
   const ranking = Object.values(porSubsede);
-  ranking.sort((a, b) => metasPercentual(b.f, b.mf) - metasPercentual(a.f, a.mf));
+  const modoRankingAtual = $("metas-ranking-modo")?.value || "faturamento";
+  ranking.sort((a, b) => modoRankingAtual === "aprendiz"
+    ? metasPercentual(b.j, b.mj) - metasPercentual(a.j, a.mj)
+    : metasPercentual(b.f, b.mf) - metasPercentual(a.f, a.mf));
   const rf = $("metas-ranking-faturamento");
   if (rf) {
-    rf.innerHTML = ranking.map(r =>
-      `<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f, r.mf).toFixed(1)}%</td></tr>`
-    ).join("") || '<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>';
+    rf.innerHTML = modoRankingAtual === "aprendiz"
+      ? ranking.map(r =>
+          `<tr><td>${metasEscapar(r.s)}</td><td>${metasNumero(r.j)}</td><td>${metasNumero(r.mj)}</td><td>${metasPercentual(r.j, r.mj).toFixed(1)}%</td></tr>`
+        ).join("") || '<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>'
+      : ranking.map(r =>
+          `<tr><td>${metasEscapar(r.s)}</td><td>${metasMoeda(r.f)}</td><td>${metasMoeda(r.mf)}</td><td>${metasPercentual(r.f, r.mf).toFixed(1)}%</td></tr>`
+        ).join("") || '<tr><td colspan="4">Sem dados para os filtros selecionados.</td></tr>';
   }
 
   ranking.sort((a, b) => (b.t / Math.max(1, b.n)) - (a.t / Math.max(1, a.n)));
@@ -4094,10 +4132,14 @@ function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
     chart.data.datasets.forEach((dataset,di)=>{const meta=chart.getDatasetMeta(di);if(meta.hidden)return;
       meta.data.forEach((bar,i)=>{const valor=Number(dataset.data[i]);if(!Number.isFinite(valor))return;
         const texto=moeda?metasMoeda(valor):metasNumero(valor);const pos=bar.tooltipPosition();
-        ctx.font="700 11px Manrope, Arial, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";
-        const largura=ctx.measureText(texto).width+10;const x=pos.x-largura/2;const y=pos.y-9;
-        ctx.fillStyle="rgba(255,255,255,.94)";ctx.beginPath();ctx.roundRect(x,y-14,largura,18,5);ctx.fill();
-        ctx.fillStyle=di===0?"#17365d":"#527ba7";ctx.fillText(texto,pos.x,y+1);
+        ctx.font="700 10px Manrope, Arial, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";
+        const largura=ctx.measureText(texto).width+8;
+        // Afasta verticalmente os rótulos das duas barras para reduzir sobreposição.
+        const deslocamento = di === 0 ? 9 : 25;
+        const x=Math.max(2,Math.min(chart.width-largura-2,pos.x-largura/2));
+        const y=Math.max(18,pos.y-deslocamento);
+        ctx.fillStyle="rgba(255,255,255,.96)";ctx.beginPath();ctx.roundRect(x,y-13,largura,16,4);ctx.fill();
+        ctx.fillStyle=di===0?"#17365d":"#527ba7";ctx.fillText(texto,pos.x,y);
       });
     });ctx.restore();
   }};
@@ -4158,4 +4200,3 @@ if (document.readyState === "loading") {
 } else {
   configurarNavegacaoLateral();
 }
-
