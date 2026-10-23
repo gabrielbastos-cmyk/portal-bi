@@ -4124,28 +4124,141 @@ function renderizarMetasAprendiz() {
   }
 }
 
-function metasDesenharGrafico(id,chave,labels,datasets,moeda) {
-  const canvas=$(id); if(!canvas||!window.Chart)return;
-  if(metasGraficos[chave])metasGraficos[chave].destroy();
-  const rotulosVisiveis={id:"metasRotulosVisiveis",afterDatasetsDraw(chart){
-    const ctx=chart.ctx;ctx.save();
-    chart.data.datasets.forEach((dataset,di)=>{const meta=chart.getDatasetMeta(di);if(meta.hidden)return;
-      meta.data.forEach((bar,i)=>{const valor=Number(dataset.data[i]);if(!Number.isFinite(valor))return;
-        const texto=moeda?metasMoeda(valor):metasNumero(valor);const pos=bar.tooltipPosition();
-        ctx.font="700 10px Manrope, Arial, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";
-        const largura=ctx.measureText(texto).width+8;
-        // Afasta verticalmente os rótulos das duas barras para reduzir sobreposição.
-        const deslocamento = di === 0 ? 9 : 25;
-        const x=Math.max(2,Math.min(chart.width-largura-2,pos.x-largura/2));
-        const y=Math.max(18,pos.y-deslocamento);
-        ctx.fillStyle="rgba(255,255,255,.96)";ctx.beginPath();ctx.roundRect(x,y-13,largura,16,4);ctx.fill();
-        ctx.fillStyle=di===0?"#17365d":"#527ba7";ctx.fillText(texto,pos.x,y);
-      });
-    });ctx.restore();
-  }};
-  metasGraficos[chave]=new Chart(canvas,{type:"bar",data:{labels:labels.map(m=>new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),datasets:datasets.map((d,i)=>({...d,backgroundColor:i===0?"#17365d":"#8db6df",borderColor:i===0?"#102744":"#6f9bc8",borderWidth:1,borderRadius:7,maxBarThickness:42,categoryPercentage:.72,barPercentage:.82}))},plugins:[rotulosVisiveis],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:26,right:8,left:4,bottom:0}},plugins:{legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle",padding:20,boxWidth:8,font:{family:"Manrope",size:12,weight:"600"},color:"#34445a"}},tooltip:{backgroundColor:"#102744",titleFont:{family:"Manrope",weight:"700"},bodyFont:{family:"DM Sans"},padding:12,cornerRadius:8,callbacks:{label:c=>c.dataset.label+": "+(moeda?metasMoeda(c.raw):metasNumero(c.raw))}}},scales:{x:{grid:{display:false},ticks:{color:"#66758a",font:{family:"DM Sans",size:11,weight:"600"}}},y:{beginAtZero:true,grace:"15%",grid:{color:"#edf1f6",drawBorder:false},border:{display:false},ticks:{color:"#778397",padding:8,font:{family:"DM Sans",size:10},callback:v=>moeda?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL",maximumFractionDigits:1}).format(v):metasNumero(v)}}}}});
-}
+function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
+  const canvas = $(id);
+  if (!canvas || !window.Chart) return;
 
+  if (metasGraficos[chave]) metasGraficos[chave].destroy();
+
+  // Rótulos compactos para não se sobreporem em gráficos com vários meses.
+  // O tooltip continua mostrando o valor completo e preciso.
+  const formatarRotulo = valor => {
+    const numero = Number(valor);
+    if (!Number.isFinite(numero)) return "";
+    if (moeda) {
+      return new Intl.NumberFormat("pt-BR", {
+        style: "currency", currency: "BRL", notation: "compact",
+        maximumFractionDigits: 1, minimumFractionDigits: 0
+      }).format(numero);
+    }
+    if (Math.abs(numero) >= 1000) {
+      return new Intl.NumberFormat("pt-BR", {
+        notation: "compact", maximumFractionDigits: 1
+      }).format(numero);
+    }
+    return metasNumero(numero);
+  };
+
+  const rotulosVisiveis = {
+    id: "metasRotulosVisiveis",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = "600 9px Manrope, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+
+      chart.data.datasets.forEach((dataset, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+
+        meta.data.forEach((bar, i) => {
+          const valor = Number(dataset.data[i]);
+          if (!Number.isFinite(valor)) return;
+          const texto = formatarRotulo(valor);
+          if (!texto) return;
+
+          const pos = bar.tooltipPosition();
+          // Os dois conjuntos ficam em alturas alternadas; rótulos compactos
+          // deixam os valores legíveis sem formar uma faixa de texto contínua.
+          const deslocamento = di === 0 ? 8 : 21;
+          const x = Math.max(25, Math.min(chart.width - 25, pos.x));
+          const y = Math.max(15, pos.y - deslocamento);
+          ctx.fillStyle = di === 0 ? "#17365d" : "#527ba7";
+          ctx.fillText(texto, x, y, 54);
+        });
+      });
+      ctx.restore();
+    }
+  };
+
+  metasGraficos[chave] = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: labels.map(m => new Date(m + "T12:00:00").toLocaleDateString("pt-BR", {
+        month: "short", year: "2-digit"
+      })),
+      datasets: datasets.map((d, i) => ({
+        ...d,
+        backgroundColor: i === 0 ? "#17365d" : "#8db6df",
+        borderColor: i === 0 ? "#102744" : "#6f9bc8",
+        borderWidth: 1,
+        borderRadius: 7,
+        maxBarThickness: 34,
+        categoryPercentage: .72,
+        barPercentage: .78
+      }))
+    },
+    plugins: [rotulosVisiveis],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 34, right: 8, left: 4, bottom: 0 } },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            usePointStyle: true,
+            pointStyle: "circle",
+            padding: 20,
+            boxWidth: 8,
+            font: { family: "Manrope", size: 12, weight: "600" },
+            color: "#34445a"
+          }
+        },
+        tooltip: {
+          backgroundColor: "#102744",
+          titleFont: { family: "Manrope", weight: "700" },
+          bodyFont: { family: "DM Sans" },
+          padding: 12,
+          cornerRadius: 8,
+          callbacks: {
+            label: c => c.dataset.label + ": " + (moeda ? metasMoeda(c.raw) : metasNumero(c.raw))
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: "#66758a",
+            font: { family: "DM Sans", size: 11, weight: "600" },
+            maxRotation: 0,
+            minRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 12
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grace: "20%",
+          grid: { color: "#edf1f6", drawBorder: false },
+          border: { display: false },
+          ticks: {
+            color: "#778397",
+            padding: 8,
+            font: { family: "DM Sans", size: 10 },
+            callback: v => moeda
+              ? new Intl.NumberFormat("pt-BR", {
+                  notation: "compact", style: "currency", currency: "BRL", maximumFractionDigits: 1
+                }).format(v)
+              : metasNumero(v)
+          }
+        }
+      }
+    }
+  });
+}
 // ==================================================
 // NAVEGAÇÃO LATERAL — item ativo em todas as seções
 // ==================================================
