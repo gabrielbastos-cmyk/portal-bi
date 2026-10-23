@@ -2241,3 +2241,30 @@ textarea:focus {
     align-items: flex-start;
   }
 }
+/* Ajustes específicos de Metas Estágio: não aplicar altura de gráfico ao cabeçalho da tabela. */
+.estagio-tabela > .metas-ranking-cabecalho {
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.estagio-tabela > .metas-table-scroll {
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0;
+}
+.estagio-tabela {
+  height: auto;
+  min-height: 0;
+  margin-top: 16px;
+}
+.estagio-ranking-ticket > .estagio-ranking-ticket-chart {
+  height: max(280px, 34px * var(--estagio-ranking-itens, 8));
+  min-height: 280px;
+  max-height: 680px;
+}
