@@ -195,7 +195,7 @@ function mostrarLogin() {
   [
     "portal-section", "admin-section", "admin-nav-link",
     "substituicoes-section", "substituicoes-nav-link",
-    "ead-section", "ead-nav-link", "metas-aprendiz-section", "metas-aprendiz-nav-link"
+    "ead-section", "ead-nav-link", "metas-aprendiz-section", "metas-aprendiz-nav-link", "metas-estagio-section", "metas-estagio-nav-link"
   ].forEach(id => {
     if ($(id)) $(id).hidden = true;
   });
@@ -354,6 +354,7 @@ async function carregarDashboards() {
   configurarAcessoSubstituicoes();
   configurarAcessoEaD();
   configurarAcessoMetasAprendiz();
+  configurarAcessoMetasEstagio();
 }
 
 function aplicarFiltrosDashboards() {
@@ -4313,3 +4314,144 @@ if (document.readyState === "loading") {
 } else {
   configurarNavegacaoLateral();
 }
+
+
+// ==================================================
+// METAS ESTÁGIO — usa o último registro disponível de cada mês
+// ==================================================
+let metasEstagioRegistros = [];
+let metasEstagioGraficos = {};
+let metasEstagioInicializado = false;
+const METAS_ESTAGIO_TABELA = "metas_estagio";
+
+function configurarAcessoMetasEstagio() {
+  const section = $("metas-estagio-section");
+  const nav = $("metas-estagio-nav-link");
+  if (!section || !nav) return;
+  const allowed = Boolean(currentUser);
+  section.hidden = !allowed;
+  nav.hidden = !allowed;
+  if (!allowed || metasEstagioInicializado) return;
+  metasEstagioInicializado = true;
+  $("estagio-mes")?.addEventListener("change", renderizarMetasEstagio);
+  $("estagio-unidade")?.addEventListener("change", renderizarMetasEstagio);
+  $("metas-estagio-atualizar")?.addEventListener("click", carregarMetasEstagio);
+  $("estagio-exportar")?.addEventListener("click", exportarMetasEstagio);
+  carregarMetasEstagio();
+}
+
+function estagioMoeda(v) {
+  return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:2}).format(Number(v)||0);
+}
+function estagioNumero(v) {
+  return new Intl.NumberFormat("pt-BR",{maximumFractionDigits:1}).format(Number(v)||0);
+}
+function estagioPct(v,meta) { return Number(meta)>0 ? Number(v)/Number(meta)*100 : 0; }
+function estagioDataBR(v) {
+  if (!v) return "—";
+  const d = new Date(String(v).slice(0,10)+"T12:00:00");
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("pt-BR");
+}
+function estagioMesLabel(m) {
+  const d = new Date(m+"-15T12:00:00");
+  return d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+}
+function estagioMensagem(msg, erro=false) {
+  const el=$("metas-estagio-message");
+  if(el){el.textContent=msg;el.style.color=erro?"#b42318":"";}
+}
+async function carregarMetasEstagio() {
+  if (!sb) return estagioMensagem("Conexão com Supabase não encontrada.",true);
+  const btn=$("metas-estagio-atualizar"); if(btn) btn.disabled=true;
+  estagioMensagem("Carregando dados de Metas Estágio...");
+  try {
+    let rows=[], offset=0; const size=1000;
+    while(true) {
+      const {data,error}=await sb.from(METAS_ESTAGIO_TABELA)
+        .select("id,unidade,faturado,numero_jovens,ticket_medio,meta_numero_jovens,meta_faturamento,data")
+        .order("data",{ascending:true}).range(offset,offset+size-1);
+      if(error) throw error;
+      rows.push(...(data||[]));
+      if(!data||data.length<size) break;
+      offset+=size;
+    }
+    // Descobre a data máxima em cada mês e usa somente o snapshot daquela data.
+    const ultimaDataMes={};
+    rows.forEach(r=>{
+      const data=String(r.data||"").slice(0,10), mes=data.slice(0,7);
+      if(data && (!ultimaDataMes[mes] || data>ultimaDataMes[mes])) ultimaDataMes[mes]=data;
+    });
+    metasEstagioRegistros=rows.filter(r=>{
+      const data=String(r.data||"").slice(0,10);
+      return data && ultimaDataMes[data.slice(0,7)]===data;
+    });
+    const meses=[...new Set(metasEstagioRegistros.map(r=>String(r.data).slice(0,7)))].sort();
+    const mesSel=$("estagio-mes"), mesAnterior=mesSel?.value;
+    if(mesSel){
+      mesSel.replaceChildren();
+      meses.slice().reverse().forEach(m=>mesSel.add(new Option(estagioMesLabel(m),m)));
+      mesSel.value=meses.includes(mesAnterior)?mesAnterior:(meses.at(-1)||"");
+    }
+    const unidades=[...new Set(metasEstagioRegistros.map(r=>String(r.unidade||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+    const unSel=$("estagio-unidade"), unAnterior=unSel?.value;
+    if(unSel){
+      unSel.replaceChildren(new Option("Todas as unidades",""));
+      unidades.forEach(u=>unSel.add(new Option(u,u)));
+      unSel.value=unidades.includes(unAnterior)?unAnterior:"";
+    }
+    renderizarMetasEstagio();
+    estagioMensagem(metasEstagioRegistros.length
+      ? `${metasEstagioRegistros.length.toLocaleString("pt-BR")} registros de fechamento mensal carregados. O painel seleciona automaticamente a última data disponível de cada mês.`
+      : "Nenhum registro encontrado em public.metas_estagio. Confira os dados e a política SELECT (RLS).",!metasEstagioRegistros.length);
+  } catch(e) {
+    console.error("Metas Estágio:",e);
+    estagioMensagem("Falha ao consultar metas_estagio: "+(e.message||"erro desconhecido")+". Confira a tabela e a política SELECT (RLS).",true);
+  } finally {if(btn)btn.disabled=false;}
+}
+function renderizarMetasEstagio() {
+  const mes=$("estagio-mes")?.value||"", unidade=$("estagio-unidade")?.value||"";
+  const doMes=metasEstagioRegistros.filter(r=>String(r.data||"").slice(0,7)===mes);
+  const rows=doMes.filter(r=>!unidade||String(r.unidade||"").trim()===unidade);
+  const sum=(arr,k)=>arr.reduce((s,r)=>s+(Number(r[k])||0),0);
+  const f=sum(rows,"faturado"), mf=sum(rows,"meta_faturamento"), j=sum(rows,"numero_jovens"), mj=sum(rows,"meta_numero_jovens");
+  const ticket=rows.length?sum(rows,"ticket_medio")/rows.length:0;
+  const set=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
+  set("estagio-faturado",estagioMoeda(f));set("estagio-faturamento-meta","Meta: "+estagioMoeda(mf));
+  set("estagio-jovens",estagioNumero(j));set("estagio-jovens-meta","Meta: "+estagioNumero(mj));
+  set("estagio-unidades",estagioNumero(new Set(rows.map(r=>r.unidade).filter(Boolean)).size));set("estagio-ticket",estagioMoeda(ticket));
+  const pf=estagioPct(f,mf), pj=estagioPct(j,mj);
+  set("estagio-faturamento-percentual",estagioNumero(pf)+"% da meta");set("estagio-jovens-percentual",estagioNumero(pj)+"% da meta");
+  const bf=$("estagio-faturamento-barra"), bj=$("estagio-jovens-barra");
+  if(bf)bf.style.width=Math.min(100,pf)+"%";if(bj)bj.style.width=Math.min(100,pj)+"%";
+  const tbody=$("estagio-tabela-corpo");
+  if(tbody){
+    tbody.replaceChildren();
+    if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=7;td.textContent="Nenhum registro para os filtros selecionados.";tr.appendChild(td);tbody.appendChild(tr);}
+    rows.slice().sort((a,b)=>String(a.unidade).localeCompare(String(b.unidade),"pt-BR")).forEach(r=>{
+      const tr=document.createElement("tr");
+      [r.unidade,estagioDataBR(r.data),estagioMoeda(r.faturado),estagioMoeda(r.meta_faturamento),estagioNumero(r.numero_jovens),estagioNumero(r.meta_numero_jovens),estagioMoeda(r.ticket_medio)].forEach(v=>{const td=document.createElement("td");td.textContent=v??"—";tr.appendChild(td);});
+      tbody.appendChild(tr);
+    });
+  }
+  const meses=[...new Set(metasEstagioRegistros.map(r=>String(r.data).slice(0,7)))].sort();
+  const historico=meses.map(m=>{
+    const rr=metasEstagioRegistros.filter(r=>String(r.data).slice(0,7)===m&&(!unidade||String(r.unidade||"").trim()===unidade));
+    return {m:estagioMesLabel(m),f:sum(rr,"faturado"),mf:sum(rr,"meta_faturamento"),j:sum(rr,"numero_jovens"),mj:sum(rr,"meta_numero_jovens")};
+  });
+  desenharGraficoEstagio("estagio-grafico-faturamento","f",historico.map(x=>x.m),[{label:"Faturado",data:historico.map(x=>x.f)},{label:"Meta",data:historico.map(x=>x.mf)}],"currency");
+  desenharGraficoEstagio("estagio-grafico-jovens","j",historico.map(x=>x.m),[{label:"Jovens",data:historico.map(x=>x.j)},{label:"Meta",data:historico.map(x=>x.mj)}],"number");
+}
+function desenharGraficoEstagio(id,key,labels,datasets,tipo) {
+  const canvas=$(id); if(!canvas||!window.Chart)return;
+  if(metasEstagioGraficos[key])metasEstagioGraficos[key].destroy();
+  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tipo==="currency"?estagioMoeda(ctx.raw):estagioNumero(ctx.raw)}`}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v)}}}}});
+}
+function exportarMetasEstagio() {
+  const mes=$("estagio-mes")?.value||"", unidade=$("estagio-unidade")?.value||"";
+  const rows=metasEstagioRegistros.filter(r=>String(r.data||"").slice(0,7)===mes&&(!unidade||String(r.unidade||"").trim()===unidade));
+  const cols=["unidade","data","faturado","meta_faturamento","numero_jovens","meta_numero_jovens","ticket_medio"];
+  const csv=[cols.join(";"),...rows.map(r=>cols.map(k=>`"${String(r[k]??"").replace(/"/g,'""')}"`).join(";"))].join("\r\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob), a=document.createElement("a");a.href=url;a.download=`metas-estagio-${mes||"dados"}.csv`;a.click();URL.revokeObjectURL(url);
+}
+
