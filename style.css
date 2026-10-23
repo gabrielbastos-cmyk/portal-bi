@@ -2182,3 +2182,62 @@ textarea:focus {
     white-space: nowrap;
   }
 }
+
+/* ==========================================================
+   AJUSTE FINAL — METAS DO APRENDIZ
+   Corrige o espaço vazio do ranking e mantém os gráficos compactos.
+   ========================================================== */
+.metas-panel.metas-ranking-principal > div.metas-ranking-cabecalho {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.metas-panel.metas-ranking-principal > .metas-table-scroll {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 0 auto;
+}
+
+.metas-ranking-principal {
+  align-self: start;
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+.metas-ranking-principal .metas-ranking-cabecalho {
+  padding-bottom: 12px;
+  margin: 0;
+}
+
+.metas-ranking-layout {
+  align-items: start;
+  margin-top: 14px;
+  gap: 16px;
+}
+
+.metas-graficos:not(.metas-ranking-layout) .metas-panel > div:not(.metas-table-scroll) {
+  height: 300px;
+  min-height: 0;
+}
+
+.metas-graficos .metas-panel canvas {
+  display: block;
+  max-width: 100%;
+}
+
+@media (max-width: 850px) {
+  .metas-graficos:not(.metas-ranking-layout) .metas-panel > div:not(.metas-table-scroll) {
+    height: 280px;
+  }
+}
+
+@media (max-width: 480px) {
+  .metas-graficos:not(.metas-ranking-layout) .metas-panel > div:not(.metas-table-scroll) {
+    height: 260px;
+  }
+  .metas-ranking-principal .metas-ranking-cabecalho {
+    align-items: flex-start;
+  }
+}
