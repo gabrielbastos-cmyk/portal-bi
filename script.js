@@ -4440,11 +4440,19 @@ function renderizarMetasEstagio() {
   });
   desenharGraficoEstagio("estagio-grafico-faturamento","f",historico.map(x=>x.m),[{label:"Faturado",data:historico.map(x=>x.f)},{label:"Meta",data:historico.map(x=>x.mf)}],"currency");
   desenharGraficoEstagio("estagio-grafico-jovens","j",historico.map(x=>x.m),[{label:"Jovens",data:historico.map(x=>x.j)},{label:"Meta",data:historico.map(x=>x.mj)}],"number");
+
+  // Ranking de ticket médio por unidade para o mês selecionado.
+  const rankingTicket = rows.slice().filter(r=>String(r.unidade||"").trim()).sort((a,b)=>(Number(b.ticket_medio)||0)-(Number(a.ticket_medio)||0));
+  desenharGraficoEstagio("estagio-grafico-ticket","tkm",rankingTicket.map(r=>String(r.unidade||"")),[{label:"Ticket médio",data:rankingTicket.map(r=>Number(r.ticket_medio)||0)}],"currency",true);
 }
-function desenharGraficoEstagio(id,key,labels,datasets,tipo) {
+function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
   const canvas=$(id); if(!canvas||!window.Chart)return;
+  if(window.ChartDataLabels && !Chart.registry.plugins.get("datalabels")) Chart.register(window.ChartDataLabels);
+  if(ranking && canvas.parentElement) canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*32))+"px";
   if(metasEstagioGraficos[key])metasEstagioGraficos[key].destroy();
-  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tipo==="currency"?estagioMoeda(ctx.raw):estagioNumero(ctx.raw)}`}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v)}}}}});
+  const fmt=v=>tipo==="currency"?estagioMoeda(v):estagioNumero(v);
+  const horizontal=ranking;
+  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets:datasets.map(ds=>({...ds,barPercentage:0.72,categoryPercentage:0.8}))},options:{indexAxis:horizontal?"y":"x",responsive:true,maintainAspectRatio:false,layout:{padding:{top:horizontal?4:22,right:horizontal?72:12,left:4,bottom:4}},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},datalabels:{display:true,anchor:horizontal?"end":"end",align:horizontal?"right":"top",clamp:true,clip:false,color:"#34445a",font:{size:10,weight:"600"},formatter:value=>fmt(value)}},scales:{x:{beginAtZero:!horizontal,ticks:{callback:v=>horizontal?fmt(v):(labels.length>6?String(v):v),autoSkip:false,maxRotation:labels.length>5?35:0,minRotation:labels.length>5?35:0}},y:{beginAtZero:true,ticks:{callback:v=>horizontal?fmt(v):(tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v))}}}}});
 }
 function exportarMetasEstagio() {
   const mes=$("estagio-mes")?.value||"", unidade=$("estagio-unidade")?.value||"";
