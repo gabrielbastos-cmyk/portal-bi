@@ -4414,7 +4414,11 @@ function renderizarMetasEstagio() {
   const rows=doMes.filter(r=>!unidade||String(r.unidade||"").trim()===unidade);
   const sum=(arr,k)=>arr.reduce((s,r)=>s+(Number(r[k])||0),0);
   const f=sum(rows,"faturado"), mf=sum(rows,"meta_faturamento"), j=sum(rows,"numero_jovens"), mj=sum(rows,"meta_numero_jovens");
-  const ticket=rows.length?sum(rows,"ticket_medio")/rows.length:0;
+  // TKM calculado a partir do faturamento e da quantidade de jovens/estagiários.
+  // O campo ticket_medio armazenado não é usado como fonte do cálculo.
+  const totalFaturado=sum(rows,"faturado");
+  const totalEstagiarios=sum(rows,"numero_jovens");
+  const ticket=totalEstagiarios>0?totalFaturado/totalEstagiarios:0;
   const set=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
   set("estagio-faturado",estagioMoeda(f));set("estagio-faturamento-meta","Meta: "+estagioMoeda(mf));
   set("estagio-jovens",estagioNumero(j));set("estagio-jovens-meta","Meta: "+estagioNumero(mj));
@@ -4429,7 +4433,7 @@ function renderizarMetasEstagio() {
     if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=7;td.textContent="Nenhum registro para os filtros selecionados.";tr.appendChild(td);tbody.appendChild(tr);}
     rows.slice().sort((a,b)=>String(a.unidade).localeCompare(String(b.unidade),"pt-BR")).forEach(r=>{
       const tr=document.createElement("tr");
-      [r.unidade,estagioDataBR(r.data),estagioMoeda(r.faturado),estagioMoeda(r.meta_faturamento),estagioNumero(r.numero_jovens),estagioNumero(r.meta_numero_jovens),estagioMoeda(r.ticket_medio)].forEach(v=>{const td=document.createElement("td");td.textContent=v??"—";tr.appendChild(td);});
+      [r.unidade,estagioDataBR(r.data),estagioMoeda(r.faturado),estagioMoeda(r.meta_faturamento),estagioNumero(r.numero_jovens),estagioNumero(r.meta_numero_jovens),estagioMoeda((Number(r.numero_jovens)||0)>0?(Number(r.faturado)||0)/Number(r.numero_jovens):0)].forEach(v=>{const td=document.createElement("td");td.textContent=v??"—";tr.appendChild(td);});
       tbody.appendChild(tr);
     });
   }
@@ -4442,17 +4446,36 @@ function renderizarMetasEstagio() {
   desenharGraficoEstagio("estagio-grafico-jovens","j",historico.map(x=>x.m),[{label:"Jovens",data:historico.map(x=>x.j)},{label:"Meta",data:historico.map(x=>x.mj)}],"number");
 
   // Ranking de ticket médio por unidade para o mês selecionado.
-  const rankingTicket = rows.slice().filter(r=>String(r.unidade||"").trim()).sort((a,b)=>(Number(b.ticket_medio)||0)-(Number(a.ticket_medio)||0));
-  desenharGraficoEstagio("estagio-grafico-ticket","tkm",rankingTicket.map(r=>String(r.unidade||"")),[{label:"Ticket médio",data:rankingTicket.map(r=>Number(r.ticket_medio)||0)}],"currency",true);
+  const rankingTicket = rows.slice()
+    .filter(r=>String(r.unidade||"").trim())
+    .map(r=>({...r, tkm:(Number(r.numero_jovens)||0)>0?(Number(r.faturado)||0)/Number(r.numero_jovens):0}))
+    .sort((a,b)=>b.tkm-a.tkm);
+  desenharGraficoEstagio(
+    "estagio-grafico-ticket",
+    "tkm",
+    rankingTicket.map((r,i)=>`${i+1}º — ${String(r.unidade||"")}`),
+    [{label:"Ticket médio",data:rankingTicket.map(r=>r.tkm)}],
+    "currency",
+    true
+  );
 }
 function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
   const canvas=$(id); if(!canvas||!window.Chart)return;
   if(window.ChartDataLabels && !Chart.registry.plugins.get("datalabels")) Chart.register(window.ChartDataLabels);
-  if(ranking && canvas.parentElement) canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*32))+"px";
+  if(ranking && canvas.parentElement) {
+    canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*34))+"px";
+    canvas.parentElement.style.setProperty("--estagio-ranking-itens",String(labels.length));
+  }
+  if(!labels.length) {
+    if(metasEstagioGraficos[key]) { metasEstagioGraficos[key].destroy(); delete metasEstagioGraficos[key]; }
+    const ctx=canvas.getContext("2d");
+    if(ctx) { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.fillStyle="#778397"; ctx.font="14px DM Sans, Arial, sans-serif"; ctx.textAlign="center"; ctx.fillText(ranking?"Sem dados para o mês/unidade selecionado":"Sem dados para exibir",canvas.width/2,Math.max(30,canvas.height/2)); ctx.restore(); }
+    return;
+  }
   if(metasEstagioGraficos[key])metasEstagioGraficos[key].destroy();
   const fmt=v=>tipo==="currency"?estagioMoeda(v):estagioNumero(v);
   const horizontal=ranking;
-  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets:datasets.map(ds=>({...ds,barPercentage:0.72,categoryPercentage:0.8}))},options:{indexAxis:horizontal?"y":"x",responsive:true,maintainAspectRatio:false,layout:{padding:{top:horizontal?4:22,right:horizontal?72:12,left:4,bottom:4}},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},datalabels:{display:true,anchor:horizontal?"end":"end",align:horizontal?"right":"top",clamp:true,clip:false,color:"#34445a",font:{size:10,weight:"600"},formatter:value=>fmt(value)}},scales:{x:{beginAtZero:!horizontal,ticks:{callback:v=>horizontal?fmt(v):(labels.length>6?String(v):v),autoSkip:false,maxRotation:labels.length>5?35:0,minRotation:labels.length>5?35:0}},y:{beginAtZero:true,ticks:{callback:v=>horizontal?fmt(v):(tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v))}}}}});
+  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets:datasets.map(ds=>({...ds,barPercentage:0.72,categoryPercentage:0.8}))},options:{indexAxis:horizontal?"y":"x",responsive:true,maintainAspectRatio:false,layout:{padding:{top:horizontal?4:22,right:horizontal?72:12,left:4,bottom:4}},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},datalabels:{display:true,anchor:"end",align:horizontal?"right":"top",offset:horizontal?4:2,clamp:true,clip:false,color:"#34445a",font:{size:10,weight:"600"},formatter:value=>fmt(value)}},scales:{x:{beginAtZero:!horizontal,ticks:{callback:v=>horizontal?fmt(v):(labels.length>6?String(v):v),autoSkip:false,maxRotation:labels.length>5?35:0,minRotation:labels.length>5?35:0}},y:{beginAtZero:true,ticks:{callback:v=>horizontal?fmt(v):(tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v))}}}}});
 }
 function exportarMetasEstagio() {
   const mes=$("estagio-mes")?.value||"", unidade=$("estagio-unidade")?.value||"";
@@ -4462,4 +4485,3 @@ function exportarMetasEstagio() {
   const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
   const url=URL.createObjectURL(blob), a=document.createElement("a");a.href=url;a.download=`metas-estagio-${mes||"dados"}.csv`;a.click();URL.revokeObjectURL(url);
 }
-
