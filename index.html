@@ -342,7 +342,17 @@
       .metas-ranking-principal .metas-ranking-botoes button { flex: 1; padding: 10px; }
     }
 
-  </style>
+
+/* Metas Estágio */
+.metas-estagio-filtros { grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+.estagio-tabela { margin-top: 20px; padding: 22px; }
+.estagio-tabela .metas-ranking-cabecalho { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.estagio-tabela h3 { margin:0; }
+.estagio-tabela table { width:100%; border-collapse:collapse; }
+.estagio-tabela th,.estagio-tabela td { padding:12px; text-align:left; border-bottom:1px solid #e6edf5; white-space:nowrap; }
+.estagio-tabela th { color:#17365d; background:#f4f7fb; }
+@media(max-width:700px){.estagio-tabela{padding:14px}.estagio-tabela th,.estagio-tabela td{padding:9px}}
+\n  </style>
 </head>
 
 <body>
@@ -980,6 +990,25 @@
           </div>
         </article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
         <p class="metas-nota">Os cartões representam o mês selecionado. Os gráficos apresentam o histórico mensal disponível na tabela bi_aprendiz_historico.</p>
+      </section>
+
+
+      <!-- METAS ESTÁGIO -->
+      <section id="metas-estagio-section" class="dashboard-section" hidden>
+        <div class="section-heading"><div><p class="section-kicker">DESEMPENHO E RESULTADOS</p><h2>Metas Estágio</h2><p class="muted">Acompanhe faturamento, jovens e metas por unidade. O painel usa sempre o registro mais recente disponível dentro de cada mês.</p></div><button type="button" id="metas-estagio-atualizar" class="access-pill">↻ Atualizar dados</button></div>
+        <p id="metas-estagio-message" role="status" aria-live="polite"></p>
+        <div class="metas-filtros metas-estagio-filtros">
+          <label>Mês de referência<select id="estagio-mes"><option value="">Carregando meses...</option></select></label>
+          <label>Unidade<select id="estagio-unidade"><option value="">Todas as unidades</option></select></label>
+        </div>
+        <div class="metas-kpis">
+          <article class="metas-card"><span>Faturamento realizado</span><strong id="estagio-faturado">—</strong><small id="estagio-faturamento-meta">Meta: —</small><div class="metas-progress"><i id="estagio-faturamento-barra"></i></div><small id="estagio-faturamento-percentual">—</small></article>
+          <article class="metas-card"><span>Jovens</span><strong id="estagio-jovens">—</strong><small id="estagio-jovens-meta">Meta: —</small><div class="metas-progress"><i id="estagio-jovens-barra"></i></div><small id="estagio-jovens-percentual">—</small></article>
+          <article class="metas-card"><span>Unidades</span><strong id="estagio-unidades">—</strong><small>Unidades com dados no mês</small></article>
+          <article class="metas-card"><span>Ticket médio</span><strong id="estagio-ticket">—</strong><small>Média dos registros selecionados</small></article>
+        </div>
+        <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="estagio-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="estagio-grafico-jovens"></canvas></div></article></div>
+        <article class="metas-panel estagio-tabela"><div class="metas-ranking-cabecalho"><h3>Detalhamento por unidade</h3><button type="button" id="estagio-exportar" class="access-pill">Exportar CSV</button></div><div class="metas-table-scroll"><table><thead><tr><th>Unidade</th><th>Data do registro</th><th>Faturado</th><th>Meta faturamento</th><th>Jovens</th><th>Meta jovens</th><th>Ticket médio</th></tr></thead><tbody id="estagio-tabela-corpo"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div></article>
       </section>
 
       <!-- ADMINISTRAÇÃO -->
