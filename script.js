@@ -1,6 +1,6 @@
 "use strict";
 
-const sb = window.sb;
+let sb = window.sb; // Atualizado novamente nos carregamentos para evitar falha se Supabase iniciar depois do script.
 const $ = id => document.getElementById(id);
 
 let currentUser = null;
@@ -3877,6 +3877,7 @@ if (document.readyState === "loading") {
 let metasAprendizRegistros = [];
 let metasGraficos = {};
 let metasAprendizInicializado = false;
+let metasAprendizCargaId = 0;
 const METAS_APRENDIZ_TABELA = "bi_aprendiz_historico";
 
 function dashboardEhMetasAprendiz(d) {
@@ -3923,6 +3924,8 @@ function metasEscapar(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({"&"
 function metasMostrarMensagem(msg, erro=false) { const el=$("metas-aprendiz-message"); if(el){el.textContent=msg;el.style.color=erro?"#b42318":"";} }
 
 async function carregarMetasAprendiz() {
+  sb = window.sb || sb;
+  const cargaId = ++metasAprendizCargaId;
   if (!sb) { metasMostrarMensagem("Conexão com Supabase não encontrada (window.sb).", true); return; }
   metasMostrarMensagem("Carregando dados das metas...");
   const btn=$("metas-aprendiz-atualizar"); if(btn) btn.disabled=true;
@@ -3932,6 +3935,7 @@ async function carregarMetasAprendiz() {
       const {data,error}=await sb.from(METAS_APRENDIZ_TABELA).select("data_referencia,tipo,subsede,local_atendimento,faturado,numero_jovens,ticket_medio,qt_empresas,meta_numero_jovens,meta_faturamento").eq("tipo",$("metas-tipo")?.value || "Matriz").order("data_referencia",{ascending:true}).range(inicio,inicio+tamanho-1);
       if(error) throw error; todos=todos.concat(data||[]); if(!data || data.length<tamanho) break; inicio+=tamanho;
     }
+    if (cargaId !== metasAprendizCargaId) return; // ignora resposta antiga que terminou depois da mais recente
     metasAprendizRegistros=todos;
     const meses=[...new Set(todos.map(r=>String(r.data_referencia).slice(0,10)))].sort();
     const sel=$("metas-mes"); if(sel){const anterior=sel.value;sel.replaceChildren();meses.slice().reverse().forEach(m=>{const o=document.createElement("option");o.value=m;o.textContent=new Date(m+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});sel.appendChild(o);});if(meses.includes(anterior))sel.value=anterior;else if(meses.length)sel.value=meses[meses.length-1];}
@@ -3947,6 +3951,7 @@ async function carregarMetasAprendiz() {
       metasMostrarMensagem(`${todos.length} registros carregados para ${$("metas-tipo")?.value || "Matriz"}.`);
     }
   } catch(e) {
+    if (cargaId !== metasAprendizCargaId) return;
     console.error("Metas do Aprendiz:",e);
     metasMostrarMensagem("Falha ao consultar bi_aprendiz_historico: "+(e.message||"erro desconhecido")+". Confira a conexão, a política SELECT (RLS) e as permissões do usuário.",true);
   }
@@ -4322,6 +4327,7 @@ if (document.readyState === "loading") {
 let metasEstagioRegistros = [];
 let metasEstagioGraficos = {};
 let metasEstagioInicializado = false;
+let metasEstagioCargaId = 0;
 const METAS_ESTAGIO_TABELA = "metas_estagio";
 
 function configurarAcessoMetasEstagio() {
@@ -4361,6 +4367,8 @@ function estagioMensagem(msg, erro=false) {
   if(el){el.textContent=msg;el.style.color=erro?"#b42318":"";}
 }
 async function carregarMetasEstagio() {
+  sb = window.sb || sb;
+  const cargaId = ++metasEstagioCargaId;
   if (!sb) return estagioMensagem("Conexão com Supabase não encontrada.",true);
   const btn=$("metas-estagio-atualizar"); if(btn) btn.disabled=true;
   estagioMensagem("Carregando dados de Metas Estágio...");
@@ -4375,6 +4383,7 @@ async function carregarMetasEstagio() {
       if(!data||data.length<size) break;
       offset+=size;
     }
+    if (cargaId !== metasEstagioCargaId) return; // impede uma consulta antiga de sobrescrever os dados atuais
     // Descobre a data máxima em cada mês e usa somente o snapshot daquela data.
     const ultimaDataMes={};
     rows.forEach(r=>{
@@ -4404,6 +4413,7 @@ async function carregarMetasEstagio() {
       ? `${metasEstagioRegistros.length.toLocaleString("pt-BR")} registros de fechamento mensal carregados. O painel seleciona automaticamente a última data disponível de cada mês.`
       : "Nenhum registro encontrado em public.metas_estagio. Confira os dados e a política SELECT (RLS).",!metasEstagioRegistros.length);
   } catch(e) {
+    if (cargaId !== metasEstagioCargaId) return;
     console.error("Metas Estágio:",e);
     estagioMensagem("Falha ao consultar metas_estagio: "+(e.message||"erro desconhecido")+". Confira a tabela e a política SELECT (RLS).",true);
   } finally {if(btn)btn.disabled=false;}
@@ -4460,23 +4470,89 @@ function renderizarMetasEstagio() {
   );
 }
 function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
-  const canvas=$(id); if(!canvas||!window.Chart)return;
+  const canvas=$(id);
+  if(!canvas || !window.Chart) return;
   if(window.ChartDataLabels && !Chart.registry.plugins.get("datalabels")) Chart.register(window.ChartDataLabels);
-  if(ranking && canvas.parentElement) {
-    canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*34))+"px";
-    canvas.parentElement.style.setProperty("--estagio-ranking-itens",String(labels.length));
+
+  if(metasEstagioGraficos[key]) {
+    metasEstagioGraficos[key].destroy();
+    delete metasEstagioGraficos[key];
   }
   if(!labels.length) {
-    if(metasEstagioGraficos[key]) { metasEstagioGraficos[key].destroy(); delete metasEstagioGraficos[key]; }
     const ctx=canvas.getContext("2d");
-    if(ctx) { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.fillStyle="#778397"; ctx.font="14px DM Sans, Arial, sans-serif"; ctx.textAlign="center"; ctx.fillText(ranking?"Sem dados para o mês/unidade selecionado":"Sem dados para exibir",canvas.width/2,Math.max(30,canvas.height/2)); ctx.restore(); }
+    if(ctx) {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.save(); ctx.fillStyle="#778397"; ctx.font="14px DM Sans, Arial, sans-serif";
+      ctx.textAlign="center"; ctx.fillText(ranking?"Sem dados para o mês/unidade selecionado":"Sem dados para exibir",canvas.width/2,Math.max(30,canvas.height/2)); ctx.restore();
+    }
     return;
   }
-  if(metasEstagioGraficos[key])metasEstagioGraficos[key].destroy();
+
+  if(ranking && canvas.parentElement) {
+    canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*34))+"px";
+  } else if(canvas.parentElement) {
+    canvas.parentElement.style.height="320px";
+  }
+
   const fmt=v=>tipo==="currency"?estagioMoeda(v):estagioNumero(v);
+  const compacto=v=>tipo==="currency"
+    ? new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",notation:"compact",maximumFractionDigits:1}).format(Number(v)||0)
+    : estagioNumero(v);
   const horizontal=ranking;
-  metasEstagioGraficos[key]=new Chart(canvas,{type:"bar",data:{labels,datasets:datasets.map(ds=>({...ds,barPercentage:0.72,categoryPercentage:0.8}))},options:{indexAxis:horizontal?"y":"x",responsive:true,maintainAspectRatio:false,layout:{padding:{top:horizontal?4:22,right:horizontal?72:12,left:4,bottom:4}},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},datalabels:{display:true,anchor:"end",align:horizontal?"right":"top",offset:horizontal?4:2,clamp:true,clip:false,color:"#34445a",font:{size:10,weight:"600"},formatter:value=>fmt(value)}},scales:{x:{beginAtZero:!horizontal,ticks:{callback:v=>horizontal?fmt(v):(labels.length>6?String(v):v),autoSkip:false,maxRotation:labels.length>5?35:0,minRotation:labels.length>5?35:0}},y:{beginAtZero:true,ticks:{callback:v=>horizontal?fmt(v):(tipo==="currency"?new Intl.NumberFormat("pt-BR",{notation:"compact",style:"currency",currency:"BRL"}).format(v):estagioNumero(v))}}}}});
+
+  metasEstagioGraficos[key]=new Chart(canvas,{
+    type:"bar",
+    data:{labels,datasets:datasets.map((ds,i)=>({
+      ...ds,
+      backgroundColor:ds.backgroundColor || (i===0 ? "#91c9ee" : "#ffabc0"),
+      borderColor:ds.borderColor || (i===0 ? "#91c9ee" : "#ffabc0"),
+      borderWidth:1,
+      barPercentage:0.72,
+      categoryPercentage:0.78
+    }))},
+    options:{
+      indexAxis:horizontal?"y":"x",
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:false,
+      layout:{padding:{top:horizontal?8:12,right:horizontal?82:8,left:4,bottom:4}},
+      plugins:{
+        legend:{position:"bottom"},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},
+        datalabels:{
+          display:ctx=>Number.isFinite(Number(ctx.raw)) && Number(ctx.raw)!==0,
+          anchor:"end",
+          align:horizontal?"right":"start",
+          offset:horizontal?4:3,
+          clamp:true,
+          clip:false,
+          color:horizontal?"#263746":"#17365d",
+          font:{size:horizontal?10:9,weight:"600"},
+          formatter:value=>fmt(value)
+        }
+      },
+      scales:{
+        x:{
+          type:horizontal?"linear":"category",
+          beginAtZero:horizontal,
+          grid:{display:!horizontal},
+          ticks:horizontal
+            ? {callback:value=>compacto(value)}
+            : {autoSkip:true,maxTicksLimit:9,maxRotation:0,minRotation:0}
+        },
+        y:{
+          type:horizontal?"category":"linear",
+          beginAtZero:!horizontal,
+          grid:{display:horizontal},
+          ticks:horizontal
+            ? {autoSkip:false}
+            : {callback:value=>compacto(value),maxTicksLimit:6}
+        }
+      }
+    }
+  });
 }
+
 function exportarMetasEstagio() {
   const mes=$("estagio-mes")?.value||"", unidade=$("estagio-unidade")?.value||"";
   const rows=metasEstagioRegistros.filter(r=>String(r.data||"").slice(0,7)===mes&&(!unidade||String(r.unidade||"").trim()===unidade));
