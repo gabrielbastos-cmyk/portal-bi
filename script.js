@@ -3989,6 +3989,21 @@ function metasRegistroNaSubsede(r, subsede, tipo) {
   return r?.subsede === subsede;
 }
 
+function aplicarCorBarraMeta(elemento, percentual) {
+  if (!elemento) return;
+
+  const p = Number(percentual) || 0;
+  const cor = p > 100
+    ? "#16835b"  // Verde: meta superada
+    : p >= 90
+      ? "#eab308" // Amarelo: de 90% até 100%
+      : "#dc4242"; // Vermelho: abaixo de 90%
+
+  elemento.style.width = Math.max(0, Math.min(100, p)) + "%";
+  elemento.style.backgroundColor = cor;
+  elemento.style.transition = "width .35s ease, background-color .25s ease";
+}
+
 function renderizarMetasAprendiz() {
   const mes = $("metas-mes")?.value || "";
   const subsede = $("metas-subsede")?.value || "";
@@ -4030,10 +4045,8 @@ function renderizarMetasAprendiz() {
   set("metas-faturamento-percentual", pF.toFixed(1) + "% da meta" + (agregado.metaF > 0 ? " · faltam " + metasMoeda(Math.max(0, agregado.metaF - agregado.faturado)) : ""));
   set("metas-jovens-percentual", pJ.toFixed(1) + "% da meta" + (agregado.metaJ > 0 ? " · faltam " + metasNumero(Math.max(0, agregado.metaJ - agregado.jovens)) : ""));
 
-  [["metas-faturamento-barra", pF], ["metas-jovens-barra", pJ]].forEach(([id, p]) => {
-    const e = $(id);
-    if (e) e.style.width = Math.min(100, Math.max(0, p)) + "%";
-  });
+  aplicarCorBarraMeta($("metas-faturamento-barra"), pF);
+  aplicarCorBarraMeta($("metas-jovens-barra"), pJ);
 
   // Os gráficos usam a mesma regra do cartão: Curitiba Matriz inclui Polos Curitiba.
   const meses = [...new Set(metasAprendizRegistros.map(r => String(r.data_referencia).slice(0, 10)))].sort();
@@ -4211,6 +4224,9 @@ function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
       maintainAspectRatio: false,
       layout: { padding: { top: 34, right: 8, left: 4, bottom: 0 } },
       plugins: {
+        // Evita rótulos duplicados no meio das barras. Os valores compactos
+        // continuam sendo desenhados pelo plugin personalizado rotulosVisiveis.
+        datalabels: { display: false },
         legend: {
           position: "bottom",
           labels: {
@@ -4436,7 +4452,8 @@ function renderizarMetasEstagio() {
   const pf=estagioPct(f,mf), pj=estagioPct(j,mj);
   set("estagio-faturamento-percentual",estagioNumero(pf)+"% da meta");set("estagio-jovens-percentual",estagioNumero(pj)+"% da meta");
   const bf=$("estagio-faturamento-barra"), bj=$("estagio-jovens-barra");
-  if(bf)bf.style.width=Math.min(100,pf)+"%";if(bj)bj.style.width=Math.min(100,pj)+"%";
+  aplicarCorBarraMeta(bf, pf);
+  aplicarCorBarraMeta(bj, pj);
   const tbody=$("estagio-tabela-corpo");
   if(tbody){
     tbody.replaceChildren();
@@ -4515,20 +4532,30 @@ function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
       responsive:true,
       maintainAspectRatio:false,
       animation:false,
-      layout:{padding:{top:horizontal?8:12,right:horizontal?82:8,left:4,bottom:4}},
+      layout:{padding:{top:horizontal?12:28,right:horizontal?130:12,left:8,bottom:8}},
       plugins:{
         legend:{position:"bottom"},
         tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},
         datalabels:{
           display:ctx=>Number.isFinite(Number(ctx.raw)) && Number(ctx.raw)!==0,
           anchor:"end",
-          align:horizontal?"right":"start",
-          offset:horizontal?4:3,
+          align:horizontal?"right":"end",
+          offset:horizontal?6:5,
           clamp:true,
           clip:false,
-          color:horizontal?"#263746":"#17365d",
-          font:{size:horizontal?10:9,weight:"600"},
-          formatter:value=>fmt(value)
+          color:"#17365d",
+          font:{family:"DM Sans",size:horizontal?10:9,weight:"600"},
+          formatter:value=>{
+            if(tipo==="currency"){
+              return new Intl.NumberFormat("pt-BR",{
+                style:"currency",
+                currency:"BRL",
+                maximumFractionDigits:horizontal?0:1,
+                notation:horizontal?"standard":"compact"
+              }).format(Number(value)||0);
+            }
+            return estagioNumero(value);
+          }
         }
       },
       scales:{
