@@ -4187,14 +4187,19 @@ function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
           const texto = formatarRotulo(valor);
           if (!texto) return;
 
-          const pos = bar.tooltipPosition();
-          // Os dois conjuntos ficam em alturas alternadas; rótulos compactos
-          // deixam os valores legíveis sem formar uma faixa de texto contínua.
-          const deslocamento = di === 0 ? 8 : 21;
-          const x = Math.max(25, Math.min(chart.width - 25, pos.x));
-          const y = Math.max(15, pos.y - deslocamento);
+          // Usa a posição real da barra, em vez do tooltipPosition(),
+          // para manter os rótulos dentro da área visível do gráfico.
+          const horizontal = chart.options.indexAxis === "y";
+          const x = horizontal
+            ? Math.min(chart.width - 8, bar.x + 7)
+            : Math.max(26, Math.min(chart.width - 26, bar.x));
+          const y = horizontal
+            ? Math.max(12, Math.min(chart.height - 8, bar.y + 3))
+            : Math.max(14, bar.y - (di === 0 ? 7 : 19));
+          ctx.textAlign = horizontal ? "left" : "center";
+          ctx.textBaseline = horizontal ? "middle" : "bottom";
           ctx.fillStyle = di === 0 ? "#17365d" : "#527ba7";
-          ctx.fillText(texto, x, y, 54);
+          ctx.fillText(texto, x, y, horizontal ? 120 : 58);
         });
       });
       ctx.restore();
@@ -4489,7 +4494,6 @@ function renderizarMetasEstagio() {
 function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
   const canvas=$(id);
   if(!canvas || !window.Chart) return;
-  if(window.ChartDataLabels && !Chart.registry.plugins.get("datalabels")) Chart.register(window.ChartDataLabels);
 
   if(metasEstagioGraficos[key]) {
     metasEstagioGraficos[key].destroy();
@@ -4506,9 +4510,9 @@ function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
   }
 
   if(ranking && canvas.parentElement) {
-    canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*34))+"px";
+    canvas.parentElement.style.height=Math.min(680,Math.max(280,labels.length*38))+"px";
   } else if(canvas.parentElement) {
-    canvas.parentElement.style.height="320px";
+    canvas.parentElement.style.height="350px";
   }
 
   const fmt=v=>tipo==="currency"?estagioMoeda(v):estagioNumero(v);
@@ -4517,46 +4521,61 @@ function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
     : estagioNumero(v);
   const horizontal=ranking;
 
+  const rotulosEstagio = {
+    id:"rotulosEstagioGerar",
+    afterDatasetsDraw(chart) {
+      const ctx=chart.ctx;
+      ctx.save();
+      ctx.font=`700 ${horizontal ? 11 : 10}px DM Sans, Arial, sans-serif`;
+      ctx.fillStyle="#17365d";
+      chart.data.datasets.forEach((dataset,di)=>{
+        const meta=chart.getDatasetMeta(di);
+        if(meta.hidden) return;
+        meta.data.forEach((element,index)=>{
+          const value=Number(dataset.data[index]);
+          if(!Number.isFinite(value) || value===0) return;
+          const text=tipo==="currency"
+            ? new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",notation:"compact",maximumFractionDigits:1}).format(value)
+            : estagioNumero(value);
+          if(!text) return;
+
+          if(horizontal) {
+            ctx.textAlign="left";
+            ctx.textBaseline="middle";
+            ctx.fillText(text,Math.min(chart.width-4,element.x+7),element.y,130);
+          } else {
+            ctx.textAlign="center";
+            ctx.textBaseline="bottom";
+            ctx.fillText(text,element.x,Math.max(13,element.y-(di===0?7:19)),78);
+          }
+        });
+      });
+      ctx.restore();
+    }
+  };
+
   metasEstagioGraficos[key]=new Chart(canvas,{
     type:"bar",
     data:{labels,datasets:datasets.map((ds,i)=>({
       ...ds,
       backgroundColor:ds.backgroundColor || (i===0 ? "#91c9ee" : "#ffabc0"),
-      borderColor:ds.borderColor || (i===0 ? "#91c9ee" : "#ffabc0"),
+      borderColor:ds.borderColor || (i===0 ? "#559bc9" : "#df829b"),
       borderWidth:1,
+      borderRadius:5,
       barPercentage:0.72,
       categoryPercentage:0.78
     }))},
+    plugins:[rotulosEstagio],
     options:{
       indexAxis:horizontal?"y":"x",
       responsive:true,
       maintainAspectRatio:false,
       animation:false,
-      layout:{padding:{top:horizontal?12:28,right:horizontal?130:12,left:8,bottom:8}},
+      layout:{padding:{top:horizontal?12:38,right:horizontal?145:12,left:8,bottom:8}},
       plugins:{
         legend:{position:"bottom"},
         tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}},
-        datalabels:{
-          display:ctx=>Number.isFinite(Number(ctx.raw)) && Number(ctx.raw)!==0,
-          anchor:"end",
-          align:horizontal?"right":"end",
-          offset:horizontal?6:5,
-          clamp:true,
-          clip:false,
-          color:"#17365d",
-          font:{family:"DM Sans",size:horizontal?10:9,weight:"600"},
-          formatter:value=>{
-            if(tipo==="currency"){
-              return new Intl.NumberFormat("pt-BR",{
-                style:"currency",
-                currency:"BRL",
-                maximumFractionDigits:horizontal?0:1,
-                notation:horizontal?"standard":"compact"
-              }).format(Number(value)||0);
-            }
-            return estagioNumero(value);
-          }
-        }
+        datalabels:{display:false}
       },
       scales:{
         x:{
