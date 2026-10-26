@@ -3,6 +3,13 @@
 let sb = window.sb; // Atualizado novamente nos carregamentos para evitar falha se Supabase iniciar depois do script.
 const $ = id => document.getElementById(id);
 
+// Registra o plugin de rótulos uma única vez para que os valores apareçam
+// tanto nos gráficos mensais quanto no ranking horizontal de TKM.
+if (window.Chart && window.ChartDataLabels && !window.__portalDatalabelsRegistered) {
+  window.Chart.register(window.ChartDataLabels);
+  window.__portalDatalabelsRegistered = true;
+}
+
 let currentUser = null;
 let currentProfile = null;
 let allDashboards = [];
@@ -4149,8 +4156,7 @@ function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
 
   if (metasGraficos[chave]) metasGraficos[chave].destroy();
 
-  // Rótulos compactos para não se sobreporem em gráficos com vários meses.
-  // O tooltip continua mostrando o valor completo e preciso.
+  // Rótulos visíveis acima das barras; o tooltip mantém o valor completo.
   const formatarRotulo = valor => {
     const numero = Number(valor);
     if (!Number.isFinite(numero)) return "";
@@ -4166,39 +4172,6 @@ function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
       }).format(numero);
     }
     return metasNumero(numero);
-  };
-
-  const rotulosVisiveis = {
-    id: "metasRotulosVisiveis",
-    afterDatasetsDraw(chart) {
-      const ctx = chart.ctx;
-      ctx.save();
-      ctx.font = "600 9px Manrope, Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-
-      chart.data.datasets.forEach((dataset, di) => {
-        const meta = chart.getDatasetMeta(di);
-        if (meta.hidden) return;
-
-        meta.data.forEach((bar, i) => {
-          const valor = Number(dataset.data[i]);
-          if (!Number.isFinite(valor)) return;
-          const texto = formatarRotulo(valor);
-          if (!texto) return;
-
-          const pos = bar.tooltipPosition();
-          // Os dois conjuntos ficam em alturas alternadas; rótulos compactos
-          // deixam os valores legíveis sem formar uma faixa de texto contínua.
-          const deslocamento = di === 0 ? 8 : 21;
-          const x = Math.max(25, Math.min(chart.width - 25, pos.x));
-          const y = Math.max(15, pos.y - deslocamento);
-          ctx.fillStyle = di === 0 ? "#17365d" : "#527ba7";
-          ctx.fillText(texto, x, y, 54);
-        });
-      });
-      ctx.restore();
-    }
   };
 
   metasGraficos[chave] = new Chart(canvas, {
@@ -4218,15 +4191,23 @@ function metasDesenharGrafico(id, chave, labels, datasets, moeda) {
         barPercentage: .78
       }))
     },
-    plugins: [rotulosVisiveis],
     options: {
       responsive: true,
       maintainAspectRatio: false,
       layout: { padding: { top: 34, right: 8, left: 4, bottom: 0 } },
       plugins: {
-        // Evita rótulos duplicados no meio das barras. Os valores compactos
-        // continuam sendo desenhados pelo plugin personalizado rotulosVisiveis.
-        datalabels: { display: false },
+        // Mostra valores compactos acima de cada barra, sem a faixa de números no meio.
+        datalabels: {
+          display: ctx => Number.isFinite(Number(ctx.raw)) && Number(ctx.raw) !== 0,
+          anchor: "end",
+          align: "end",
+          offset: 3,
+          clamp: true,
+          clip: false,
+          color: ctx => ctx.datasetIndex === 0 ? "#17365d" : "#527ba7",
+          font: { family: "Manrope, Arial, sans-serif", size: 9, weight: "600" },
+          formatter: value => formatarRotulo(value)
+        },
         legend: {
           position: "bottom",
           labels: {
@@ -4489,7 +4470,10 @@ function renderizarMetasEstagio() {
 function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
   const canvas=$(id);
   if(!canvas || !window.Chart) return;
-  if(window.ChartDataLabels && !Chart.registry.plugins.get("datalabels")) Chart.register(window.ChartDataLabels);
+  if(window.ChartDataLabels && !window.__portalDatalabelsRegistered) {
+    Chart.register(window.ChartDataLabels);
+    window.__portalDatalabelsRegistered = true;
+  }
 
   if(metasEstagioGraficos[key]) {
     metasEstagioGraficos[key].destroy();
@@ -4540,11 +4524,11 @@ function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
           display:ctx=>Number.isFinite(Number(ctx.raw)) && Number(ctx.raw)!==0,
           anchor:"end",
           align:horizontal?"right":"end",
-          offset:horizontal?6:5,
-          clamp:true,
+          offset:horizontal?8:4,
+          clamp:false,
           clip:false,
           color:"#17365d",
-          font:{family:"DM Sans",size:horizontal?10:9,weight:"600"},
+          font:{family:"DM Sans, Arial, sans-serif",size:horizontal?11:9,weight:"700"},
           formatter:value=>{
             if(tipo==="currency"){
               return new Intl.NumberFormat("pt-BR",{
@@ -4563,6 +4547,7 @@ function desenharGraficoEstagio(id,key,labels,datasets,tipo,ranking=false) {
           type:horizontal?"linear":"category",
           beginAtZero:horizontal,
           grid:{display:!horizontal},
+          grace: horizontal ? "18%" : 0,
           ticks:horizontal
             ? {callback:value=>compacto(value)}
             : {autoSkip:true,maxTicksLimit:9,maxRotation:0,minRotation:0}
