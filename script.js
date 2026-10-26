@@ -555,9 +555,93 @@ function renderizarDashboardsAdministrativos() {
     const desc = document.createElement("p");
     desc.textContent = `${d.category || "outros"} — ID: ${d.id}`;
 
-    item.append(title, desc);
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.textContent = "Editar";
+    editButton.addEventListener("click", () => editarDashboard(d.id));
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = "Excluir";
+    deleteButton.addEventListener("click", () => excluirDashboard(d.id));
+
+    item.append(title, desc, editButton, deleteButton);
     container.appendChild(item);
   });
+}
+
+function editarDashboard(id) {
+  const d = allDashboards.find(item => String(item.id) === String(id));
+  if (!d) return;
+
+  $("dashboard-id").value = d.id ?? "";
+  $("dashboard-name").value = d.name ?? "";
+  $("dashboard-description").value = d.description ?? "";
+  $("dashboard-category").value = d.category || "outros";
+  $("dashboard-url").value = d.url ?? "";
+
+  const submitButton = $("dashboard-form")?.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.textContent = "Salvar alterações";
+
+  let cancelButton = $("dashboard-cancel-edit");
+  if (!cancelButton && $("dashboard-form")) {
+    cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.id = "dashboard-cancel-edit";
+    cancelButton.textContent = "Cancelar edição";
+    cancelButton.addEventListener("click", limparFormularioDashboard);
+    const submit = $("dashboard-form").querySelector('button[type="submit"]');
+    submit?.parentElement?.appendChild(cancelButton);
+  }
+  if (cancelButton) cancelButton.hidden = false;
+
+  showMessage("dashboard-form-message", `Editando: ${d.name || d.id}`, "success");
+  $("dashboard-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("dashboard-name")?.focus();
+}
+
+function limparFormularioDashboard() {
+  $("dashboard-form")?.reset();
+  const submitButton = $("dashboard-form")?.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.textContent = "Salvar dashboard";
+  const cancelButton = $("dashboard-cancel-edit");
+  if (cancelButton) cancelButton.hidden = true;
+  clearMessage("dashboard-form-message");
+}
+
+async function excluirDashboard(id) {
+  const d = allDashboards.find(item => String(item.id) === String(id));
+  if (!d) return;
+
+  const confirmed = window.confirm(
+    `Tem certeza que deseja excluir o dashboard "${d.name || d.id}" do portal? Essa ação não pode ser desfeita.`
+  );
+  if (!confirmed) return;
+
+  try {
+    // Remove primeiro as permissões vinculadas para evitar falha por chave estrangeira.
+    const { error: permissionsError } = await sb
+      .from("dashboard_permissions")
+      .delete()
+      .eq("dashboard_id", d.id);
+    if (permissionsError) throw permissionsError;
+
+    const { error } = await sb.from("dashboards").delete().eq("id", d.id);
+    if (error) throw error;
+
+    if (String($("dashboard-id")?.value || "") === String(d.id)) {
+      limparFormularioDashboard();
+    }
+
+    showMessage("dashboard-form-message", "Dashboard excluído do portal.", "success");
+    await carregarDashboards();
+    if (currentProfile?.role === "admin") await carregarAdministracao();
+  } catch (error) {
+    showMessage(
+      "dashboard-form-message",
+      `Não foi possível excluir o dashboard. Verifique as permissões de exclusão no Supabase. ${friendlyError(error)}`
+    );
+  }
 }
 
 if ($("dashboard-form")) {
@@ -583,7 +667,7 @@ if ($("dashboard-form")) {
       if (error) throw error;
 
       showMessage("dashboard-form-message", "Dashboard salvo com sucesso!", "success");
-      $("dashboard-form").reset();
+      limparFormularioDashboard();
       await carregarDashboards();
 
       if (currentProfile?.role === "admin") await carregarAdministracao();
