@@ -4724,6 +4724,21 @@ function exportarMetasEstagio() {
   };
   const ativo = r => [true,1,"1","true","t","sim","ativo"].includes(typeof r.ativo_no_mes === "string" ? r.ativo_no_mes.toLowerCase().trim() : r.ativo_no_mes);
   const valor = v => Number(v) || 0;
+  // Identifica a faixa de carga horária a partir do campo tipo_contrato.
+  // Exemplos reconhecidos: "20-24h", "24 horas", "30 a 36 horas", "6h".
+  function cargaHoraria(r) {
+    const t = txt(r.tipo_contrato).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+    const faixa = t.match(/(\\d{1,2})\\s*(?:-|a|ate|à)\\s*(\\d{1,2})\\s*(?:h|hora|horas)?/);
+    if (faixa) {
+      const a = Number(faixa[1]), b = Number(faixa[2]);
+      if (a >= 20 && b <= 24) return "4h";
+      if (a >= 30 && b <= 36) return "6h";
+    }
+    const nums = [...t.matchAll(/\\d{1,2}/g)].map(m => Number(m[0]));
+    if (nums.some(n => n >= 20 && n <= 24)) return "4h";
+    if (nums.some(n => n >= 30 && n <= 36)) return "6h";
+    return "Não identificada";
+  }
   const pct = (atual, anterior) => anterior > 0 ? ((atual-anterior)/anterior)*100 : null;
   const pctLabel = p => p == null ? "Sem histórico para comparar" : `${p > 0 ? "+" : ""}${p.toLocaleString("pt-BR",{maximumFractionDigits:1,minimumFractionDigits:1})}% vs. mês anterior`;
 
@@ -4798,6 +4813,9 @@ function exportarMetasEstagio() {
     if(el("cc-kpi-empresas")) el("cc-kpi-empresas").textContent=inteiro(empresas);
     if(el("cc-kpi-consultores")) el("cc-kpi-consultores").textContent=inteiro(consultores);
     if(el("cc-kpi-mensal")) el("cc-kpi-mensal").textContent=moeda(soma);
+    if(el("cc-kpi-tkm")) el("cc-kpi-tkm").textContent=moeda(lista.length ? soma / lista.length : 0);
+    if(el("cc-kpi-4h")) el("cc-kpi-4h").textContent=inteiro(lista.filter(r=>cargaHoraria(r)==="4h").length);
+    if(el("cc-kpi-6h")) el("cc-kpi-6h").textContent=inteiro(lista.filter(r=>cargaHoraria(r)==="6h").length);
     const historico=agregarMensal(dados), p=periodoSelecionado() || historico.at(-1)?.periodo;
     const i=historico.findIndex(x=>x.periodo===p), atual=historico[i], anterior=historico[i-1];
     const elC=el("cc-kpi-crescimento"), elF=el("cc-kpi-faturamento-crescimento"), elA=el("cc-kpi-ativos-crescimento");
@@ -4837,6 +4855,44 @@ function exportarMetasEstagio() {
       }
     });
 
+    // Ranking de TKM: contribuição mensal somada dividida pela quantidade de contratos
+    // de cada consultor dentro da lista já filtrada.
+    const tkmPorConsultor = new Map();
+    lista.forEach(r => {
+      const nome = txt(r.consultor) || "Sem consultor";
+      if (!tkmPorConsultor.has(nome)) tkmPorConsultor.set(nome, { total: 0, contratos: 0 });
+      const item = tkmPorConsultor.get(nome);
+      item.total += valor(r.contribuicao_mensal);
+      item.contratos++;
+    });
+    const rankingTkm = [...tkmPorConsultor.entries()]
+      .map(([nome, x]) => ({ nome, tkm: x.contratos ? x.total / x.contratos : 0, contratos: x.contratos }))
+      .sort((a,b) => b.tkm-a.tkm || a.nome.localeCompare(b.nome,"pt-BR"));
+    grafico("cc-grafico-tkm", {
+      type: "bar",
+      data: { labels: rankingTkm.map(x=>x.nome), datasets: [{ label: "TKM médio", data: rankingTkm.map(x=>x.tkm), backgroundColor: "#3678c8", borderRadius: 5 }] },
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
+        layout: { padding: { right: 86, left: 4, top: 8, bottom: 4 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `TKM médio: ${moeda(ctx.raw)} · ${inteiro(rankingTkm[ctx.dataIndex]?.contratos)} contratos` } },
+          datalabels: { display: true, anchor: "end", align: "end", clamp: true, color: "#34445b", font: { weight: "600", size: 10 }, formatter: v => moeda(v) }
+        },
+        scales: { x: { beginAtZero: true, grace: "18%", ticks: { callback: v => moeda(v) } }, y: { ticks: { autoSkip: false } } }
+      }
+    });
+    const areaTkm = el("cc-area-ranking-tkm");
+    if (areaTkm) areaTkm.style.height = `${Math.max(320, rankingTkm.length * 31)}px`;
+
+    const faixas = ["4h", "6h", "Não identificada"];
+    const contagemFaixas = faixas.map(f => lista.filter(r => cargaHoraria(r) === f).length);
+    grafico("cc-grafico-carga-horaria", {
+      type: "bar",
+      data: { labels: ["4h (20–24h)", "6h (30–36h)", "Não identificada"], datasets: [{ label: "Contratos", data: contagemFaixas, backgroundColor: ["#16835b", "#3678c8", "#cbd5e1"], borderRadius: 5 }] },
+      options: { ...opcoesBarra(false), plugins: { ...opcoesBarra(false).plugins, tooltip: { callbacks: { label: ctx => `Contratos: ${inteiro(ctx.raw)}` } } } }
+    });
+
     const porConsultor={}; lista.forEach(r=>{const n=txt(r.consultor)||"Sem consultor";porConsultor[n]=(porConsultor[n]||0)+1;});
     const todosConsultores=Object.entries(porConsultor).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"pt-BR"));
     const top=todosConsultores.slice(0,10);
@@ -4849,7 +4905,7 @@ function exportarMetasEstagio() {
     grafico("cc-grafico-cartao",{type:"doughnut",data:{labels:["Com Cartão Futuro","Sem Cartão Futuro"],datasets:[{data:[cartao.sim,cartao.nao],backgroundColor:["#3678c8","#d7e0eb"],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},datalabels:{display:true,color:"#182538",font:{weight:"600"},formatter:v=>inteiro(v)},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${inteiro(ctx.raw)}`}}}}});
     const alturaTodos=el("cc-grafico-consultores-todos")?.parentElement; if(alturaTodos)alturaTodos.style.height=`${Math.max(320,todosConsultores.length*30)}px`;
     const alturaSubs=el("cc-grafico-subsede")?.parentElement; if(alturaSubs)alturaSubs.style.height=`${Math.max(320,todasSubsedes.length*32)}px`;
-    graficos["cc-grafico-consultores-todos"]?.resize(); graficos["cc-grafico-subsede"]?.resize();
+    graficos["cc-grafico-consultores-todos"]?.resize(); graficos["cc-grafico-subsede"]?.resize(); graficos["cc-grafico-tkm"]?.resize();
   }
 
   function atualizarTabela(lista) {
