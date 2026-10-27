@@ -4724,17 +4724,21 @@ function exportarMetasEstagio() {
   };
   const ativo = r => [true,1,"1","true","t","sim","ativo"].includes(typeof r.ativo_no_mes === "string" ? r.ativo_no_mes.toLowerCase().trim() : r.ativo_no_mes);
   const valor = v => Number(v) || 0;
-  // Identifica a faixa de carga horária a partir do campo tipo_contrato.
-  // Exemplos reconhecidos: "20-24h", "24 horas", "30 a 36 horas", "6h".
+  // Classifica pela coluna carga_horaria existente na base; usa tipo_contrato como alternativa.
   function cargaHoraria(r) {
-    const t = txt(r.tipo_contrato).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
-    const faixa = t.match(/(\\d{1,2})\\s*(?:-|a|ate|à)\\s*(\\d{1,2})\\s*(?:h|hora|horas)?/);
+    const t = [r.carga_horaria, r.tipo_contrato]
+      .map(v => txt(v).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
+      .filter(Boolean).join(" ");
+    // Exemplos: "4h", "6h", "20-24h", "20 a 24 horas", "30-36 horas".
+    if (/\b4\s*h\b/.test(t)) return "4h";
+    if (/\b6\s*h\b/.test(t)) return "6h";
+    const faixa = t.match(/(\d{1,2})\s*(?:-|a|ate|à)\s*(\d{1,2})\s*(?:h|hora|horas)?/);
     if (faixa) {
       const a = Number(faixa[1]), b = Number(faixa[2]);
       if (a >= 20 && b <= 24) return "4h";
       if (a >= 30 && b <= 36) return "6h";
     }
-    const nums = [...t.matchAll(/\\d{1,2}/g)].map(m => Number(m[0]));
+    const nums = [...t.matchAll(/\d{1,2}/g)].map(m => Number(m[0]));
     if (nums.some(n => n >= 20 && n <= 24)) return "4h";
     if (nums.some(n => n >= 30 && n <= 36)) return "6h";
     return "Não identificada";
@@ -4745,7 +4749,7 @@ function exportarMetasEstagio() {
   async function buscarTodos() {
     const conexao = window.sb || sb;
     if (!conexao) throw new Error("Conexão com Supabase não encontrada.");
-    const campos = "id,chave_origem,periodo_referencia,empresa,cnpj,consultor,cidade,subsede,regiao,aprendiz,data_inicio,data_fim,tipo_contrato,cartao_futuro,contribuicao_mensal,contribuicao_unica,contribuicao_adm_folha,ativo_no_mes,origem";
+    const campos = "id,chave_origem,periodo_referencia,empresa,cnpj,consultor,cidade,subsede,regiao,aprendiz,data_inicio,data_fim,tipo_contrato,carga_horaria,cartao_futuro,contribuicao_mensal,contribuicao_unica,contribuicao_adm_folha,ativo_no_mes,origem";
     const todos = [], tamanho = 1000;
     for (let inicio = 0; ; inicio += tamanho) {
       const { data, error } = await conexao.from(TABLE).select(campos).order("periodo_referencia", { ascending: true }).range(inicio, inicio + tamanho - 1);
