@@ -9,14 +9,14 @@
   <title>Portal BI | GERAR</title>
 
   <!-- CSS principal -->
-  <link rel="stylesheet" href="./style.css?v=20261027-tkm-carga">
+  <link rel="stylesheet" href="./style.css?v=20261027-tkm-carga-30-18h-v2">
 
   <!-- Bibliotecas e configurações existentes -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-  <script src="./script.js?v=20261027-tkm-carga" defer></script>
+  <script src="./script.js?v=20261027-tkm-carga-30-18h-v2" defer></script>
 
   <style>
 
@@ -689,7 +689,7 @@
           <article class="cc-kpi"><span>Contribuição mensal</span><strong id="cc-kpi-mensal">—</strong><small id="cc-kpi-faturamento-crescimento">Comparação mensal</small></article>
           <article class="cc-kpi"><span>TKM médio</span><strong id="cc-kpi-tkm">—</strong><small>Contribuição mensal média por contrato</small></article>
           <article class="cc-kpi"><span>Contratos 4h (20–24h)</span><strong id="cc-kpi-4h">—</strong><small>Contratos na faixa de 20 a 24 horas</small></article>
-          <article class="cc-kpi"><span>Contratos 6h (30–36h)</span><strong id="cc-kpi-6h">—</strong><small>Contratos na faixa de 30 a 36 horas</small></article>
+          <article class="cc-kpi"><span>Contratos 6h (30–18h)</span><strong id="cc-kpi-6h">—</strong><small>Contratos identificados pela faixa 30-18h</small></article>
         </div>
         <div class="cc-graficos">
           <article class="cc-painel"><h3>Evolução mensal de contratos</h3><p class="muted">Todos os meses disponíveis, independentemente do mês selecionado.</p><div class="cc-grafico-area"><canvas id="cc-grafico-periodo"></canvas></div></article>
@@ -697,7 +697,7 @@
           <article class="cc-painel cc-painel-wide"><h3>Crescimento de contratos por mês (%)</h3><div class="cc-grafico-area"><canvas id="cc-grafico-crescimento"></canvas></div></article>
           <article class="cc-painel"><h3>Contratos por consultor (Top 10)</h3><div class="cc-grafico-area"><canvas id="cc-grafico-consultor"></canvas></div></article>
           <article class="cc-painel cc-painel-wide"><h3>Ranking de TKM por consultor</h3><p class="muted">Consultores ordenados do maior para o menor ticket médio. O valor aparece ao lado de cada barra e acompanha os filtros selecionados.</p><div class="cc-grafico-area" id="cc-area-ranking-tkm"><canvas id="cc-grafico-tkm"></canvas></div></article>
-          <article class="cc-painel"><h3>Contratos por carga horária</h3><p class="muted">4h: 20–24 horas · 6h: 30–36 horas · demais faixas ficam como não identificadas.</p><div class="cc-grafico-area"><canvas id="cc-grafico-carga-horaria"></canvas></div></article>
+          <article class="cc-painel"><h3>Contratos por carga horária</h3><p class="muted">4h: 20–24 horas · 6h: 30–18 horas · demais faixas ficam como não identificadas.</p><div class="cc-grafico-area"><canvas id="cc-grafico-carga-horaria"></canvas></div></article>
           <article class="cc-painel"><h3>Contratos por Cartão Futuro</h3><div class="cc-grafico-area"><canvas id="cc-grafico-cartao"></canvas></div></article>
           <article class="cc-painel cc-painel-wide"><h3>Todos os consultores — ranking completo</h3><p class="muted">O gráfico aumenta de altura para mostrar todos os consultores.</p><div class="cc-grafico-area"><canvas id="cc-grafico-consultores-todos"></canvas></div></article>
           <article class="cc-painel cc-painel-wide"><h3>Contratos por todas as sub sedes</h3><p class="muted">Todas as subsedes são exibidas, ordenadas da maior para a menor carteira.</p><div class="cc-grafico-area"><canvas id="cc-grafico-subsede"></canvas></div></article>
