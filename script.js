@@ -4706,6 +4706,12 @@ function exportarMetasEstagio() {
   let carregando = false;
   let graficos = {};
   const el = id => document.getElementById(id);
+  // O plugin é carregado no HTML, mas precisa ser registrado no Chart.js para
+  // que os rótulos configurados nos gráficos apareçam sem passar o mouse.
+  if (window.Chart && window.ChartDataLabels && !window.__ccDataLabelsRegistered) {
+    window.Chart.register(window.ChartDataLabels);
+    window.__ccDataLabelsRegistered = true;
+  }
   const txt = v => v == null ? "" : String(v).trim();
   const moeda = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 }).format(Number(v) || 0);
   const inteiro = v => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(Number(v) || 0);
@@ -4918,10 +4924,22 @@ function exportarMetasEstagio() {
       }
     });
 
+    // Top 5 empresas com aprendizes ativos no conjunto filtrado.
+    // Como o filtro de período seleciona o mês mais recente por padrão,
+    // a contagem representa os contratos ativos daquele período, sem somar
+    // repetidamente o histórico de meses anteriores.
+    const porEmpresaAtiva = new Map();
+    lista.filter(ativo).forEach(r => {
+      const nome = txt(r.empresa) || "Empresa não identificada";
+      porEmpresaAtiva.set(nome, (porEmpresaAtiva.get(nome) || 0) + 1);
+    });
+    const topEmpresasAtivas = [...porEmpresaAtiva.entries()]
+      .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"))
+      .slice(0, 5);
+    renderizarRankingEmpresasAtivas(topEmpresasAtivas);
+
     const porConsultor={}; lista.forEach(r=>{const n=txt(r.consultor)||"Sem consultor";porConsultor[n]=(porConsultor[n]||0)+1;});
     const todosConsultores=Object.entries(porConsultor).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"pt-BR"));
-    const top=todosConsultores.slice(0,10);
-    grafico("cc-grafico-consultor",{type:"bar",data:{labels:top.map(x=>x[0]),datasets:[{label:"Contratos",data:top.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:5}]},options:opcoesBarra(true)});
     grafico("cc-grafico-consultores-todos",{type:"bar",data:{labels:todosConsultores.map(x=>x[0]),datasets:[{label:"Contratos",data:todosConsultores.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:4}]},options:opcoesBarra(true)});
     const porSubsede={}; lista.forEach(r=>{const n=txt(r.subsede)||"Sem subsede";porSubsede[n]=(porSubsede[n]||0)+1;});
     const todasSubsedes=Object.entries(porSubsede).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"pt-BR"));
@@ -4931,6 +4949,33 @@ function exportarMetasEstagio() {
     const alturaTodos=el("cc-grafico-consultores-todos")?.parentElement; if(alturaTodos)alturaTodos.style.height=`${Math.max(320,todosConsultores.length*30)}px`;
     const alturaSubs=el("cc-grafico-subsede")?.parentElement; if(alturaSubs)alturaSubs.style.height=`${Math.max(320,todasSubsedes.length*32)}px`;
     graficos["cc-grafico-consultores-todos"]?.resize(); graficos["cc-grafico-subsede"]?.resize(); graficos["cc-grafico-tkm"]?.resize();
+  }
+
+  function renderizarRankingEmpresasAtivas(ranking) {
+    const container = el("cc-ranking-empresas");
+    if (!container) return;
+
+    if (!ranking.length) {
+      container.innerHTML = '<p class="cc-ranking-vazio">Nenhuma empresa com aprendizes ativos foi encontrada para os filtros selecionados.</p>';
+      return;
+    }
+
+    const maximo = Math.max(...ranking.map(item => item[1]), 1);
+    container.innerHTML = ranking.map(([nome, quantidade], indice) => {
+      const largura = Math.max(2, (quantidade / maximo) * 100);
+      const rotulo = quantidade === 1 ? "aprendiz ativo" : "aprendizes ativos";
+      return `
+        <div class="cc-ranking-empresa">
+          <div class="cc-ranking-empresa-topo">
+            <span class="cc-ranking-posicao">${indice + 1}º</span>
+            <span class="cc-ranking-nome" title="${escape(nome)}">${escape(nome)}</span>
+            <span class="cc-ranking-valor">${inteiro(quantidade)} ${rotulo}</span>
+          </div>
+          <div class="cc-ranking-trilho" role="img" aria-label="${escape(nome)}: ${inteiro(quantidade)} ${rotulo}">
+            <div class="cc-ranking-barra" style="width:${largura}%"></div>
+          </div>
+        </div>`;
+    }).join("");
   }
 
   function atualizarTabela(lista) {
