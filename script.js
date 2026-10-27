@@ -4724,23 +4724,28 @@ function exportarMetasEstagio() {
   };
   const ativo = r => [true,1,"1","true","t","sim","ativo"].includes(typeof r.ativo_no_mes === "string" ? r.ativo_no_mes.toLowerCase().trim() : r.ativo_no_mes);
   const valor = v => Number(v) || 0;
-  // Classifica pela coluna carga_horaria existente na base; usa tipo_contrato como alternativa.
+  // Classifica pela coluna carga_horaria; usa os campos de texto como alternativa.
+  // Na planilha, os contratos de 6h aparecem como "30-18h".
   function cargaHoraria(r) {
-    const t = [r.carga_horaria, r.tipo_contrato]
+    const t = [r.carga_horaria, r.tipo_contrato, r.aprendiz]
       .map(v => txt(v).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
       .filter(Boolean).join(" ");
-    // Exemplos: "4h", "6h", "20-24h", "20 a 24 horas", "30-36 horas".
+
+    // Reconhece o formato real da base antes das regras genéricas.
+    if (/\b30\s*[-–]\s*18\s*h\b/.test(t)) return "6h";
+    if (/\b20\s*[-–]\s*24\s*h\b/.test(t)) return "4h";
+    if (/\b30\s*[-–]\s*36\s*h\b/.test(t)) return "6h";
+
     if (/\b4\s*h\b/.test(t)) return "4h";
     if (/\b6\s*h\b/.test(t)) return "6h";
-    const faixa = t.match(/(\d{1,2})\s*(?:-|a|ate|à)\s*(\d{1,2})\s*(?:h|hora|horas)?/);
+
+    const faixa = t.match(/(\d{1,2})\s*(?:-|–|a|ate|à)\s*(\d{1,2})\s*(?:h|hora|horas)?/);
     if (faixa) {
       const a = Number(faixa[1]), b = Number(faixa[2]);
-      if (a >= 20 && b <= 24) return "4h";
-      if (a >= 30 && b <= 36) return "6h";
+      if (a === 20 && b === 24) return "4h";
+      if (a === 30 && (b === 18 || b === 36)) return "6h";
     }
-    const nums = [...t.matchAll(/\d{1,2}/g)].map(m => Number(m[0]));
-    if (nums.some(n => n >= 20 && n <= 24)) return "4h";
-    if (nums.some(n => n >= 30 && n <= 36)) return "6h";
+
     return "Não identificada";
   }
   const pct = (atual, anterior) => anterior > 0 ? ((atual-anterior)/anterior)*100 : null;
@@ -4881,7 +4886,7 @@ function exportarMetasEstagio() {
         plugins: {
           legend: { display: false },
           tooltip: { callbacks: { label: ctx => `TKM médio: ${moeda(ctx.raw)} · ${inteiro(rankingTkm[ctx.dataIndex]?.contratos)} contratos` } },
-          datalabels: { display: true, anchor: "end", align: "end", clamp: true, color: "#34445b", font: { weight: "600", size: 10 }, formatter: v => moeda(v) }
+          datalabels: { display: true, anchor: "end", align: "end", clamp: true, color: "#34445b", font: { weight: "700", size: 11 }, formatter: v => moeda(v) }
         },
         scales: { x: { beginAtZero: true, grace: "18%", ticks: { callback: v => moeda(v) } }, y: { ticks: { autoSkip: false } } }
       }
@@ -4893,8 +4898,24 @@ function exportarMetasEstagio() {
     const contagemFaixas = faixas.map(f => lista.filter(r => cargaHoraria(r) === f).length);
     grafico("cc-grafico-carga-horaria", {
       type: "bar",
-      data: { labels: ["4h (20–24h)", "6h (30–36h)", "Não identificada"], datasets: [{ label: "Contratos", data: contagemFaixas, backgroundColor: ["#16835b", "#3678c8", "#cbd5e1"], borderRadius: 5 }] },
-      options: { ...opcoesBarra(false), plugins: { ...opcoesBarra(false).plugins, tooltip: { callbacks: { label: ctx => `Contratos: ${inteiro(ctx.raw)}` } } } }
+      data: { labels: ["4h (20–24h)", "6h (30–18h)", "Não identificada"], datasets: [{ label: "Contratos", data: contagemFaixas, backgroundColor: ["#16835b", "#3678c8", "#cbd5e1"], borderRadius: 5 }] },
+      options: {
+        ...opcoesBarra(false),
+        layout: { padding: { top: 28, right: 12, bottom: 4, left: 4 } },
+        plugins: {
+          ...opcoesBarra(false).plugins,
+          datalabels: {
+            display: true,
+            anchor: "end",
+            align: "end",
+            clamp: true,
+            color: "#182538",
+            font: { weight: "700", size: 12 },
+            formatter: v => inteiro(v)
+          },
+          tooltip: { callbacks: { label: ctx => `Contratos: ${inteiro(ctx.raw)}` } }
+        }
+      }
     });
 
     const porConsultor={}; lista.forEach(r=>{const n=txt(r.consultor)||"Sem consultor";porConsultor[n]=(porConsultor[n]||0)+1;});
