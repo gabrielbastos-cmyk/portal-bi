@@ -195,7 +195,7 @@ function mostrarLogin() {
   [
     "portal-section", "admin-section", "admin-nav-link",
     "substituicoes-section", "substituicoes-nav-link",
-    "ead-section", "ead-nav-link", "metas-aprendiz-section", "metas-aprendiz-nav-link", "metas-estagio-section", "metas-estagio-nav-link"
+    "ead-section", "ead-nav-link", "metas-aprendiz-section", "metas-aprendiz-nav-link", "metas-estagio-section", "metas-estagio-nav-link", "carteira-consultores-section", "carteira-consultores-nav-link"
   ].forEach(id => {
     if ($(id)) $(id).hidden = true;
   });
@@ -208,6 +208,7 @@ function mostrarPortal() {
   if ($("login-section")) $("login-section").hidden = true;
   if ($("portal-section")) $("portal-section").hidden = false;
   if ($("user-email")) $("user-email").textContent = currentUser?.email || "";
+  if (typeof window.inicializarCarteiraConsultores === "function") window.inicializarCarteiraConsultores();
 }
 
 if ($("login-form")) {
@@ -4691,3 +4692,125 @@ function exportarMetasEstagio() {
   const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
   const url=URL.createObjectURL(blob), a=document.createElement("a");a.href=url;a.download=`metas-estagio-${mes||"dados"}.csv`;a.click();URL.revokeObjectURL(url);
 }
+
+// ==================================================
+// CARTEIRA DOS CONSULTORES — public.bi_carteira_consultores
+// ==================================================
+(() => {
+  "use strict";
+  const TABLE = "bi_carteira_consultores";
+  let dados = [];
+  let inicializado = false;
+  let carregando = false;
+  let graficos = {};
+  const el = id => document.getElementById(id);
+  const txt = v => v == null ? "" : String(v).trim();
+  const moeda = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 }).format(Number(v) || 0);
+  const inteiro = v => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(Number(v) || 0);
+  const dataPt = v => { if (!v) return "—"; const d = new Date(String(v).slice(0,10)+"T12:00:00"); return Number.isNaN(d.getTime()) ? txt(v) : d.toLocaleDateString("pt-BR"); };
+  const escape = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  async function buscarTodos() {
+    if (!window.sb) throw new Error("Conexão com Supabase não encontrada.");
+    const campos = "id,chave_origem,periodo_referencia,empresa,cnpj,consultor,cidade,subsede,regiao,aprendiz,data_inicio,data_fim,tipo_contrato,cartao_futuro,contribuicao_mensal,contribuicao_unica,contribuicao_adm_folha,ativo_no_mes,origem";
+    const todos = [];
+    const tamanho = 1000;
+    for (let inicio = 0; ; inicio += tamanho) {
+      const { data, error } = await window.sb.from(TABLE).select(campos).order("periodo_referencia", { ascending: true }).range(inicio, inicio + tamanho - 1);
+      if (error) throw error;
+      todos.push(...(data || []));
+      if (!data || data.length < tamanho) break;
+    }
+    return todos;
+  }
+
+  function preencherSelect(id, valores, todosLabel) {
+    const select = el(id); if (!select) return;
+    const anterior = select.value;
+    const unicos = [...new Set(valores.map(txt).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+    select.replaceChildren(new Option(todosLabel, ""));
+    unicos.forEach(v => select.add(new Option(v, v)));
+    if (unicos.includes(anterior)) select.value = anterior;
+  }
+
+  function filtros() {
+    const periodo=el("cc-filtro-periodo")?.value || "";
+    const consultor=el("cc-filtro-consultor")?.value || "";
+    const subsede=el("cc-filtro-subsede")?.value || "";
+    const cidade=el("cc-filtro-cidade")?.value || "";
+    const empresa=(el("cc-filtro-empresa")?.value || "").toLocaleLowerCase("pt-BR");
+    const status=el("cc-filtro-status")?.value || "";
+    return dados.filter(r => (!periodo || r.periodo_referencia===periodo) && (!consultor || txt(r.consultor)===consultor) && (!subsede || txt(r.subsede)===subsede) && (!cidade || txt(r.cidade)===cidade) && (!empresa || [r.empresa,r.cnpj,r.aprendiz,r.consultor].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(empresa))) && (!status || String(Boolean(r.ativo_no_mes))===status));
+  }
+
+  function montarFiltros() {
+    preencherSelect("cc-filtro-periodo", dados.map(r=>r.periodo_referencia), "Todos os períodos");
+    preencherSelect("cc-filtro-consultor", dados.map(r=>r.consultor), "Todos os consultores");
+    preencherSelect("cc-filtro-subsede", dados.map(r=>r.subsede), "Todas as subsedes");
+    preencherSelect("cc-filtro-cidade", dados.map(r=>r.cidade), "Todas as cidades");
+  }
+
+  function atualizarKpis(lista) {
+    const ativos=lista.filter(r=>r.ativo_no_mes===true || r.ativo_no_mes===1 || r.ativo_no_mes==="true").length;
+    const empresas=new Set(lista.map(r=>txt(r.empresa)).filter(Boolean)).size;
+    const consultores=new Set(lista.map(r=>txt(r.consultor)).filter(Boolean)).size;
+    const soma=lista.reduce((a,r)=>a+(Number(r.contribuicao_mensal)||0),0);
+    if(el("cc-kpi-total")) el("cc-kpi-total").textContent=inteiro(lista.length);
+    if(el("cc-kpi-ativos")) el("cc-kpi-ativos").textContent=inteiro(ativos);
+    if(el("cc-kpi-empresas")) el("cc-kpi-empresas").textContent=inteiro(empresas);
+    if(el("cc-kpi-consultores")) el("cc-kpi-consultores").textContent=inteiro(consultores);
+    if(el("cc-kpi-mensal")) el("cc-kpi-mensal").textContent=moeda(soma);
+  }
+
+  function destruirGraficos(){ Object.values(graficos).forEach(g=>{try{g.destroy()}catch(_){}}); graficos={}; }
+  function grafico(id, config){ const canvas=el(id); if(!canvas || !window.Chart) return; if(graficos[id]) graficos[id].destroy(); graficos[id]=new Chart(canvas,config); }
+  function atualizarGraficos(lista) {
+    if(!window.Chart) return;
+    const porPeriodo={}; lista.forEach(r=>{const p=txt(r.periodo_referencia); if(p) porPeriodo[p]=(porPeriodo[p]||0)+1;});
+    const periodos=Object.keys(porPeriodo).sort();
+    grafico("cc-grafico-periodo",{type:"line",data:{labels:periodos.map(p=>{const d=new Date(p+"T12:00:00");return d.toLocaleDateString("pt-BR",{month:"short",year:"numeric"})}),datasets:[{label:"Contratos",data:periodos.map(p=>porPeriodo[p]),borderColor:"#245b91",backgroundColor:"rgba(36,91,145,.14)",fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+    const porConsultor={}; lista.forEach(r=>{const n=txt(r.consultor)||"Sem consultor";porConsultor[n]=(porConsultor[n]||0)+1;});
+    const top=Object.entries(porConsultor).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    grafico("cc-grafico-consultor",{type:"bar",data:{labels:top.map(x=>x[0]),datasets:[{label:"Contratos",data:top.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:5}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+    const porSubsede={}; lista.forEach(r=>{const n=txt(r.subsede)||"Sem subsede";porSubsede[n]=(porSubsede[n]||0)+1;});
+    const topS=Object.entries(porSubsede).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    grafico("cc-grafico-subsede",{type:"bar",data:{labels:topS.map(x=>x[0]),datasets:[{label:"Contratos",data:topS.map(x=>x[1]),backgroundColor:"#4c8b67",borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  }
+
+  function atualizarTabela(lista) {
+    const corpo=el("cc-tabela-corpo"); if(!corpo) return;
+    const busca=(el("cc-busca")?.value||"").toLocaleLowerCase("pt-BR");
+    const filtrados=lista.filter(r=>!busca || [r.empresa,r.cnpj,r.consultor,r.cidade,r.subsede,r.aprendiz,r.tipo_contrato].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(busca)));
+    const pagina=Math.max(1,Number(el("cc-pagina")?.value)||1); const tamanho=50; const totalPaginas=Math.max(1,Math.ceil(filtrados.length/tamanho)); const p=Math.min(pagina,totalPaginas); if(el("cc-pagina")) el("cc-pagina").value=String(p);
+    const inicio=(p-1)*tamanho; const paginaDados=filtrados.slice(inicio,inicio+tamanho);
+    corpo.innerHTML=paginaDados.length?paginaDados.map(r=>`<tr><td>${escape(r.periodo_referencia)}</td><td>${escape(r.consultor||"—")}</td><td>${escape(r.subsede||"—")}</td><td>${escape(r.empresa||"—")}</td><td>${escape(r.cnpj||"—")}</td><td>${escape(r.aprendiz||"—")}</td><td>${escape(r.cidade||"—")}</td><td>${escape(r.tipo_contrato||"—")}</td><td>${r.ativo_no_mes ? "Ativo" : "Inativo"}</td><td>${moeda(r.contribuicao_mensal)}</td></tr>`).join(""):`<tr><td colspan="10">Nenhum contrato encontrado com os filtros selecionados.</td></tr>`;
+    if(el("cc-contador")) el("cc-contador").textContent=filtrados.length?`Exibindo ${inicio+1}–${Math.min(inicio+tamanho,filtrados.length)} de ${inteiro(filtrados.length)} contratos · Página ${p} de ${totalPaginas}`:"Nenhum contrato encontrado.";
+    if(el("cc-anterior")) el("cc-anterior").disabled=p<=1;
+    if(el("cc-proxima")) el("cc-proxima").disabled=p>=totalPaginas;
+  }
+
+  function renderizar() { const lista=filtros(); atualizarKpis(lista); atualizarGraficos(lista); if(el("cc-pagina"))el("cc-pagina").value="1"; atualizarTabela(lista); }
+  function mensagem(texto,tipo="info"){const m=el("cc-mensagem");if(m){m.textContent=texto;m.dataset.tipo=tipo;}}
+  async function carregar() {
+    if(carregando) return; carregando=true; const botao=el("cc-atualizar"); if(botao)botao.disabled=true; mensagem("Carregando contratos do Supabase…");
+    try { dados=await buscarTodos(); montarFiltros(); renderizar(); mensagem(`${inteiro(dados.length)} contratos carregados com sucesso.`,"success"); }
+    catch(e){ console.error("Carteira dos Consultores:",e); mensagem("Não foi possível carregar a Carteira dos Consultores: "+(e.message||"erro desconhecido")+". Confira as permissões SELECT da tabela bi_carteira_consultores no Supabase.","error"); }
+    finally{carregando=false;if(botao)botao.disabled=false;}
+  }
+  function configurarEventos(){
+    ["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status"].forEach(id=>el(id)?.addEventListener("change",renderizar));
+    el("cc-filtro-empresa")?.addEventListener("input",renderizar); el("cc-busca")?.addEventListener("input",()=>atualizarTabela(filtros()));
+    el("cc-atualizar")?.addEventListener("click",carregar);
+    el("cc-limpar")?.addEventListener("click",()=>{["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-empresa","cc-busca"].forEach(id=>{if(el(id))el(id).value="";});renderizar();});
+    el("cc-anterior")?.addEventListener("click",()=>{if(el("cc-pagina"))el("cc-pagina").value=String(Math.max(1,Number(el("cc-pagina").value)-1));atualizarTabela(filtros());});
+    el("cc-proxima")?.addEventListener("click",()=>{if(el("cc-pagina"))el("cc-pagina").value=String((Number(el("cc-pagina").value)||1)+1);atualizarTabela(filtros());});
+    el("cc-exportar")?.addEventListener("click",()=>{const lista=filtros();const headers=["Período","Consultor","Subsede","Empresa","CNPJ","Aprendiz","Cidade","Tipo de contrato","Ativo","Contribuição mensal"];const linhas=lista.map(r=>[r.periodo_referencia,r.consultor,r.subsede,r.empresa,r.cnpj,r.aprendiz,r.cidade,r.tipo_contrato,r.ativo_no_mes?"Ativo":"Inativo",r.contribuicao_mensal].map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(";"));const blob=new Blob(["\uFEFF"+[headers.join(";"),...linhas].join("\r\n")],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="carteira-consultores.csv";a.click();URL.revokeObjectURL(url);});
+  }
+  window.inicializarCarteiraConsultores=function(){
+    const section=el("carteira-consultores-section"),nav=el("carteira-consultores-nav-link");
+    if(!section||!nav||!window.sb)return;
+    section.hidden=false;nav.hidden=false;
+    if(!inicializado){configurarEventos();inicializado=true;carregar();}
+  };
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>{if(window.sb && window.sb.auth)window.sb.auth.getSession().then(({data})=>{if(data?.session)window.inicializarCarteiraConsultores();});},{once:true});
+})();
