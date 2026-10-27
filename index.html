@@ -15,6 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   <script src="./script.js" defer></script>
 
   <style>
@@ -246,7 +247,119 @@
         padding: 12px;
       }
     }
-  </style>
+
+    /* Ajuste visual do ranking: evita o grande espaço vazio e melhora a leitura */
+    .metas-graficos.metas-ranking-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 18px;
+      margin-top: 22px;
+    }
+    .metas-ranking-principal {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      align-self: start;
+      height: auto !important;
+      min-height: 0 !important;
+      gap: 16px;
+      padding: 22px;
+      overflow: visible;
+    }
+    .metas-ranking-principal .metas-ranking-cabecalho {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      width: 100%;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e6edf5;
+    }
+    .metas-ranking-principal h3 {
+      margin: 0;
+      line-height: 1.35;
+      flex: 1 1 360px;
+      min-width: 0;
+    }
+    .metas-ranking-principal .metas-ranking-botoes {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 0 0 auto;
+      padding: 4px;
+      flex: 0 0 auto;
+      border: 1px solid #e0e7f0;
+      border-radius: 12px;
+      background: #f4f7fb;
+    }
+    .metas-ranking-principal .metas-ranking-botoes button {
+      min-height: 42px;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #17365d;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+    }
+    .metas-ranking-principal .metas-ranking-botoes button.active,
+    .metas-ranking-principal .metas-ranking-botoes button[aria-pressed="true"] {
+      background: #17365d;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(16, 44, 76, .18);
+    }
+    .metas-ranking-principal .metas-table-scroll {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      margin: 0;
+    }
+    .metas-ranking-principal table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .metas-ranking-principal th,
+    .metas-ranking-principal td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .metas-ranking-principal tbody tr:hover {
+      background: #f5f8fc;
+    }
+    @media (max-width: 700px) {
+      .metas-ranking-principal { padding: 16px; }
+      .metas-ranking-principal th,
+      .metas-ranking-principal td { padding: 10px 8px; white-space: nowrap; }
+      .metas-ranking-principal .metas-ranking-cabecalho { align-items: stretch; gap: 12px; }
+      .metas-ranking-principal .metas-ranking-botoes { width: 100%; margin-left: 0; }
+      .metas-ranking-principal .metas-ranking-botoes button { flex: 1; padding: 10px; }
+    }
+
+
+/* Metas Estágio */
+.metas-estagio-filtros { grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+.estagio-tabela { margin-top: 20px; padding: 22px; }
+.estagio-tabela .metas-ranking-cabecalho { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.estagio-tabela h3 { margin:0; }
+.estagio-tabela table { width:100%; border-collapse:collapse; }
+.estagio-tabela th,.estagio-tabela td { padding:12px; text-align:left; border-bottom:1px solid #e6edf5; white-space:nowrap; }
+.estagio-tabela th { color:#17365d; background:#f4f7fb; }
+@media(max-width:700px){.estagio-tabela{padding:14px}.estagio-tabela th,.estagio-tabela td{padding:9px}}
+\n  
+    .metas-estagio-filtros + .metas-kpis + .metas-graficos canvas { max-height: 390px; }
+    .estagio-ranking-ticket { margin-top: 20px; padding: 22px; }
+    .estagio-ranking-ticket h3 { margin-top: 0; }
+    .estagio-ranking-ticket-chart { position: relative; width: 100%; min-height: 280px; height: max(280px, 32px * var(--estagio-ranking-itens, 8)); max-height: 680px; }
+    .estagio-ranking-ticket-chart canvas { width: 100% !important; height: 100% !important; }
+</style>
 </head>
 
 <body>
@@ -327,10 +440,10 @@
         <span class="nav-icon">▥</span> Controle de Vagas Aprendiz
       </a>
 
+
       <a class="nav-link" href="#carteira-consultores-section" id="carteira-consultores-nav-link" hidden>
         <span class="nav-icon">▤</span> Carteira dos Consultores
       </a>
-
       <a
         class="nav-link"
         href="#substituicoes-section"
@@ -348,6 +461,14 @@
         hidden
       >
         <span class="nav-icon">⌖</span> Análise Geográfica EaD
+      </a>
+
+      <a class="nav-link" href="#metas-aprendiz-section" id="metas-aprendiz-nav-link" hidden>
+        <span class="nav-icon">▤</span> Metas do Aprendiz
+      </a>
+
+      <a class="nav-link" href="#metas-estagio-section" id="metas-estagio-nav-link" hidden>
+        <span class="nav-icon">▤</span> Metas Estágio
       </a>
 
       <a
@@ -895,6 +1016,63 @@
           atendimento EaD. Casos que exijam análise adicional devem ser
           avaliados pela equipe responsável.
         </p>
+      </section>
+
+
+      <!-- METAS DO APRENDIZ -->
+      <section id="metas-aprendiz-section" class="dashboard-section" hidden>
+        <div class="section-heading"><div><p class="section-kicker">DESEMPENHO E RESULTADOS</p><h2>Metas do Aprendiz</h2><p class="muted">Acompanhe o realizado, as metas e a evolução mensal por unidade.</p></div><button type="button" id="metas-aprendiz-atualizar" class="access-pill">↻ Atualizar dados</button></div>
+        <p id="metas-aprendiz-message" role="status" aria-live="polite"></p>
+        <div class="metas-filtros">
+          <label>Tipo de unidade<select id="metas-tipo"><option value="Matriz">Matriz</option><option value="Polos">Polos</option></select></label>
+          <label>Mês de referência<select id="metas-mes"><option value="">Carregando meses...</option></select></label>
+          <label>Subsede<select id="metas-subsede"><option value="">Todas as subsedes</option></select></label>
+          <label id="metas-unidade-wrap" hidden>Unidade / Polo<select id="metas-unidade"><option value="">Todas as unidades da subsede</option></select></label>
+        </div>
+        <div class="metas-kpis">
+          <article class="metas-card"><span>Faturamento realizado</span><strong id="metas-faturado">—</strong><small id="metas-faturamento-meta">Meta: —</small><div class="metas-progress"><i id="metas-faturamento-barra"></i></div><small id="metas-faturamento-percentual">—</small></article>
+          <article class="metas-card"><span>Jovens ativos</span><strong id="metas-jovens">—</strong><small id="metas-jovens-meta">Meta: —</small><div class="metas-progress"><i id="metas-jovens-barra"></i></div><small id="metas-jovens-percentual">—</small></article>
+          <article class="metas-card"><span>Empresas</span><strong id="metas-empresas">—</strong><small>Quantidade no período selecionado</small></article>
+          <article class="metas-card"><span>Ticket médio</span><strong id="metas-ticket">—</strong><small>Conforme registros da base</small></article>
+        </div>
+        <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="metas-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="metas-grafico-jovens"></canvas></div></article></div>
+        <div class="metas-graficos metas-ranking-layout"><article class="metas-panel metas-ranking-principal">
+          <div class="metas-ranking-cabecalho">
+            <h3 id="metas-ranking-titulo">Ranking de subsedes — atingimento de faturamento</h3>
+            <div class="metas-ranking-botoes" role="group" aria-label="Selecionar indicador do ranking">
+              <button type="button" data-modo-ranking="faturamento" class="ativo" aria-pressed="true">Faturamento</button>
+              <button type="button" data-modo-ranking="aprendiz" aria-pressed="false">Aprendiz</button>
+            </div>
+          </div>
+          <input type="hidden" id="metas-ranking-modo" value="faturamento">
+          <div class="metas-table-scroll">
+            <table>
+              <thead><tr id="metas-ranking-cabecalho"><th id="metas-ranking-dimensao">Subsede</th><th>Faturado</th><th>Meta</th><th>Atingimento</th></tr></thead>
+              <tbody id="metas-ranking-faturamento"></tbody>
+            </table>
+          </div>
+        </article><article class="metas-panel"><h3>Ranking de subsedes — ticket médio</h3><div class="metas-table-scroll"><table><thead><tr><th id="metas-ranking-ticket-dimensao">Subsede</th><th>Ticket médio</th><th>Jovens</th></tr></thead><tbody id="metas-ranking-ticket"></tbody></table></div></article></div>
+        <p class="metas-nota">Os cartões representam o mês selecionado. Os gráficos apresentam o histórico mensal disponível na tabela bi_aprendiz_historico.</p>
+      </section>
+
+
+      <!-- METAS ESTÁGIO -->
+      <section id="metas-estagio-section" class="dashboard-section" hidden>
+        <div class="section-heading"><div><p class="section-kicker">DESEMPENHO E RESULTADOS</p><h2>Metas Estágio</h2><p class="muted">Acompanhe faturamento, jovens e metas por unidade. O painel usa sempre o registro mais recente disponível dentro de cada mês.</p></div><button type="button" id="metas-estagio-atualizar" class="access-pill">↻ Atualizar dados</button></div>
+        <p id="metas-estagio-message" role="status" aria-live="polite"></p>
+        <div class="metas-filtros metas-estagio-filtros">
+          <label>Mês de referência<select id="estagio-mes"><option value="">Carregando meses...</option></select></label>
+          <label>Unidade<select id="estagio-unidade"><option value="">Todas as unidades</option></select></label>
+        </div>
+        <div class="metas-kpis">
+          <article class="metas-card"><span>Faturamento realizado</span><strong id="estagio-faturado">—</strong><small id="estagio-faturamento-meta">Meta: —</small><div class="metas-progress"><i id="estagio-faturamento-barra"></i></div><small id="estagio-faturamento-percentual">—</small></article>
+          <article class="metas-card"><span>Jovens</span><strong id="estagio-jovens">—</strong><small id="estagio-jovens-meta">Meta: —</small><div class="metas-progress"><i id="estagio-jovens-barra"></i></div><small id="estagio-jovens-percentual">—</small></article>
+          <article class="metas-card"><span>Unidades</span><strong id="estagio-unidades">—</strong><small>Unidades com dados no mês</small></article>
+          <article class="metas-card"><span>Ticket médio</span><strong id="estagio-ticket">—</strong><small>Média dos registros selecionados</small></article>
+        </div>
+        <div class="metas-graficos"><article class="metas-panel"><h3>Faturamento × meta por mês</h3><div><canvas id="estagio-grafico-faturamento"></canvas></div></article><article class="metas-panel"><h3>Jovens × meta por mês</h3><div><canvas id="estagio-grafico-jovens"></canvas></div></article></div>
+        <article class="metas-panel estagio-ranking-ticket"><h3>Ranking de ticket médio (TKM) por unidade</h3><p class="muted">Unidades ordenadas do maior para o menor ticket médio no mês selecionado. Os valores aparecem ao lado das barras.</p><div class="estagio-ranking-ticket-chart"><canvas id="estagio-grafico-ticket"></canvas></div></article>
+        <article class="metas-panel estagio-tabela"><div class="metas-ranking-cabecalho"><h3>Detalhamento por unidade</h3><button type="button" id="estagio-exportar" class="access-pill">Exportar CSV</button></div><div class="metas-table-scroll"><table><thead><tr><th>Unidade</th><th>Data do registro</th><th>Faturado</th><th>Meta faturamento</th><th>Jovens</th><th>Meta jovens</th><th>Ticket médio</th></tr></thead><tbody id="estagio-tabela-corpo"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div></article>
       </section>
 
       <!-- ADMINISTRAÇÃO -->
