@@ -9,14 +9,14 @@
   <title>Portal BI | GERAR</title>
 
   <!-- CSS principal -->
-  <link rel="stylesheet" href="./style.css?v=20261027-carteira-rotulos-top5-v1">
+  <link rel="stylesheet" href="./style.css?v=20261019">
 
   <!-- Bibliotecas e configurações existentes -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-  <script src="./script.js?v=20261027-carteira-rotulos-top5-v1" defer></script>
+  <script src="./script.js?v=20261027" defer></script>
 
   <style>
 
@@ -656,35 +656,20 @@
       <!-- CARTEIRA DOS CONSULTORES -->
       <section id="carteira-consultores-section" class="dashboard-section" hidden>
         <div class="section-heading">
-          <div><p class="section-kicker">INDICADORES OPERACIONAIS</p><h2>Carteira dos Consultores</h2><p class="muted">Acompanhe contratos, empresas, consultores, contribuições e crescimento mensal.</p><p class="muted" id="cc-periodo-atual">Referência: mês mais recente</p></div>
+          <div><p class="section-kicker">INDICADORES OPERACIONAIS</p><h2>Carteira dos Consultores</h2><p class="muted">Acompanhe contratos, empresas, consultores e contribuições por período.</p></div>
           <button type="button" class="access-pill" id="cc-atualizar">Atualizar dados ↻</button>
         </div>
         <style>
           #carteira-consultores-section .cc-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:20px 0;align-items:end}
           #carteira-consultores-section .cc-filtros label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--text,#182538)}
           #carteira-consultores-section .cc-filtros input,#carteira-consultores-section .cc-filtros select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--border,#e3e8f0);border-radius:8px;background:#fff;color:var(--text,#182538);font:inherit}
-          #carteira-consultores-section .cc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0}
+          #carteira-consultores-section .cc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin:18px 0}
           #carteira-consultores-section .cc-kpi,#carteira-consultores-section .cc-painel{background:#fff;border:1px solid var(--border,#e3e8f0);border-radius:12px;padding:18px;box-shadow:0 4px 16px rgba(16,44,76,.04);min-width:0}
-          #carteira-consultores-section .cc-kpi span{display:block;color:var(--muted,#778397);font-size:12px;line-height:1.4;min-height:34px;margin-bottom:8px}#carteira-consultores-section .cc-kpi strong{display:block;font-size:clamp(20px,1.8vw,27px);line-height:1.25;white-space:nowrap;overflow-wrap:normal;letter-spacing:-.4px}
-          #carteira-consultores-section .cc-graficos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}#carteira-consultores-section .cc-graficos .cc-painel-wide{grid-column:1/-1}#carteira-consultores-section .cc-grafico-area{position:relative;height:320px}#carteira-consultores-section .cc-kpi small{display:block;margin-top:8px;font-size:11px;color:#64748b;line-height:1.4}#carteira-consultores-section .cc-painel .muted{font-size:12px;margin:0 0 12px}
-          #carteira-consultores-section .cc-ranking-empresas-painel{padding:22px}
-          #carteira-consultores-section .cc-ranking-empresas-cabecalho{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
-          #carteira-consultores-section .cc-ranking-empresas-cabecalho h3{margin:0 0 7px}
-          #carteira-consultores-section .cc-ranking-empresas-cabecalho .muted{margin:0;line-height:1.5}
-          #carteira-consultores-section .cc-ranking-selo{flex:0 0 auto;padding:5px 10px;border-radius:999px;background:#d8f3e3;color:#087443;font-size:12px;font-weight:700}
-          #carteira-consultores-section .cc-ranking-empresas{display:flex;flex-direction:column;gap:16px}
-          #carteira-consultores-section .cc-ranking-empresa{min-width:0}
-          #carteira-consultores-section .cc-ranking-empresa-topo{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;margin-bottom:7px}
-          #carteira-consultores-section .cc-ranking-posicao{color:#64748b;font-size:13px;font-weight:700}
-          #carteira-consultores-section .cc-ranking-nome{min-width:0;overflow-wrap:anywhere;font-size:14px;font-weight:600;color:#182538}
-          #carteira-consultores-section .cc-ranking-valor{white-space:nowrap;font-size:14px;font-weight:700;color:#182538}
-          #carteira-consultores-section .cc-ranking-trilho{height:9px;overflow:hidden;border-radius:999px;background:#eef1f4}
-          #carteira-consultores-section .cc-ranking-barra{height:100%;min-width:2px;border-radius:999px;background:#3b8ba5;transition:width .2s ease}
-          #carteira-consultores-section .cc-ranking-vazio{margin:0;color:#64748b;font-size:13px}
-          @media(max-width:600px){#carteira-consultores-section .cc-ranking-empresas-painel{padding:16px}#carteira-consultores-section .cc-ranking-empresa-topo{grid-template-columns:28px minmax(0,1fr);gap:8px}#carteira-consultores-section .cc-ranking-valor{grid-column:2;white-space:normal;margin-top:-4px}}
+          #carteira-consultores-section .cc-kpi span{display:block;color:var(--muted,#778397);font-size:12px;margin-bottom:8px}#carteira-consultores-section .cc-kpi strong{font-size:clamp(20px,2vw,28px);color:var(--navy,#17365d);overflow-wrap:anywhere}
+          #carteira-consultores-section .cc-graficos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}#carteira-consultores-section .cc-graficos .cc-painel-wide{grid-column:1/-1}#carteira-consultores-section .cc-grafico-area{position:relative;height:300px}
           #carteira-consultores-section .cc-tabela-scroll{overflow:auto;width:100%}#carteira-consultores-section table{border-collapse:collapse;width:100%;min-width:1150px;font-size:12px}#carteira-consultores-section th,#carteira-consultores-section td{padding:11px;border-bottom:1px solid var(--border,#e3e8f0);text-align:left;vertical-align:top}#carteira-consultores-section th{background:var(--bg,#f4f6fa);color:var(--navy,#17365d);white-space:nowrap}#carteira-consultores-section td{overflow-wrap:anywhere}
           #carteira-consultores-section .cc-tabela-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}#carteira-consultores-section .cc-botoes{display:flex;gap:8px;flex-wrap:wrap}#carteira-consultores-section .cc-botoes button{border:1px solid var(--border,#e3e8f0);border-radius:8px;padding:9px 12px;background:#fff;color:var(--navy,#17365d);cursor:pointer}#carteira-consultores-section .cc-botoes button:disabled{opacity:.45;cursor:not-allowed}#cc-mensagem{margin:12px 0;font-size:13px}#cc-mensagem[data-tipo="error"]{color:#b42318}#cc-mensagem[data-tipo="success"]{color:#18794e}
-          @media(max-width:1100px){#carteira-consultores-section .cc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){#carteira-consultores-section .cc-kpis{grid-template-columns:1fr 1fr}#carteira-consultores-section .cc-graficos{grid-template-columns:1fr}#carteira-consultores-section .cc-graficos .cc-painel-wide{grid-column:auto}}@media(max-width:420px){#carteira-consultores-section .cc-kpis{grid-template-columns:1fr}}
+          @media(max-width:760px){#carteira-consultores-section .cc-graficos{grid-template-columns:1fr}#carteira-consultores-section .cc-graficos .cc-painel-wide{grid-column:auto}}
         </style>
         <p id="cc-mensagem" role="status" aria-live="polite">Aguardando carregamento…</p>
         <div class="cc-filtros">
@@ -697,36 +682,16 @@
           <button type="button" id="cc-limpar" class="access-pill">Limpar filtros</button>
         </div>
         <div class="cc-kpis">
-          <article class="cc-kpi"><span>Total de contratos</span><strong id="cc-kpi-total">—</strong><small id="cc-kpi-crescimento">Comparação mensal</small></article>
-          <article class="cc-kpi"><span>Contratos ativos</span><strong id="cc-kpi-ativos">—</strong><small id="cc-kpi-ativos-crescimento">Comparação mensal</small></article>
+          <article class="cc-kpi"><span>Total de contratos</span><strong id="cc-kpi-total">—</strong></article>
+          <article class="cc-kpi"><span>Contratos ativos</span><strong id="cc-kpi-ativos">—</strong></article>
           <article class="cc-kpi"><span>Empresas</span><strong id="cc-kpi-empresas">—</strong></article>
           <article class="cc-kpi"><span>Consultores</span><strong id="cc-kpi-consultores">—</strong></article>
-          <article class="cc-kpi"><span>Contribuição mensal</span><strong id="cc-kpi-mensal">—</strong><small id="cc-kpi-faturamento-crescimento">Comparação mensal</small></article>
-          <article class="cc-kpi"><span>TKM médio</span><strong id="cc-kpi-tkm">—</strong><small>Contribuição mensal média por contrato</small></article>
-          <article class="cc-kpi"><span>Contratos 4h (20–24h)</span><strong id="cc-kpi-4h">—</strong><small>Contratos na faixa de 20 a 24 horas</small></article>
-          <article class="cc-kpi"><span>Contratos 6h (30–18h)</span><strong id="cc-kpi-6h">—</strong><small>Contratos identificados pela faixa 30-18h</small></article>
+          <article class="cc-kpi"><span>Contribuição mensal</span><strong id="cc-kpi-mensal">—</strong></article>
         </div>
         <div class="cc-graficos">
-          <article class="cc-painel"><h3>Evolução mensal de contratos</h3><p class="muted">Todos os meses disponíveis, independentemente do mês selecionado.</p><div class="cc-grafico-area"><canvas id="cc-grafico-periodo"></canvas></div></article>
-          <article class="cc-painel"><h3>Evolução mensal da contribuição</h3><p class="muted">Comparação do valor mensal da carteira.</p><div class="cc-grafico-area"><canvas id="cc-grafico-faturamento"></canvas></div></article>
-          <article class="cc-painel cc-painel-wide"><h3>Crescimento de contratos por mês (%)</h3><div class="cc-grafico-area"><canvas id="cc-grafico-crescimento"></canvas></div></article>
-          <article class="cc-painel cc-painel-wide cc-ranking-empresas-painel">
-            <div class="cc-ranking-empresas-cabecalho">
-              <div>
-                <h3>Top 5 empresas com mais aprendizes ativos</h3>
-                <p class="muted">Empresas ordenadas da maior para a menor quantidade de aprendizes ativos no período e nos filtros selecionados.</p>
-              </div>
-              <span class="cc-ranking-selo">Top 5</span>
-            </div>
-            <div id="cc-ranking-empresas" class="cc-ranking-empresas" aria-live="polite">
-              <p class="cc-ranking-vazio">Carregando ranking...</p>
-            </div>
-          </article>
-          <article class="cc-painel cc-painel-wide"><h3>Ranking de TKM por consultor</h3><p class="muted">Consultores ordenados do maior para o menor ticket médio. O valor aparece ao lado de cada barra e acompanha os filtros selecionados.</p><div class="cc-grafico-area" id="cc-area-ranking-tkm"><canvas id="cc-grafico-tkm"></canvas></div></article>
-          <article class="cc-painel"><h3>Contratos por carga horária</h3><p class="muted">4h: 20–24 horas · 6h: 30–18 horas · demais faixas ficam como não identificadas.</p><div class="cc-grafico-area"><canvas id="cc-grafico-carga-horaria"></canvas></div></article>
-          <article class="cc-painel"><h3>Contratos por Cartão Futuro</h3><div class="cc-grafico-area"><canvas id="cc-grafico-cartao"></canvas></div></article>
-          <article class="cc-painel cc-painel-wide"><h3>Todos os consultores — ranking completo</h3><p class="muted">O gráfico aumenta de altura para mostrar todos os consultores.</p><div class="cc-grafico-area"><canvas id="cc-grafico-consultores-todos"></canvas></div></article>
-          <article class="cc-painel cc-painel-wide"><h3>Contratos por todas as sub sedes</h3><p class="muted">Todas as subsedes são exibidas, ordenadas da maior para a menor carteira.</p><div class="cc-grafico-area"><canvas id="cc-grafico-subsede"></canvas></div></article>
+          <article class="cc-painel"><h3>Evolução por período</h3><div class="cc-grafico-area"><canvas id="cc-grafico-periodo"></canvas></div></article>
+          <article class="cc-painel"><h3>Contratos por consultor (Top 10)</h3><div class="cc-grafico-area"><canvas id="cc-grafico-consultor"></canvas></div></article>
+          <article class="cc-painel cc-painel-wide"><h3>Contratos por subsede (Top 10)</h3><div class="cc-grafico-area"><canvas id="cc-grafico-subsede"></canvas></div></article>
         </div>
         <article class="cc-painel">
           <div class="cc-tabela-topo"><div><h3>Detalhamento dos contratos</h3><p id="cc-contador">Carregando…</p></div><div class="cc-botoes"><input id="cc-busca" type="search" placeholder="Pesquisar na tabela…" aria-label="Pesquisar na tabela"><button id="cc-exportar" type="button">Exportar CSV</button></div></div>
