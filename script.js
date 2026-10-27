@@ -4695,6 +4695,8 @@ function exportarMetasEstagio() {
 
 // ==================================================
 // CARTEIRA DOS CONSULTORES — public.bi_carteira_consultores
+// Atualização: mês mais recente automático, evolução histórica,
+// crescimento mensal, ranking completo de consultores e todas as subsedes.
 // ==================================================
 (() => {
   "use strict";
@@ -4707,16 +4709,31 @@ function exportarMetasEstagio() {
   const txt = v => v == null ? "" : String(v).trim();
   const moeda = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 }).format(Number(v) || 0);
   const inteiro = v => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(Number(v) || 0);
-  const dataPt = v => { if (!v) return "—"; const d = new Date(String(v).slice(0,10)+"T12:00:00"); return Number.isNaN(d.getTime()) ? txt(v) : d.toLocaleDateString("pt-BR"); };
   const escape = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const periodoKey = v => {
+    const s = txt(v);
+    const m = s.match(/(\d{4})[-/](\d{1,2})/);
+    if (m) return `${m[1]}-${String(Number(m[2])).padStart(2,"0")}`;
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  };
+  const periodoLabel = p => {
+    if (!p) return "Sem período";
+    const [a,m] = p.split("-").map(Number);
+    return new Date(a,m-1,1,12).toLocaleDateString("pt-BR",{month:"short",year:"numeric"}).replace(".","");
+  };
+  const ativo = r => [true,1,"1","true","t","sim","ativo"].includes(typeof r.ativo_no_mes === "string" ? r.ativo_no_mes.toLowerCase().trim() : r.ativo_no_mes);
+  const valor = v => Number(v) || 0;
+  const pct = (atual, anterior) => anterior > 0 ? ((atual-anterior)/anterior)*100 : null;
+  const pctLabel = p => p == null ? "Sem histórico para comparar" : `${p > 0 ? "+" : ""}${p.toLocaleString("pt-BR",{maximumFractionDigits:1,minimumFractionDigits:1})}% vs. mês anterior`;
 
   async function buscarTodos() {
-    if (!window.sb) throw new Error("Conexão com Supabase não encontrada.");
+    const conexao = window.sb || sb;
+    if (!conexao) throw new Error("Conexão com Supabase não encontrada.");
     const campos = "id,chave_origem,periodo_referencia,empresa,cnpj,consultor,cidade,subsede,regiao,aprendiz,data_inicio,data_fim,tipo_contrato,cartao_futuro,contribuicao_mensal,contribuicao_unica,contribuicao_adm_folha,ativo_no_mes,origem";
-    const todos = [];
-    const tamanho = 1000;
+    const todos = [], tamanho = 1000;
     for (let inicio = 0; ; inicio += tamanho) {
-      const { data, error } = await window.sb.from(TABLE).select(campos).order("periodo_referencia", { ascending: true }).range(inicio, inicio + tamanho - 1);
+      const { data, error } = await conexao.from(TABLE).select(campos).order("periodo_referencia", { ascending: true }).range(inicio, inicio + tamanho - 1);
       if (error) throw error;
       todos.push(...(data || []));
       if (!data || data.length < tamanho) break;
@@ -4724,76 +4741,134 @@ function exportarMetasEstagio() {
     return todos;
   }
 
-  function preencherSelect(id, valores, todosLabel) {
+  function preencherSelect(id, valores, todosLabel, selecionarMaisRecente=false) {
     const select = el(id); if (!select) return;
     const anterior = select.value;
     const unicos = [...new Set(valores.map(txt).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
     select.replaceChildren(new Option(todosLabel, ""));
     unicos.forEach(v => select.add(new Option(v, v)));
-    if (unicos.includes(anterior)) select.value = anterior;
+    if (selecionarMaisRecente) {
+      const meses = [...new Set(valores.map(periodoKey).filter(Boolean))].sort();
+      const ultimo = meses.at(-1) || "";
+      // O filtro guarda o valor original da coluna, mesmo se ela vier como data completa.
+      const valorUltimo = unicos.filter(v=>periodoKey(v)===ultimo).sort().at(-1) || "";
+      select.value = unicos.includes(anterior) && periodoKey(anterior)===ultimo ? anterior : valorUltimo;
+    } else if (unicos.includes(anterior)) select.value = anterior;
   }
 
+  function periodoSelecionado() { return periodoKey(el("cc-filtro-periodo")?.value || ""); }
   function filtros() {
-    const periodo=el("cc-filtro-periodo")?.value || "";
+    const periodo=periodoSelecionado();
     const consultor=el("cc-filtro-consultor")?.value || "";
     const subsede=el("cc-filtro-subsede")?.value || "";
     const cidade=el("cc-filtro-cidade")?.value || "";
     const empresa=(el("cc-filtro-empresa")?.value || "").toLocaleLowerCase("pt-BR");
     const status=el("cc-filtro-status")?.value || "";
-    return dados.filter(r => (!periodo || r.periodo_referencia===periodo) && (!consultor || txt(r.consultor)===consultor) && (!subsede || txt(r.subsede)===subsede) && (!cidade || txt(r.cidade)===cidade) && (!empresa || [r.empresa,r.cnpj,r.aprendiz,r.consultor].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(empresa))) && (!status || String(Boolean(r.ativo_no_mes))===status));
+    return dados.filter(r => (!periodo || periodoKey(r.periodo_referencia)===periodo) && (!consultor || txt(r.consultor)===consultor) && (!subsede || txt(r.subsede)===subsede) && (!cidade || txt(r.cidade)===cidade) && (!empresa || [r.empresa,r.cnpj,r.aprendiz,r.consultor].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(empresa))) && (!status || String(ativo(r))===status));
   }
 
   function montarFiltros() {
-    preencherSelect("cc-filtro-periodo", dados.map(r=>r.periodo_referencia), "Todos os períodos");
+    preencherSelect("cc-filtro-periodo", dados.map(r=>r.periodo_referencia), "Todos os períodos", true);
     preencherSelect("cc-filtro-consultor", dados.map(r=>r.consultor), "Todos os consultores");
     preencherSelect("cc-filtro-subsede", dados.map(r=>r.subsede), "Todas as subsedes");
     preencherSelect("cc-filtro-cidade", dados.map(r=>r.cidade), "Todas as cidades");
   }
 
+  function agregarMensal(lista) {
+    const mapa = new Map();
+    lista.forEach(r=>{
+      const p=periodoKey(r.periodo_referencia); if(!p) return;
+      if(!mapa.has(p)) mapa.set(p,{contratos:0,ativos:0,empresas:new Set(),consultores:new Set(),faturamento:0,comCartao:0,semCartao:0});
+      const x=mapa.get(p); x.contratos++; if(ativo(r))x.ativos++;
+      if(txt(r.empresa))x.empresas.add(txt(r.empresa)); if(txt(r.consultor))x.consultores.add(txt(r.consultor));
+      x.faturamento+=valor(r.contribuicao_mensal);
+      const cf=txt(r.cartao_futuro).toLocaleLowerCase("pt-BR");
+      if(["sim","true","1","yes","com cartão futuro","com cartao futuro"].includes(cf))x.comCartao++; else if(cf)x.semCartao++;
+    });
+    return [...mapa.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([periodo,x])=>({...x,periodo,empresas:x.empresas.size,consultores:x.consultores.size}));
+  }
+
   function atualizarKpis(lista) {
-    const ativos=lista.filter(r=>r.ativo_no_mes===true || r.ativo_no_mes===1 || r.ativo_no_mes==="true").length;
+    const ativos=lista.filter(ativo).length;
     const empresas=new Set(lista.map(r=>txt(r.empresa)).filter(Boolean)).size;
     const consultores=new Set(lista.map(r=>txt(r.consultor)).filter(Boolean)).size;
-    const soma=lista.reduce((a,r)=>a+(Number(r.contribuicao_mensal)||0),0);
+    const soma=lista.reduce((a,r)=>a+valor(r.contribuicao_mensal),0);
     if(el("cc-kpi-total")) el("cc-kpi-total").textContent=inteiro(lista.length);
     if(el("cc-kpi-ativos")) el("cc-kpi-ativos").textContent=inteiro(ativos);
     if(el("cc-kpi-empresas")) el("cc-kpi-empresas").textContent=inteiro(empresas);
     if(el("cc-kpi-consultores")) el("cc-kpi-consultores").textContent=inteiro(consultores);
     if(el("cc-kpi-mensal")) el("cc-kpi-mensal").textContent=moeda(soma);
+    const historico=agregarMensal(dados), p=periodoSelecionado() || historico.at(-1)?.periodo;
+    const i=historico.findIndex(x=>x.periodo===p), atual=historico[i], anterior=historico[i-1];
+    const elC=el("cc-kpi-crescimento"), elF=el("cc-kpi-faturamento-crescimento"), elA=el("cc-kpi-ativos-crescimento");
+    if(elC)elC.textContent=pctLabel(pct(atual?.contratos||0,anterior?.contratos||0));
+    if(elF)elF.textContent=pctLabel(pct(atual?.faturamento||0,anterior?.faturamento||0));
+    if(elA)elA.textContent=pctLabel(pct(atual?.ativos||0,anterior?.ativos||0));
+    if(el("cc-periodo-atual")) el("cc-periodo-atual").textContent=atual?`Referência: ${periodoLabel(atual.periodo)}`:"Sem período disponível";
   }
 
   function destruirGraficos(){ Object.values(graficos).forEach(g=>{try{g.destroy()}catch(_){}}); graficos={}; }
   function grafico(id, config){ const canvas=el(id); if(!canvas || !window.Chart) return; if(graficos[id]) graficos[id].destroy(); graficos[id]=new Chart(canvas,config); }
+  function opcoesBarra(horizontal=true) {
+    return {indexAxis:horizontal?"y":"x",responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||"Contratos"}: ${inteiro(ctx.raw)}`}},
+        datalabels:{display:true,anchor:"end",align:"end",clamp:true,color:"#34445b",font:{weight:"600",size:10},formatter:v=>inteiro(v)}},
+      layout:{padding:{top:8,right:horizontal?45:12,bottom:4,left:4}},
+      scales:horizontal?{x:{beginAtZero:true,grace:"12%",ticks:{precision:0}},y:{ticks:{autoSkip:false}}}:{y:{beginAtZero:true,grace:"12%",ticks:{precision:0}},x:{ticks:{autoSkip:true,maxRotation:0}}}};
+  }
   function atualizarGraficos(lista) {
     if(!window.Chart) return;
-    const porPeriodo={}; lista.forEach(r=>{const p=txt(r.periodo_referencia); if(p) porPeriodo[p]=(porPeriodo[p]||0)+1;});
-    const periodos=Object.keys(porPeriodo).sort();
-    grafico("cc-grafico-periodo",{type:"line",data:{labels:periodos.map(p=>{const d=new Date(p+"T12:00:00");return d.toLocaleDateString("pt-BR",{month:"short",year:"numeric"})}),datasets:[{label:"Contratos",data:periodos.map(p=>porPeriodo[p]),borderColor:"#245b91",backgroundColor:"rgba(36,91,145,.14)",fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+    const mensal=agregarMensal(dados), labels=mensal.map(x=>periodoLabel(x.periodo));
+    const cfgLinha=(label,serie,cor,formatarMoeda=false)=>({type:"line",data:{labels,datasets:[{label,data:mensal.map(serie),borderColor:cor,backgroundColor:cor+"22",fill:true,tension:.28,pointRadius:4,pointHoverRadius:6}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${formatarMoeda?moeda(ctx.raw):inteiro(ctx.raw)}`}},datalabels:{display:true,align:"top",anchor:"end",color:"#34445b",font:{weight:"600",size:10},formatter:v=>formatarMoeda?moeda(v):inteiro(v)}},scales:{y:{beginAtZero:true,grace:"12%"},x:{ticks:{maxRotation:0,autoSkip:false}}}}});
+    grafico("cc-grafico-periodo",cfgLinha("Contratos",x=>x.contratos,"#245b91"));
+    grafico("cc-grafico-faturamento",cfgLinha("Contribuição mensal",x=>x.faturamento,"#16835b",true));
+    const crescimento=mensal.map((x,i)=>i===0?null:pct(x.contratos,mensal[i-1].contratos));
+    grafico("cc-grafico-crescimento", {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Crescimento de contratos (%)", data: crescimento, backgroundColor: crescimento.map(v => v == null ? "#cbd5e1" : v >= 0 ? "#16835b" : "#c2413b"), borderRadius: 5 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw == null ? "Sem mês anterior" : `${ctx.raw > 0 ? "+" : ""}${ctx.raw.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` } },
+          datalabels: { display: true, anchor: "end", align: "end", formatter: v => v == null ? "—" : `${v > 0 ? "+" : ""}${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`, color: "#34445b", font: { weight: "600", size: 10 } }
+        },
+        scales: { y: { beginAtZero: false, grace: "15%", ticks: { callback: v => `${v}%` } }, x: { ticks: { maxRotation: 0, autoSkip: false } } }
+      }
+    });
+
     const porConsultor={}; lista.forEach(r=>{const n=txt(r.consultor)||"Sem consultor";porConsultor[n]=(porConsultor[n]||0)+1;});
-    const top=Object.entries(porConsultor).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    grafico("cc-grafico-consultor",{type:"bar",data:{labels:top.map(x=>x[0]),datasets:[{label:"Contratos",data:top.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:5}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+    const todosConsultores=Object.entries(porConsultor).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"pt-BR"));
+    const top=todosConsultores.slice(0,10);
+    grafico("cc-grafico-consultor",{type:"bar",data:{labels:top.map(x=>x[0]),datasets:[{label:"Contratos",data:top.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:5}]},options:opcoesBarra(true)});
+    grafico("cc-grafico-consultores-todos",{type:"bar",data:{labels:todosConsultores.map(x=>x[0]),datasets:[{label:"Contratos",data:todosConsultores.map(x=>x[1]),backgroundColor:"#3b82a0",borderRadius:4}]},options:opcoesBarra(true)});
     const porSubsede={}; lista.forEach(r=>{const n=txt(r.subsede)||"Sem subsede";porSubsede[n]=(porSubsede[n]||0)+1;});
-    const topS=Object.entries(porSubsede).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    grafico("cc-grafico-subsede",{type:"bar",data:{labels:topS.map(x=>x[0]),datasets:[{label:"Contratos",data:topS.map(x=>x[1]),backgroundColor:"#4c8b67",borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+    const todasSubsedes=Object.entries(porSubsede).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"pt-BR"));
+    grafico("cc-grafico-subsede",{type:"bar",data:{labels:todasSubsedes.map(x=>x[0]),datasets:[{label:"Contratos",data:todasSubsedes.map(x=>x[1]),backgroundColor:"#4c8b67",borderRadius:4}]},options:opcoesBarra(true)});
+    const cartao=lista.reduce((a,r)=>{const v=txt(r.cartao_futuro).toLocaleLowerCase("pt-BR");if(["sim","true","1","yes","com cartão futuro","com cartao futuro"].includes(v))a.sim++;else if(v && ["não","nao","false","0","no","sem cartão futuro","sem cartao futuro"].includes(v))a.nao++;return a;},{sim:0,nao:0});
+    grafico("cc-grafico-cartao",{type:"doughnut",data:{labels:["Com Cartão Futuro","Sem Cartão Futuro"],datasets:[{data:[cartao.sim,cartao.nao],backgroundColor:["#3678c8","#d7e0eb"],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},datalabels:{display:true,color:"#182538",font:{weight:"600"},formatter:v=>inteiro(v)},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${inteiro(ctx.raw)}`}}}}});
+    const alturaTodos=el("cc-grafico-consultores-todos")?.parentElement; if(alturaTodos)alturaTodos.style.height=`${Math.max(320,todosConsultores.length*30)}px`;
+    const alturaSubs=el("cc-grafico-subsede")?.parentElement; if(alturaSubs)alturaSubs.style.height=`${Math.max(320,todasSubsedes.length*32)}px`;
+    graficos["cc-grafico-consultores-todos"]?.resize(); graficos["cc-grafico-subsede"]?.resize();
   }
 
   function atualizarTabela(lista) {
     const corpo=el("cc-tabela-corpo"); if(!corpo) return;
     const busca=(el("cc-busca")?.value||"").toLocaleLowerCase("pt-BR");
     const filtrados=lista.filter(r=>!busca || [r.empresa,r.cnpj,r.consultor,r.cidade,r.subsede,r.aprendiz,r.tipo_contrato].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(busca)));
-    const pagina=Math.max(1,Number(el("cc-pagina")?.value)||1); const tamanho=50; const totalPaginas=Math.max(1,Math.ceil(filtrados.length/tamanho)); const p=Math.min(pagina,totalPaginas); if(el("cc-pagina")) el("cc-pagina").value=String(p);
-    const inicio=(p-1)*tamanho; const paginaDados=filtrados.slice(inicio,inicio+tamanho);
-    corpo.innerHTML=paginaDados.length?paginaDados.map(r=>`<tr><td>${escape(r.periodo_referencia)}</td><td>${escape(r.consultor||"—")}</td><td>${escape(r.subsede||"—")}</td><td>${escape(r.empresa||"—")}</td><td>${escape(r.cnpj||"—")}</td><td>${escape(r.aprendiz||"—")}</td><td>${escape(r.cidade||"—")}</td><td>${escape(r.tipo_contrato||"—")}</td><td>${r.ativo_no_mes ? "Ativo" : "Inativo"}</td><td>${moeda(r.contribuicao_mensal)}</td></tr>`).join(""):`<tr><td colspan="10">Nenhum contrato encontrado com os filtros selecionados.</td></tr>`;
+    const pagina=Math.max(1,Number(el("cc-pagina")?.value)||1), tamanho=50, totalPaginas=Math.max(1,Math.ceil(filtrados.length/tamanho)), p=Math.min(pagina,totalPaginas);
+    if(el("cc-pagina")) el("cc-pagina").value=String(p);
+    const inicio=(p-1)*tamanho, paginaDados=filtrados.slice(inicio,inicio+tamanho);
+    corpo.innerHTML=paginaDados.length?paginaDados.map(r=>`<tr><td>${escape(periodoLabel(periodoKey(r.periodo_referencia)))}</td><td>${escape(r.consultor||"—")}</td><td>${escape(r.subsede||"—")}</td><td>${escape(r.empresa||"—")}</td><td>${escape(r.cnpj||"—")}</td><td>${escape(r.aprendiz||"—")}</td><td>${escape(r.cidade||"—")}</td><td>${escape(r.tipo_contrato||"—")}</td><td>${ativo(r)?"Ativo":"Inativo"}</td><td>${moeda(r.contribuicao_mensal)}</td></tr>`).join(""):`<tr><td colspan="10">Nenhum contrato encontrado com os filtros selecionados.</td></tr>`;
     if(el("cc-contador")) el("cc-contador").textContent=filtrados.length?`Exibindo ${inicio+1}–${Math.min(inicio+tamanho,filtrados.length)} de ${inteiro(filtrados.length)} contratos · Página ${p} de ${totalPaginas}`:"Nenhum contrato encontrado.";
     if(el("cc-anterior")) el("cc-anterior").disabled=p<=1;
     if(el("cc-proxima")) el("cc-proxima").disabled=p>=totalPaginas;
   }
-
   function renderizar() { const lista=filtros(); atualizarKpis(lista); atualizarGraficos(lista); if(el("cc-pagina"))el("cc-pagina").value="1"; atualizarTabela(lista); }
   function mensagem(texto,tipo="info"){const m=el("cc-mensagem");if(m){m.textContent=texto;m.dataset.tipo=tipo;}}
   async function carregar() {
     if(carregando) return; carregando=true; const botao=el("cc-atualizar"); if(botao)botao.disabled=true; mensagem("Carregando contratos do Supabase…");
-    try { dados=await buscarTodos(); montarFiltros(); renderizar(); mensagem(`${inteiro(dados.length)} contratos carregados com sucesso.`,"success"); }
+    try { const novos=await buscarTodos(); dados=novos; montarFiltros(); renderizar(); mensagem(`${inteiro(dados.length)} contratos carregados. Mês mais recente selecionado automaticamente; os gráficos históricos mostram todos os períodos disponíveis.`,"success"); }
     catch(e){ console.error("Carteira dos Consultores:",e); mensagem("Não foi possível carregar a Carteira dos Consultores: "+(e.message||"erro desconhecido")+". Confira as permissões SELECT da tabela bi_carteira_consultores no Supabase.","error"); }
     finally{carregando=false;if(botao)botao.disabled=false;}
   }
@@ -4801,16 +4876,16 @@ function exportarMetasEstagio() {
     ["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status"].forEach(id=>el(id)?.addEventListener("change",renderizar));
     el("cc-filtro-empresa")?.addEventListener("input",renderizar); el("cc-busca")?.addEventListener("input",()=>atualizarTabela(filtros()));
     el("cc-atualizar")?.addEventListener("click",carregar);
-    el("cc-limpar")?.addEventListener("click",()=>{["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-empresa","cc-busca"].forEach(id=>{if(el(id))el(id).value="";});renderizar();});
+    el("cc-limpar")?.addEventListener("click",()=>{["cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-empresa","cc-busca"].forEach(id=>{if(el(id))el(id).value="";}); const sel=el("cc-filtro-periodo");if(sel){const vals=[...sel.options].map(o=>o.value).filter(Boolean);sel.value=vals.sort((a,b)=>periodoKey(a).localeCompare(periodoKey(b))).at(-1)||"";}renderizar();});
     el("cc-anterior")?.addEventListener("click",()=>{if(el("cc-pagina"))el("cc-pagina").value=String(Math.max(1,Number(el("cc-pagina").value)-1));atualizarTabela(filtros());});
     el("cc-proxima")?.addEventListener("click",()=>{if(el("cc-pagina"))el("cc-pagina").value=String((Number(el("cc-pagina").value)||1)+1);atualizarTabela(filtros());});
-    el("cc-exportar")?.addEventListener("click",()=>{const lista=filtros();const headers=["Período","Consultor","Subsede","Empresa","CNPJ","Aprendiz","Cidade","Tipo de contrato","Ativo","Contribuição mensal"];const linhas=lista.map(r=>[r.periodo_referencia,r.consultor,r.subsede,r.empresa,r.cnpj,r.aprendiz,r.cidade,r.tipo_contrato,r.ativo_no_mes?"Ativo":"Inativo",r.contribuicao_mensal].map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(";"));const blob=new Blob(["\uFEFF"+[headers.join(";"),...linhas].join("\r\n")],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="carteira-consultores.csv";a.click();URL.revokeObjectURL(url);});
+    el("cc-exportar")?.addEventListener("click",()=>{const lista=filtros();const headers=["Período","Consultor","Subsede","Empresa","CNPJ","Aprendiz","Cidade","Tipo de contrato","Ativo","Contribuição mensal"];const linhas=lista.map(r=>[periodoKey(r.periodo_referencia),r.consultor,r.subsede,r.empresa,r.cnpj,r.aprendiz,r.cidade,r.tipo_contrato,ativo(r)?"Ativo":"Inativo",r.contribuicao_mensal].map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(";"));const blob=new Blob(["\uFEFF"+[headers.join(";"),...linhas].join("\r\n")],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="carteira-consultores.csv";a.click();URL.revokeObjectURL(url);});
   }
   window.inicializarCarteiraConsultores=function(){
     const section=el("carteira-consultores-section"),nav=el("carteira-consultores-nav-link");
-    if(!section||!nav||!window.sb)return;
+    if(!section||!nav||!(window.sb||sb))return;
     section.hidden=false;nav.hidden=false;
     if(!inicializado){configurarEventos();inicializado=true;carregar();}
   };
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>{if(window.sb && window.sb.auth)window.sb.auth.getSession().then(({data})=>{if(data?.session)window.inicializarCarteiraConsultores();});},{once:true});
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>{if((window.sb||sb)?.auth)(window.sb||sb).auth.getSession().then(({data})=>{if(data?.session)window.inicializarCarteiraConsultores();});},{once:true});
 })();
