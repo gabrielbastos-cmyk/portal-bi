@@ -390,7 +390,10 @@ async function adminCall(action, payload = {}) {
     body: { action, ...payload }
   });
 
-  if (error) throw new Error("Falha na operação administrativa. Confira a função portal-admin.");
+  if (error) {
+    const status = error.context?.status ? ` (HTTP ${error.context.status})` : "";
+    throw new Error(`Falha na operação portal-admin${status}: ${error.message || "verifique a implantação e os logs da Edge Function."}`);
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 }
@@ -458,13 +461,107 @@ if ($("permission-user")) {
   $("permission-user").addEventListener("change", carregarPermissoesUsuario);
 }
 
+const SUPERVISOR_MODULES = [
+  { key: "ead", label: "Análise Geográfica EaD" },
+  { key: "metas_aprendiz", label: "Metas Aprendiz" },
+  { key: "metas_estagio", label: "Metas Estágio" },
+  { key: "carteira_consultores", label: "Carteira de Consultores" },
+  { key: "vagas_aprendiz", label: "Vagas Aprendiz" },
+  { key: "substituicoes", label: "Controle de Substituições" },
+  { key: "dashboards", label: "Dashboards" }
+];
+
+const KNOWN_SUBSEDES = [
+  "Ambiente Digital", "Blumenau", "Campos Gerais", "Cascavel", "Chapecó",
+  "Curitiba", "EAD - SÃO PAULO", "EAD GLOBAL Estados", "Florianópolis",
+  "Foz do Iguaçu", "Foz do Itajaí", "Grande Florianópolis", "Grande Floripa",
+  "Guarapuava", "Joinville", "Joinville e Itajai", "Joinville+Itajaí",
+  "Londrina", "Maringá", "Oeste do Paraná", "Polos Curitiba", "Ponta Grossa"
+];
+
+function criarOpcaoPermissao(container, name, value, checked = false) {
+  const label = document.createElement("label");
+  label.className = "permission-option";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.name = name;
+  input.value = value;
+  input.checked = checked;
+  const span = document.createElement("span");
+  span.textContent = value.label || value;
+  label.append(input, span);
+  container.appendChild(label);
+}
+
+function renderizarOpcoesSupervisor(moduleKeys = [], subsedes = []) {
+  const moduleList = $("permission-module-list");
+  const subsedeList = $("permission-subsede-list");
+  if (!moduleList || !subsedeList) return;
+
+  moduleList.replaceChildren();
+  SUPERVISOR_MODULES.forEach(module => {
+    const label = document.createElement("label");
+    label.className = "permission-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "supervisor-module";
+    input.value = module.key;
+    input.checked = moduleKeys.includes(module.key);
+    const span = document.createElement("span");
+    span.textContent = module.label;
+    label.append(input, span);
+    moduleList.appendChild(label);
+  });
+
+  subsedeList.replaceChildren();
+  KNOWN_SUBSEDES.forEach(subsede => {
+    const label = document.createElement("label");
+    label.className = "permission-option";
+    label.dataset.subsede = subsede.toLocaleLowerCase("pt-BR");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "supervisor-subsede";
+    input.value = subsede;
+    input.checked = subsedes.includes(subsede);
+    const span = document.createElement("span");
+    span.textContent = subsede;
+    label.append(input, span);
+    subsedeList.appendChild(label);
+  });
+  filtrarSubsedes();
+}
+
+function filtrarSubsedes() {
+  const term = ($("permission-subsede-search")?.value || "").trim().toLocaleLowerCase("pt-BR");
+  $("permission-subsede-list")?.querySelectorAll(".permission-option").forEach(item => {
+    item.hidden = !item.dataset.subsede.includes(term);
+  });
+}
+
+if ($("permission-subsede-search")) {
+  $("permission-subsede-search").addEventListener("input", filtrarSubsedes);
+}
+if ($("select-visible-subsedes")) {
+  $("select-visible-subsedes").addEventListener("click", () => {
+    $("permission-subsede-list")?.querySelectorAll(".permission-option:not([hidden]) input").forEach(input => input.checked = true);
+  });
+}
+if ($("clear-subsedes")) {
+  $("clear-subsedes").addEventListener("click", () => {
+    $("permission-subsede-list")?.querySelectorAll('input[name="supervisor-subsede"]').forEach(input => input.checked = false);
+  });
+}
+
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
 
   const userId = $("permission-user")?.value;
-  const container = $("permission-dashboard-list");
-  if (!container) return;
-  container.replaceChildren();
+  const dashboardContainer = $("permission-dashboard-list");
+  const supervisorContainer = $("permission-supervisor-settings");
+  if (!dashboardContainer) return;
+
+  dashboardContainer.replaceChildren();
+  if (supervisorContainer) supervisorContainer.hidden = true;
   if (!userId) return;
 
   const user = adminUsers.find(u => u.id === userId);
@@ -475,36 +572,52 @@ async function carregarPermissoesUsuario() {
     return;
   }
 
+  if (user.role === "supervisor") {
+    dashboardContainer.hidden = true;
+    if (supervisorContainer) supervisorContainer.hidden = false;
+    try {
+      const [{ data: moduleRows, error: moduleError }, { data: subsedeRows, error: subsedeError }] = await Promise.all([
+        sb.from("user_module_permissions").select("module_key").eq("user_id", userId),
+        sb.from("user_subsede_permissions").select("subsede").eq("user_id", userId)
+      ]);
+      if (moduleError) throw moduleError;
+      if (subsedeError) throw subsedeError;
+      renderizarOpcoesSupervisor(
+        (moduleRows || []).map(row => row.module_key),
+        (subsedeRows || []).map(row => row.subsede)
+      );
+    } catch (error) {
+      showMessage("permission-message", friendlyError(error));
+    }
+    return;
+  }
+
+  dashboardContainer.hidden = false;
   try {
     const { data: permissions, error } = await sb
       .from("dashboard_permissions")
       .select("dashboard_id")
       .eq("user_id", userId);
-
     if (error) throw error;
-    const ids = new Set((permissions || []).map(p => p.dashboard_id));
+    const ids = new Set((permissions || []).map(p => String(p.dashboard_id)));
 
     const { data: dashboards, error: dError } = await sb
       .from("dashboards")
       .select("id, name, description, category, url")
       .order("name");
-
     if (dError) throw dError;
 
     (dashboards || []).forEach(d => {
       const label = document.createElement("label");
       label.className = "permission-option";
-
       const input = document.createElement("input");
       input.type = "checkbox";
       input.value = d.id;
-      input.checked = ids.has(d.id);
-
+      input.checked = ids.has(String(d.id));
       const span = document.createElement("span");
       span.textContent = d.name || "Dashboard sem nome";
-
       label.append(input, span);
-      container.appendChild(label);
+      dashboardContainer.appendChild(label);
     });
   } catch (error) {
     showMessage("permission-message", friendlyError(error));
@@ -514,10 +627,7 @@ async function carregarPermissoesUsuario() {
 if ($("save-permissions-btn")) {
   $("save-permissions-btn").addEventListener("click", async () => {
     const userId = $("permission-user")?.value;
-
-    if (!userId) {
-      return showMessage("permission-message", "Selecione um usuário primeiro.");
-    }
+    if (!userId) return showMessage("permission-message", "Selecione um usuário primeiro.");
 
     const user = adminUsers.find(u => u.id === userId);
     if (user?.role === "admin") {
@@ -526,13 +636,19 @@ if ($("save-permissions-btn")) {
 
     const button = $("save-permissions-btn");
     setLoading(button, true, "Salvando...");
-
     try {
-      const ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')]
-        .map(i => i.value);
-
-      await adminCall("set_permissions", { user_id: userId, dashboard_ids: ids });
-      showMessage("permission-message", "Permissões salvas com sucesso!", "success");
+      if (user?.role === "supervisor") {
+        const module_keys = [...$("permission-module-list").querySelectorAll('input[name="supervisor-module"]:checked')].map(i => i.value);
+        const subsedes = [...$("permission-subsede-list").querySelectorAll('input[name="supervisor-subsede"]:checked')].map(i => i.value);
+        if (!module_keys.length) throw new Error("Selecione pelo menos um módulo para o supervisor.");
+        if (!subsedes.length) throw new Error("Selecione pelo menos uma subsede para o supervisor.");
+        await adminCall("set_supervisor_access", { user_id: userId, module_keys, subsedes });
+        showMessage("permission-message", "Módulos e subsedes do supervisor salvos com sucesso!", "success");
+      } else {
+        const ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
+        await adminCall("set_permissions", { user_id: userId, dashboard_ids: ids });
+        showMessage("permission-message", "Permissões salvas com sucesso!", "success");
+      }
     } catch (error) {
       showMessage("permission-message", friendlyError(error));
     } finally {
