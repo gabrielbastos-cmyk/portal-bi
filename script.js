@@ -587,15 +587,12 @@ async function carregarPermissoesUsuario() {
 
     try {
       if (!sb) throw new Error("O Supabase ainda não foi inicializado. Atualize a página e tente novamente.");
-      const [{ data: moduleRows, error: moduleError }, { data: subsedeRows, error: subsedeError }] = await Promise.all([
-        sb.from("user_module_permissions").select("module_key").eq("user_id", userId),
-        sb.from("user_subsede_permissions").select("subsede").eq("user_id", userId)
-      ]);
-      if (moduleError) throw moduleError;
-      if (subsedeError) throw subsedeError;
+      // Lê as permissões pela Edge Function administrativa, que usa supabaseAdmin
+      // e não depende das políticas RLS do navegador para essas tabelas.
+      const result = await adminCall("get_supervisor_access", { user_id: userId });
       renderizarOpcoesSupervisor(
-        (moduleRows || []).map(row => row.module_key),
-        (subsedeRows || []).map(row => row.subsede)
+        Array.isArray(result.module_keys) ? result.module_keys : [],
+        Array.isArray(result.subsedes) ? result.subsedes : []
       );
       supervisorPermissionsReady = true;
       if (saveButton) saveButton.disabled = false;
