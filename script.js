@@ -7,6 +7,7 @@ let currentUser = null;
 let currentProfile = null;
 let allDashboards = [];
 let adminUsers = [];
+let supervisorPermissionsReady = false;
 
 const SUB_VIEW = "vw_substituicoes_bi";
 const SUB_PAGE_SIZE = 20;
@@ -554,14 +555,17 @@ if ($("clear-subsedes")) {
 
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
+  supervisorPermissionsReady = false;
 
   const userId = $("permission-user")?.value;
   const dashboardContainer = $("permission-dashboard-list");
   const supervisorContainer = $("permission-supervisor-settings");
+  const saveButton = $("save-permissions-btn");
   if (!dashboardContainer) return;
 
   dashboardContainer.replaceChildren();
   if (supervisorContainer) supervisorContainer.hidden = true;
+  if (saveButton) saveButton.disabled = false;
   if (!userId) return;
 
   const user = adminUsers.find(u => u.id === userId);
@@ -575,7 +579,14 @@ async function carregarPermissoesUsuario() {
   if (user.role === "supervisor") {
     dashboardContainer.hidden = true;
     if (supervisorContainer) supervisorContainer.hidden = false;
+
+    // Mostra as opções imediatamente, mas não permite salvar até confirmar
+    // que as permissões atuais foram lidas do Supabase.
+    renderizarOpcoesSupervisor([], []);
+    if (saveButton) saveButton.disabled = true;
+
     try {
+      if (!sb) throw new Error("O Supabase ainda não foi inicializado. Atualize a página e tente novamente.");
       const [{ data: moduleRows, error: moduleError }, { data: subsedeRows, error: subsedeError }] = await Promise.all([
         sb.from("user_module_permissions").select("module_key").eq("user_id", userId),
         sb.from("user_subsede_permissions").select("subsede").eq("user_id", userId)
@@ -586,8 +597,10 @@ async function carregarPermissoesUsuario() {
         (moduleRows || []).map(row => row.module_key),
         (subsedeRows || []).map(row => row.subsede)
       );
+      supervisorPermissionsReady = true;
+      if (saveButton) saveButton.disabled = false;
     } catch (error) {
-      showMessage("permission-message", friendlyError(error));
+      showMessage("permission-message", `${friendlyError(error)} As opções foram exibidas, mas o salvamento fica bloqueado para não substituir permissões que não foram carregadas.`, "error");
     }
     return;
   }
@@ -638,6 +651,9 @@ if ($("save-permissions-btn")) {
     setLoading(button, true, "Salvando...");
     try {
       if (user?.role === "supervisor") {
+        if (!supervisorPermissionsReady) {
+          throw new Error("As permissões atuais do supervisor ainda não foram carregadas. Atualize a página e tente novamente antes de salvar.");
+        }
         const module_keys = [...$("permission-module-list").querySelectorAll('input[name="supervisor-module"]:checked')].map(i => i.value);
         const subsedes = [...$("permission-subsede-list").querySelectorAll('input[name="supervisor-subsede"]:checked')].map(i => i.value);
         if (!module_keys.length) throw new Error("Selecione pelo menos um módulo para o supervisor.");
