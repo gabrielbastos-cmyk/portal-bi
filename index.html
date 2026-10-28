@@ -1245,6 +1245,19 @@
 
             <div id="permission-dashboard-list"></div>
 
+            <div id="permission-supervisor-settings" hidden>
+              <h4>Módulos autorizados</h4>
+              <div id="permission-module-list" class="permission-choice-list"></div>
+
+              <h4>Subsedes autorizadas</h4>
+              <input id="permission-subsede-search" type="search" placeholder="Buscar subsede..." aria-label="Buscar subsede">
+              <div class="permission-choice-actions">
+                <button id="select-visible-subsedes" type="button" class="secondary-button">Selecionar resultados</button>
+                <button id="clear-subsedes" type="button" class="secondary-button">Limpar seleção</button>
+              </div>
+              <div id="permission-subsede-list" class="permission-choice-list"></div>
+            </div>
+
             <button id="save-permissions-btn" type="button">
               Salvar permissões
             </button>
