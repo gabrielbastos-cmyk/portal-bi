@@ -2268,3 +2268,47 @@ textarea:focus {
   min-height: 280px;
   max-height: 680px;
 }
+
+/* Permissões regionais de supervisores */
+#permission-supervisor-settings {
+  margin: 14px 0;
+}
+#permission-supervisor-settings[hidden],
+#permission-dashboard-list[hidden] {
+  display: none !important;
+}
+#permission-supervisor-settings h4 {
+  margin: 16px 0 8px;
+  color: var(--navy, #17365d);
+  font-size: 13px;
+  font-weight: 700;
+}
+.permission-choice-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+#permission-subsede-search {
+  width: 100%;
+  margin: 4px 0 8px;
+}
+.permission-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.permission-choice-actions button {
+  width: auto;
+  padding: 8px 12px;
+}
+.permission-choice-actions .secondary-button {
+  background: #eef3fa;
+  color: var(--navy, #17365d);
+  border: 1px solid var(--border, #e3e8f0);
+}
+.permission-choice-actions .secondary-button:hover {
+  background: #e1eaf6;
+}
