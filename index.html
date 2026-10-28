@@ -7,6 +7,7 @@
   <meta name="description" content="Portal BI — acesso aos dashboards e indicadores.">
   <meta name="theme-color" content="#102c4c">
   <title>Portal BI | GERAR</title>
+  <!-- Logo GERAR: mantenha gerar-logo.svg na mesma pasta deste index.html -->
 
   <!-- CSS principal -->
   <link rel="stylesheet" href="./style.css?v=20261027-carteira-rotulos-top5-v1">
@@ -353,7 +354,7 @@
 .estagio-tabela th,.estagio-tabela td { padding:12px; text-align:left; border-bottom:1px solid #e6edf5; white-space:nowrap; }
 .estagio-tabela th { color:#17365d; background:#f4f7fb; }
 @media(max-width:700px){.estagio-tabela{padding:14px}.estagio-tabela th,.estagio-tabela td{padding:9px}}
-\n  
+
     .metas-estagio-filtros + .metas-kpis + .metas-graficos canvas { max-height: 390px; }
     .estagio-ranking-ticket { margin-top: 20px; padding: 22px; }
     .estagio-ranking-ticket h3 { margin-top: 0; }
@@ -362,6 +363,7 @@
 
     /* Logo oficial/identidade GERAR — alteração visual restrita à marca */
     .gerar-logo-wrap {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -394,6 +396,28 @@
       height: 100%;
       object-fit: contain;
     }
+    /* Fallback visual se gerar-logo.svg ainda não tiver sido enviado ao GitHub */
+    .gerar-logo-fallback {
+      position: relative;
+      color: #102c4c;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+    .gerar-logo-wrap.gerar-logo-fallback::after,
+    .gerar-logo-sidebar.gerar-logo-fallback::after {
+      content: "GERAR";
+      display: block;
+      color: #102c4c;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      line-height: 1;
+    }
+    .gerar-logo-sidebar.gerar-logo-fallback::after {
+      font-size: 10px;
+      letter-spacing: .02em;
+    }
 
   </style>
 </head>
@@ -402,7 +426,7 @@
   <!-- LOGIN -->
   <section id="login-section" class="login-shell">
     <div class="login-brand">
-      <div class="brand-mark gerar-logo-wrap"><img class="gerar-logo-login" src="./gerar-logo.svg" alt="Logo GERAR"></div>
+      <div class="brand-mark gerar-logo-wrap"><img class="gerar-logo-login" src="./gerar-logo.svg" alt="Logo GERAR" onerror="this.hidden=true; this.parentElement.classList.add('gerar-logo-fallback')"></div>
       <p class="eyebrow">GERAR · INTELIGÊNCIA DE DADOS</p>
       <h1>Portal BI</h1>
       <p class="login-intro">
@@ -455,7 +479,7 @@
   <div id="portal-section" class="app-shell" hidden>
     <aside class="sidebar">
       <a class="brand-lockup" href="#inicio" aria-label="Portal BI início">
-        <span class="brand-mark small gerar-logo-sidebar"><img src="./gerar-logo.svg" alt="Logo GERAR"></span>
+        <span class="brand-mark small gerar-logo-sidebar"><img src="./gerar-logo.svg" alt="Logo GERAR" onerror="this.hidden=true; this.parentElement.classList.add('gerar-logo-fallback')"></span>
         <span>
           <strong>Portal BI</strong>
           <small>GERAR · Dados &amp; Gestão</small>
