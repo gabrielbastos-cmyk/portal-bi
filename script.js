@@ -8,6 +8,18 @@ let currentProfile = null;
 let allDashboards = [];
 let adminUsers = [];
 let supervisorPermissionsReady = false;
+let currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
+
+function usuarioTemModulo(moduleKey) {
+  if (currentProfile?.role === "admin") return true;
+  if (currentProfile?.role === "supervisor") return currentAccess.module_keys.includes(moduleKey);
+  return true; // Mantém o comportamento atual dos usuários comuns.
+}
+
+function dashboardEstaAutorizado(dashboard) {
+  if (currentProfile?.role === "admin") return true;
+  return currentAccess.dashboard_ids.map(String).includes(String(dashboard?.id));
+}
 
 const SUB_VIEW = "vw_substituicoes_bi";
 const SUB_PAGE_SIZE = 20;
@@ -268,9 +280,21 @@ async function atualizarPortal() {
     if (!profile) throw new Error("Seu perfil não foi encontrado na tabela profiles.");
 
     currentProfile = profile;
+    currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
+    if (profile.role !== "admin") {
+      const access = await adminCall("get_my_access");
+      currentAccess = {
+        module_keys: Array.isArray(access.module_keys) ? access.module_keys : [],
+        subsedes: Array.isArray(access.subsedes) ? access.subsedes : [],
+        dashboard_ids: Array.isArray(access.dashboard_ids) ? access.dashboard_ids.map(String) : []
+      };
+    }
     mostrarPortal();
 
     const isAdmin = profile.role === "admin";
+    const vagasAllowed = isAdmin || profile.role !== "supervisor" || usuarioTemModulo("vagas_aprendiz");
+    if ($("vagas-aprendiz-section")) $("vagas-aprendiz-section").hidden = !vagasAllowed;
+    if ($("vagas-aprendiz-nav-link")) $("vagas-aprendiz-nav-link").hidden = !vagasAllowed;
 
     if ($("admin-section")) $("admin-section").hidden = !isAdmin;
     if ($("admin-nav-link")) {
@@ -310,7 +334,8 @@ async function carregarDashboards() {
   if (error) throw error;
   allDashboards = data || [];
 
-  allDashboards.forEach(d => {
+  const dashboardsVisiveis = allDashboards.filter(dashboardEstaAutorizado);
+  dashboardsVisiveis.forEach(d => {
     const card = document.createElement("article");
     card.className = "dashboard-card";
 
@@ -343,11 +368,11 @@ async function carregarDashboards() {
     grid.appendChild(card);
   });
 
-  if ($("summary-total")) $("summary-total").textContent = String(allDashboards.length);
+  if ($("summary-total")) $("summary-total").textContent = String(dashboardsVisiveis.length);
 
   if ($("summary-categories")) {
     $("summary-categories").textContent = String(
-      new Set(allDashboards.map(d => normalize(d.category || "outros"))).size
+      new Set(dashboardsVisiveis.map(d => normalize(d.category || "outros"))).size
     );
   }
 
@@ -553,6 +578,27 @@ if ($("clear-subsedes")) {
   });
 }
 
+function renderizarPermissoesDashboards(dashboards, idsAutorizados) {
+  const container = $("permission-dashboard-list");
+  if (!container) return;
+  container.replaceChildren();
+  const heading = document.createElement("h4");
+  heading.textContent = "Dashboards autorizados";
+  container.appendChild(heading);
+  (dashboards || []).forEach(d => {
+    const label = document.createElement("label");
+    label.className = "permission-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = String(d.id);
+    input.checked = idsAutorizados.has(String(d.id));
+    const span = document.createElement("span");
+    span.textContent = d.name || "Dashboard sem nome";
+    label.append(input, span);
+    container.appendChild(label);
+  });
+}
+
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
   supervisorPermissionsReady = false;
@@ -577,7 +623,7 @@ async function carregarPermissoesUsuario() {
   }
 
   if (user.role === "supervisor") {
-    dashboardContainer.hidden = true;
+    dashboardContainer.hidden = false;
     if (supervisorContainer) supervisorContainer.hidden = false;
 
     // Mostra as opções imediatamente, mas não permite salvar até confirmar
@@ -594,6 +640,13 @@ async function carregarPermissoesUsuario() {
         Array.isArray(result.module_keys) ? result.module_keys : [],
         Array.isArray(result.subsedes) ? result.subsedes : []
       );
+      const dashboardIds = new Set((result.dashboard_ids || []).map(String));
+      const { data: dashboards, error: dashboardsError } = await sb
+        .from("dashboards")
+        .select("id, name, description, category, url")
+        .order("name");
+      if (dashboardsError) throw dashboardsError;
+      renderizarPermissoesDashboards(dashboards || [], dashboardIds);
       supervisorPermissionsReady = true;
       if (saveButton) saveButton.disabled = false;
     } catch (error) {
@@ -617,18 +670,7 @@ async function carregarPermissoesUsuario() {
       .order("name");
     if (dError) throw dError;
 
-    (dashboards || []).forEach(d => {
-      const label = document.createElement("label");
-      label.className = "permission-option";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = d.id;
-      input.checked = ids.has(String(d.id));
-      const span = document.createElement("span");
-      span.textContent = d.name || "Dashboard sem nome";
-      label.append(input, span);
-      dashboardContainer.appendChild(label);
-    });
+    renderizarPermissoesDashboards(dashboards || [], ids);
   } catch (error) {
     showMessage("permission-message", friendlyError(error));
   }
@@ -655,8 +697,10 @@ if ($("save-permissions-btn")) {
         const subsedes = [...$("permission-subsede-list").querySelectorAll('input[name="supervisor-subsede"]:checked')].map(i => i.value);
         if (!module_keys.length) throw new Error("Selecione pelo menos um módulo para o supervisor.");
         if (!subsedes.length) throw new Error("Selecione pelo menos uma subsede para o supervisor.");
+        const dashboard_ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
         await adminCall("set_supervisor_access", { user_id: userId, module_keys, subsedes });
-        showMessage("permission-message", "Módulos e subsedes do supervisor salvos com sucesso!", "success");
+        await adminCall("set_permissions", { user_id: userId, dashboard_ids });
+        showMessage("permission-message", "Módulos, subsedes e dashboards do supervisor salvos com sucesso!", "success");
       } else {
         const ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
         await adminCall("set_permissions", { user_id: userId, dashboard_ids: ids });
@@ -827,7 +871,9 @@ function configurarAcessoSubstituicoes() {
   const nav = $("substituicoes-nav-link");
   if (!section || !nav) return;
 
-  const allowed = currentProfile?.role === "admin" || allDashboards.some(dashboardEhSubstituicoes);
+  const allowed = currentProfile?.role === "supervisor"
+    ? usuarioTemModulo("substituicoes")
+    : currentProfile?.role === "admin" || allDashboards.some(dashboardEhSubstituicoes);
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
@@ -907,7 +953,10 @@ async function carregarSubstituicoes() {
     offset += pageSize;
   }
 
-  subRegistros = all.map(normalizarRegistroSubstituicao);
+  const substituicoesNormalizadas = all.map(normalizarRegistroSubstituicao);
+  subRegistros = currentProfile?.role === "supervisor"
+    ? substituicoesNormalizadas.filter(r => currentAccess.subsedes.some(subsede => normalize(subsede) === normalize(r.subsede)))
+    : substituicoesNormalizadas;
   subPaginaAtual = 1;
   preencherFiltrosSubstituicoes();
 
@@ -1327,7 +1376,9 @@ function configurarAcessoEaD() {
   const nav = $("ead-nav-link");
   if (!section || !nav) return;
 
-  const allowed = currentProfile?.role === "admin" || allDashboards.some(dashboardEhEaD);
+  const allowed = currentProfile?.role === "supervisor"
+    ? usuarioTemModulo("ead")
+    : currentProfile?.role === "admin" || allDashboards.some(dashboardEhEaD);
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
@@ -1417,7 +1468,9 @@ async function carregarAnaliseEaD() {
     offset += pageSize;
   }
 
-  eadRegistros = registros;
+  eadRegistros = currentProfile?.role === "supervisor"
+    ? registros.filter(r => currentAccess.subsedes.some(subsede => normalize(subsede) === normalize(r.subsede_responsavel)))
+    : registros;
   eadPaginaAtual = 1;
   preencherFiltrosEaD();
   renderizarAnaliseEaD();
@@ -4104,7 +4157,7 @@ function configurarAcessoMetasAprendiz() {
   const section = $("metas-aprendiz-section");
   const nav = $("metas-aprendiz-nav-link");
   if (!section || !nav) return;
-  const allowed = Boolean(currentUser); // Exibe o módulo a todo usuário autenticado; a leitura continua protegida pelo RLS do Supabase.
+  const allowed = currentProfile?.role === "supervisor" ? usuarioTemModulo("metas_aprendiz") : Boolean(currentUser);
   section.hidden = !allowed; nav.hidden = !allowed;
   if (allowed && !metasAprendizInicializado) {
     metasAprendizInicializado = true;
@@ -4569,7 +4622,7 @@ function configurarAcessoMetasEstagio() {
   const section = $("metas-estagio-section");
   const nav = $("metas-estagio-nav-link");
   if (!section || !nav) return;
-  const allowed = Boolean(currentUser);
+  const allowed = currentProfile?.role === "supervisor" ? usuarioTemModulo("metas_estagio") : Boolean(currentUser);
   section.hidden = !allowed;
   nav.hidden = !allowed;
   if (!allowed || metasEstagioInicializado) return;
@@ -5139,7 +5192,9 @@ function exportarMetasEstagio() {
   window.inicializarCarteiraConsultores=function(){
     const section=el("carteira-consultores-section"),nav=el("carteira-consultores-nav-link");
     if(!section||!nav||!(window.sb||sb))return;
-    section.hidden=false;nav.hidden=false;
+    const allowed = currentProfile?.role === "admin" || (currentProfile?.role === "supervisor" ? usuarioTemModulo("carteira_consultores") : Boolean(currentUser));
+    section.hidden=!allowed;nav.hidden=!allowed;
+    if(!allowed)return;
     if(!inicializado){configurarEventos();inicializado=true;carregar();}
   };
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>{if((window.sb||sb)?.auth)(window.sb||sb).auth.getSession().then(({data})=>{if(data?.session)window.inicializarCarteiraConsultores();});},{once:true});
