@@ -10,17 +10,6 @@ let adminUsers = [];
 let supervisorPermissionsReady = false;
 let currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
 
-function usuarioTemModulo(moduleKey) {
-  if (currentProfile?.role === "admin") return true;
-  if (currentProfile?.role === "supervisor") return currentAccess.module_keys.includes(moduleKey);
-  return true; // Mantém o comportamento atual dos usuários comuns.
-}
-
-function dashboardEstaAutorizado(dashboard) {
-  if (currentProfile?.role === "admin") return true;
-  return currentAccess.dashboard_ids.map(String).includes(String(dashboard?.id));
-}
-
 const SUB_VIEW = "vw_substituicoes_bi";
 const SUB_PAGE_SIZE = 20;
 const EAD_TABLE = "ead_analise_geografica";
@@ -281,20 +270,26 @@ async function atualizarPortal() {
 
     currentProfile = profile;
     currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
+
+    // Para usuários não administradores, carrega as permissões antes de montar o menu.
+    // Em caso de falha, aplica acesso mínimo (fail closed), sem liberar módulos por engano.
     if (profile.role !== "admin") {
-      const access = await adminCall("get_my_access");
-      currentAccess = {
-        module_keys: Array.isArray(access.module_keys) ? access.module_keys : [],
-        subsedes: Array.isArray(access.subsedes) ? access.subsedes : [],
-        dashboard_ids: Array.isArray(access.dashboard_ids) ? access.dashboard_ids.map(String) : []
-      };
+      try {
+        const access = await adminCall("get_my_access");
+        currentAccess = {
+          module_keys: Array.isArray(access.module_keys) ? access.module_keys : [],
+          subsedes: Array.isArray(access.subsedes) ? access.subsedes : [],
+          dashboard_ids: Array.isArray(access.dashboard_ids) ? access.dashboard_ids.map(String) : []
+        };
+      } catch (accessError) {
+        console.error("Não foi possível carregar as permissões do usuário:", accessError);
+        currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
+      }
     }
+
     mostrarPortal();
 
     const isAdmin = profile.role === "admin";
-    const vagasAllowed = isAdmin || profile.role !== "supervisor" || usuarioTemModulo("vagas_aprendiz");
-    if ($("vagas-aprendiz-section")) $("vagas-aprendiz-section").hidden = !vagasAllowed;
-    if ($("vagas-aprendiz-nav-link")) $("vagas-aprendiz-nav-link").hidden = !vagasAllowed;
 
     if ($("admin-section")) $("admin-section").hidden = !isAdmin;
     if ($("admin-nav-link")) {
@@ -316,6 +311,42 @@ async function atualizarPortal() {
 }
 
 // ==================================================
+// CONTROLE DE ACESSO POR MÓDULO
+// ==================================================
+
+function moduloPermitido(moduleKey) {
+  if (currentProfile?.role === "admin") return true;
+  if (currentProfile?.role === "supervisor") {
+    return currentAccess.module_keys.includes(moduleKey);
+  }
+  return Boolean(currentUser);
+}
+
+function aplicarAcessoVagasAprendiz() {
+  const section = $("vagas-aprendiz-section");
+  const nav = document.querySelector('a[href="#vagas-aprendiz-section"]');
+  const allowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" && moduloPermitido("vagas_aprendiz")) ||
+    (currentProfile?.role !== "supervisor" && Boolean(currentUser));
+  if (section) section.hidden = !allowed;
+  if (nav) nav.hidden = !allowed;
+
+  const dashboardsHidden = currentProfile?.role === "supervisor" && !moduloPermitido("dashboards");
+  const dashboardsNav = document.querySelector('a[href="#dashboards"]');
+  const dashboardsSection = $("dashboards");
+  if (dashboardsNav) dashboardsNav.hidden = dashboardsHidden;
+  if (dashboardsSection) dashboardsSection.hidden = dashboardsHidden;
+
+  const carteiraSection = $("carteira-consultores-section");
+  const carteiraNav = $("carteira-consultores-nav-link");
+  const carteiraAllowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" && moduloPermitido("carteira_consultores")) ||
+    (currentProfile?.role !== "supervisor" && Boolean(currentUser));
+  if (carteiraSection) carteiraSection.hidden = !carteiraAllowed;
+  if (carteiraNav) carteiraNav.hidden = !carteiraAllowed;
+}
+
+// ==================================================
 // DASHBOARDS E FILTROS
 // ==================================================
 
@@ -332,10 +363,20 @@ async function carregarDashboards() {
     .order("name");
 
   if (error) throw error;
-  allDashboards = data || [];
 
-  const dashboardsVisiveis = allDashboards.filter(dashboardEstaAutorizado);
-  dashboardsVisiveis.forEach(d => {
+  const dashboardRows = data || [];
+  if (currentProfile?.role === "admin") {
+    allDashboards = dashboardRows;
+  } else {
+    const dashboardModuleAllowed = currentProfile?.role !== "supervisor" ||
+      moduloPermitido("dashboards");
+    const permittedIds = new Set((currentAccess.dashboard_ids || []).map(String));
+    allDashboards = dashboardModuleAllowed
+      ? dashboardRows.filter(d => permittedIds.has(String(d.id)))
+      : [];
+  }
+
+  allDashboards.forEach(d => {
     const card = document.createElement("article");
     card.className = "dashboard-card";
 
@@ -368,16 +409,17 @@ async function carregarDashboards() {
     grid.appendChild(card);
   });
 
-  if ($("summary-total")) $("summary-total").textContent = String(dashboardsVisiveis.length);
+  if ($("summary-total")) $("summary-total").textContent = String(allDashboards.length);
 
   if ($("summary-categories")) {
     $("summary-categories").textContent = String(
-      new Set(dashboardsVisiveis.map(d => normalize(d.category || "outros"))).size
+      new Set(allDashboards.map(d => normalize(d.category || "outros"))).size
     );
   }
 
   aplicarFiltrosDashboards();
   renderizarDashboardsAdministrativos();
+  aplicarAcessoVagasAprendiz();
   configurarAcessoSubstituicoes();
   configurarAcessoEaD();
   configurarAcessoMetasAprendiz();
@@ -485,6 +527,46 @@ if ($("user-create-form")) {
 
 if ($("permission-user")) {
   $("permission-user").addEventListener("change", carregarPermissoesUsuario);
+
+  // Botão de exclusão criado aqui para não exigir alteração no index.html.
+  if (!$("delete-user-btn")) {
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.id = "delete-user-btn";
+    deleteButton.className = "secondary-button";
+    deleteButton.textContent = "Excluir login selecionado";
+    deleteButton.style.marginTop = "10px";
+    $("permission-user").insertAdjacentElement("afterend", deleteButton);
+
+    deleteButton.addEventListener("click", async () => {
+      const targetId = $("permission-user").value;
+      if (!targetId) {
+        showMessage("permission-message", "Selecione um usuário para excluir.");
+        return;
+      }
+      const target = adminUsers.find(u => u.id === targetId);
+      if (!target) return;
+      if (currentUser?.id === targetId) {
+        showMessage("permission-message", "Por segurança, não é possível excluir o login que está usando agora.");
+        return;
+      }
+      const confirmed = window.confirm(
+        `Tem certeza que deseja excluir o login ${target.email || targetId}? Essa ação é permanente.`
+      );
+      if (!confirmed) return;
+
+      setLoading(deleteButton, true, "Excluindo...");
+      try {
+        await adminCall("delete_user", { user_id: targetId });
+        showMessage("permission-message", "Login excluído com sucesso.", "success");
+        await carregarAdministracao();
+      } catch (error) {
+        showMessage("permission-message", friendlyError(error));
+      } finally {
+        setLoading(deleteButton, false);
+      }
+    });
+  }
 }
 
 const SUPERVISOR_MODULES = [
@@ -578,27 +660,6 @@ if ($("clear-subsedes")) {
   });
 }
 
-function renderizarPermissoesDashboards(dashboards, idsAutorizados) {
-  const container = $("permission-dashboard-list");
-  if (!container) return;
-  container.replaceChildren();
-  const heading = document.createElement("h4");
-  heading.textContent = "Dashboards autorizados";
-  container.appendChild(heading);
-  (dashboards || []).forEach(d => {
-    const label = document.createElement("label");
-    label.className = "permission-option";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.value = String(d.id);
-    input.checked = idsAutorizados.has(String(d.id));
-    const span = document.createElement("span");
-    span.textContent = d.name || "Dashboard sem nome";
-    label.append(input, span);
-    container.appendChild(label);
-  });
-}
-
 async function carregarPermissoesUsuario() {
   clearMessage("permission-message");
   supervisorPermissionsReady = false;
@@ -640,13 +701,33 @@ async function carregarPermissoesUsuario() {
         Array.isArray(result.module_keys) ? result.module_keys : [],
         Array.isArray(result.subsedes) ? result.subsedes : []
       );
-      const dashboardIds = new Set((result.dashboard_ids || []).map(String));
+
       const { data: dashboards, error: dashboardsError } = await sb
         .from("dashboards")
         .select("id, name, description, category, url")
         .order("name");
       if (dashboardsError) throw dashboardsError;
-      renderizarPermissoesDashboards(dashboards || [], dashboardIds);
+      const selectedDashboardIds = new Set(
+        (Array.isArray(result.dashboard_ids) ? result.dashboard_ids : []).map(String)
+      );
+      dashboardContainer.replaceChildren();
+      const dashboardTitle = document.createElement("h4");
+      dashboardTitle.textContent = "Dashboards autorizados";
+      dashboardContainer.appendChild(dashboardTitle);
+      (dashboards || []).forEach(d => {
+        const label = document.createElement("label");
+        label.className = "permission-option";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "supervisor-dashboard";
+        input.value = String(d.id);
+        input.checked = selectedDashboardIds.has(String(d.id));
+        const span = document.createElement("span");
+        span.textContent = d.name || "Dashboard sem nome";
+        label.append(input, span);
+        dashboardContainer.appendChild(label);
+      });
+
       supervisorPermissionsReady = true;
       if (saveButton) saveButton.disabled = false;
     } catch (error) {
@@ -670,7 +751,18 @@ async function carregarPermissoesUsuario() {
       .order("name");
     if (dError) throw dError;
 
-    renderizarPermissoesDashboards(dashboards || [], ids);
+    (dashboards || []).forEach(d => {
+      const label = document.createElement("label");
+      label.className = "permission-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = d.id;
+      input.checked = ids.has(String(d.id));
+      const span = document.createElement("span");
+      span.textContent = d.name || "Dashboard sem nome";
+      label.append(input, span);
+      dashboardContainer.appendChild(label);
+    });
   } catch (error) {
     showMessage("permission-message", friendlyError(error));
   }
@@ -695,9 +787,8 @@ if ($("save-permissions-btn")) {
         }
         const module_keys = [...$("permission-module-list").querySelectorAll('input[name="supervisor-module"]:checked')].map(i => i.value);
         const subsedes = [...$("permission-subsede-list").querySelectorAll('input[name="supervisor-subsede"]:checked')].map(i => i.value);
-        if (!module_keys.length) throw new Error("Selecione pelo menos um módulo para o supervisor.");
-        if (!subsedes.length) throw new Error("Selecione pelo menos uma subsede para o supervisor.");
-        const dashboard_ids = [...$("permission-dashboard-list").querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
+        // Listas vazias são permitidas: isso possibilita retirar totalmente o acesso a módulos ou subsedes.
+        const dashboard_ids = [...$("permission-dashboard-list").querySelectorAll('input[name="supervisor-dashboard"]:checked')].map(i => i.value);
         await adminCall("set_supervisor_access", { user_id: userId, module_keys, subsedes });
         await adminCall("set_permissions", { user_id: userId, dashboard_ids });
         showMessage("permission-message", "Módulos, subsedes e dashboards do supervisor salvos com sucesso!", "success");
@@ -871,9 +962,9 @@ function configurarAcessoSubstituicoes() {
   const nav = $("substituicoes-nav-link");
   if (!section || !nav) return;
 
-  const allowed = currentProfile?.role === "supervisor"
-    ? usuarioTemModulo("substituicoes")
-    : currentProfile?.role === "admin" || allDashboards.some(dashboardEhSubstituicoes);
+  const allowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" && moduloPermitido("substituicoes")) ||
+    (currentProfile?.role !== "supervisor" && allDashboards.some(dashboardEhSubstituicoes));
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
@@ -953,10 +1044,7 @@ async function carregarSubstituicoes() {
     offset += pageSize;
   }
 
-  const substituicoesNormalizadas = all.map(normalizarRegistroSubstituicao);
-  subRegistros = currentProfile?.role === "supervisor"
-    ? substituicoesNormalizadas.filter(r => currentAccess.subsedes.some(subsede => normalize(subsede) === normalize(r.subsede)))
-    : substituicoesNormalizadas;
+  subRegistros = all.map(normalizarRegistroSubstituicao);
   subPaginaAtual = 1;
   preencherFiltrosSubstituicoes();
 
@@ -1376,9 +1464,9 @@ function configurarAcessoEaD() {
   const nav = $("ead-nav-link");
   if (!section || !nav) return;
 
-  const allowed = currentProfile?.role === "supervisor"
-    ? usuarioTemModulo("ead")
-    : currentProfile?.role === "admin" || allDashboards.some(dashboardEhEaD);
+  const allowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" && moduloPermitido("ead")) ||
+    (currentProfile?.role !== "supervisor" && allDashboards.some(dashboardEhEaD));
   section.hidden = !allowed;
   nav.hidden = !allowed;
 
@@ -1468,9 +1556,15 @@ async function carregarAnaliseEaD() {
     offset += pageSize;
   }
 
-  eadRegistros = currentProfile?.role === "supervisor"
-    ? registros.filter(r => currentAccess.subsedes.some(subsede => normalize(subsede) === normalize(r.subsede_responsavel)))
-    : registros;
+  // Para supervisores, limita os registros às subsedes autorizadas.
+  if (currentProfile?.role === "supervisor") {
+    const allowedSubsedes = new Set((currentAccess.subsedes || []).map(normalize));
+    eadRegistros = registros.filter(row =>
+      allowedSubsedes.has(normalize(row.subsede_responsavel))
+    );
+  } else {
+    eadRegistros = registros;
+  }
   eadPaginaAtual = 1;
   preencherFiltrosEaD();
   renderizarAnaliseEaD();
@@ -4157,7 +4251,8 @@ function configurarAcessoMetasAprendiz() {
   const section = $("metas-aprendiz-section");
   const nav = $("metas-aprendiz-nav-link");
   if (!section || !nav) return;
-  const allowed = currentProfile?.role === "supervisor" ? usuarioTemModulo("metas_aprendiz") : Boolean(currentUser);
+  const allowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" ? moduloPermitido("metas_aprendiz") : Boolean(currentUser));
   section.hidden = !allowed; nav.hidden = !allowed;
   if (allowed && !metasAprendizInicializado) {
     metasAprendizInicializado = true;
@@ -4622,7 +4717,8 @@ function configurarAcessoMetasEstagio() {
   const section = $("metas-estagio-section");
   const nav = $("metas-estagio-nav-link");
   if (!section || !nav) return;
-  const allowed = currentProfile?.role === "supervisor" ? usuarioTemModulo("metas_estagio") : Boolean(currentUser);
+  const allowed = currentProfile?.role === "admin" ||
+    (currentProfile?.role === "supervisor" ? moduloPermitido("metas_estagio") : Boolean(currentUser));
   section.hidden = !allowed;
   nav.hidden = !allowed;
   if (!allowed || metasEstagioInicializado) return;
@@ -5192,9 +5288,7 @@ function exportarMetasEstagio() {
   window.inicializarCarteiraConsultores=function(){
     const section=el("carteira-consultores-section"),nav=el("carteira-consultores-nav-link");
     if(!section||!nav||!(window.sb||sb))return;
-    const allowed = currentProfile?.role === "admin" || (currentProfile?.role === "supervisor" ? usuarioTemModulo("carteira_consultores") : Boolean(currentUser));
-    section.hidden=!allowed;nav.hidden=!allowed;
-    if(!allowed)return;
+    section.hidden=false;nav.hidden=false;
     if(!inicializado){configurarEventos();inicializado=true;carregar();}
   };
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>{if((window.sb||sb)?.auth)(window.sb||sb).auth.getSession().then(({data})=>{if(data?.session)window.inicializarCarteiraConsultores();});},{once:true});
