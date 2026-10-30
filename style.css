@@ -2358,19 +2358,3 @@ textarea:focus {
 @media(max-width:700px) {
   .vagas-panel-root .vagas-chart-cursos { height:245px; min-height:245px; }
 }
-
-/* Integração da Análise Geográfica EaD + Presencial */
-.analise-fonte-switch{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 22px}
-.analise-fonte-switch button{border:1px solid var(--border);background:#fff;color:var(--navy);padding:10px 18px;border-radius:9px;font-weight:700;cursor:pointer}
-.analise-fonte-switch button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
-.presencial-painel{margin:18px 0 26px;padding:20px;border:1px solid var(--border);border-radius:16px;background:#fff;box-shadow:var(--shadow)}
-.presencial-painel[hidden]{display:none!important}
-.presencial-topo{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.presencial-topo h3{margin:0 0 5px;color:var(--navy)}
-.presencial-filtros{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin:18px 0}
-.presencial-filtros label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:var(--muted)}
-.presencial-filtros input,.presencial-filtros select{width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)}
-.presencial-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 20px}
-.presencial-kpis article{padding:16px;border:1px solid var(--border);border-radius:12px;background:#f8fafd;display:flex;flex-direction:column;gap:7px}
-.presencial-kpis span{font-size:12px;color:var(--muted)}.presencial-kpis strong{font:800 25px Manrope,sans-serif;color:var(--navy)}
-@media(max-width:800px){.presencial-filtros{grid-template-columns:repeat(2,minmax(0,1fr))}.presencial-kpis{grid-template-columns:1fr}}
