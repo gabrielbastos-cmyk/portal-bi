@@ -3204,6 +3204,32 @@ function dataSolicitacaoRegistro(r) {
   return r.solicitado_em || r.data_solicitacao || null;
 }
 
+// O período do relatório é agrupado pelo mês/ano da data de solicitação
+// disponível na view. Assim, o usuário escolhe um mês sem precisar
+// preencher manualmente duas datas.
+function periodoRelatorioRegistro(r) {
+  const data = dataISO(dataSolicitacaoRegistro(r));
+  return data ? data.slice(0, 7) : "";
+}
+
+function formatarPeriodoRelatorio(periodo) {
+  if (!/^\d{4}-\d{2}$/.test(String(periodo || ""))) return String(periodo || "");
+  const [ano, mes] = periodo.split("-");
+  const nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  return `${nomes[Number(mes) - 1]} / ${ano}`;
+}
+
+function preencherFiltroPeriodo() {
+  const select = $("vagas-filtroPeriodo");
+  if (!select) return;
+  const anterior = select.value;
+  const periodos = [...new Set(registros.map(periodoRelatorioRegistro).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  select.replaceChildren(new Option("Todos os períodos", ""));
+  periodos.forEach(periodo => select.add(new Option(formatarPeriodoRelatorio(periodo), periodo)));
+  if (periodos.includes(anterior)) select.value = anterior;
+}
+
 function formatarData(valor) {
   if (!valor) return "—";
 
@@ -3368,8 +3394,7 @@ function aplicarFiltros() {
   const curso = $("vagas-filtroCurso")?.value || "";
   const empresa = $("vagas-filtroEmpresa")?.value || "";
   const solicitante = $("vagas-filtroSolicitante")?.value || "";
-  const inicial = $("vagas-dataInicial")?.value || "";
-  const final = $("vagas-dataFinal")?.value || "";
+  const periodo = $("vagas-filtroPeriodo")?.value || "";
 
   return registros.filter(r => {
     const textoBusca = normalizar([
@@ -3418,13 +3443,7 @@ function aplicarFiltros() {
       return false;
     }
 
-    const data = dataISO(dataSolicitacaoRegistro(r));
-
-    if (inicial && (!data || data < inicial)) {
-      return false;
-    }
-
-    if (final && (!data || data > final)) {
+    if (periodo && periodoRelatorioRegistro(r) !== periodo) {
       return false;
     }
 
@@ -3541,16 +3560,17 @@ const pluginRotulosValores = {
            */
           const posicao = elemento.tooltipPosition();
 
-          ctx.textAlign = "center";
           ctx.fillStyle = "#263238";
           ctx.shadowColor = "rgba(255, 255, 255, 0.85)";
           ctx.shadowBlur = 2;
 
-          ctx.fillText(
-            texto,
-            posicao.x,
-            posicao.y - 10
-          );
+          if (chart.options.indexAxis === "y") {
+            ctx.textAlign = "left";
+            ctx.fillText(texto, posicao.x + 8, posicao.y);
+          } else {
+            ctx.textAlign = "center";
+            ctx.fillText(texto, posicao.x, posicao.y - 10);
+          }
         }
 
         ctx.restore();
@@ -3565,7 +3585,7 @@ const pluginRotulosValores = {
    CRIAÇÃO DOS GRÁFICOS
 ===================================================== */
 
-function criarGrafico(id, tipo, labels, valores, titulo) {
+function criarGrafico(id, tipo, labels, valores, titulo, horizontal = false) {
   const canvas = $(id);
 
   if (!canvas || typeof Chart === "undefined") {
@@ -3601,6 +3621,7 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      ...(horizontal ? { indexAxis: "y" } : {}),
       onClick: (_event, elementos) => {
         if (!elementos?.length) return;
         const indice = elementos[0].index;
@@ -3644,13 +3665,19 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
         }
       },
 
-      scales: tipo === "doughnut" ? {} : {
+      scales: tipo === "doughnut" ? {} : horizontal ? {
+        x: {
+          beginAtZero: true,
+          grace: "15%",
+          ticks: { precision: 0 }
+        },
+        y: {
+          ticks: { autoSkip: false }
+        }
+      } : {
         y: {
           beginAtZero: true,
-
-          ticks: {
-            precision: 0
-          }
+          ticks: { precision: 0 }
         }
       }
     }
@@ -3714,6 +3741,14 @@ function obterContagemIdades(lista) {
 
   resultado.encontrouDados = encontrouCampoIdade;
   return resultado;
+}
+
+function ehVagaAberta(r) {
+  const status = normalizar(statusRegistro(r));
+  const encerrada = status.includes("FECHAD") || status.includes("CANCEL");
+  const aberta = status.includes("ABERTA") || status.includes("ABERTO") ||
+    status.includes("AGUARDANDO") || status.includes("PENDENTE");
+  return aberta && !encerrada;
 }
 
 /* =====================================================
@@ -3814,6 +3849,22 @@ function atualizarGraficos(lista) {
     [idades.menores, idades.maiores],
     "Vagas por faixa etária"
   );
+
+  // Ranking dos cursos com mais vagas abertas, limitado aos 12 primeiros
+  // para manter os nomes legíveis. Usa o mesmo critério do KPI de vagas abertas.
+  const cursosAbertos = contarPor(
+    lista.filter(ehVagaAberta),
+    cursoRegistro
+  ).filter(([nome]) => nome && nome !== "Não informado").slice(0, 12).reverse();
+
+  criarGrafico(
+    "vagas-graficoCursosAbertas",
+    "bar",
+    cursosAbertos.map(item => item[0]),
+    cursosAbertos.map(item => item[1]),
+    "Vagas em aberto por curso",
+    true
+  );
 }
 
 /* =====================================================
@@ -3821,18 +3872,7 @@ function atualizarGraficos(lista) {
 ===================================================== */
 
 function atualizarIndicadores(lista) {
-  const abertas = lista.filter(r => {
-    const s = normalizar(statusRegistro(r));
-
-    return (
-      s.includes("ABERTA") ||
-      s.includes("ABERTO") ||
-      s.includes("AGUARDANDO") ||
-      s.includes("PENDENTE")
-    ) &&
-    !s.includes("FECHAD") &&
-    !s.includes("CANCEL");
-  });
+  const abertas = lista.filter(ehVagaAberta);
 
   const andamento = lista.filter(r => {
     const s = normalizar(statusRegistro(r));
@@ -4156,8 +4196,7 @@ function configurarEventos() {
     ["vagas-filtroCurso", "change"],
     ["vagas-filtroEmpresa", "change"],
     ["vagas-filtroSolicitante", "change"],
-    ["vagas-dataInicial", "change"],
-    ["vagas-dataFinal", "change"]
+    ["vagas-filtroPeriodo", "change"]
   ].forEach(([id, evento]) => {
     const elemento = $(id);
 
@@ -4202,8 +4241,7 @@ function configurarEventos() {
         "vagas-filtroCurso",
         "vagas-filtroEmpresa",
         "vagas-filtroSolicitante",
-        "vagas-dataInicial",
-        "vagas-dataFinal"
+        "vagas-filtroPeriodo"
       ].forEach(id => {
         const elemento = $(id);
 
@@ -4272,6 +4310,8 @@ async function iniciarCarregamento() {
       registros.map(solicitanteRegistro),
       "Todos os solicitantes"
     );
+
+    preencherFiltroPeriodo();
 
     atualizarPainel();
 
