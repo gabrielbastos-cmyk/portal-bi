@@ -1857,6 +1857,7 @@ textarea:focus {
 .vagas-panel-root .vagas-chart-area { position:relative; width:100%; height:190px; min-width:0; }
 .vagas-panel-root .vagas-chart-area canvas { display:block; width:100% !important; max-width:100%; max-height:100%; }
 .vagas-panel-root .vagas-chart-tall { height:220px; }
+.vagas-panel-root .vagas-chart-cursos { height:300px; }
 .vagas-panel-root .vagas-table-panel { margin-bottom:12px; }
 .vagas-panel-root .vagas-table-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .vagas-panel-root .vagas-table-heading h3 { margin:0 0 4px; }
@@ -1870,7 +1871,7 @@ textarea:focus {
 .vagas-panel-root tbody tr:hover td { background:#f7faf8; }
 .vagas-panel-root tbody tr:last-child td { border-bottom:0; }
 @media(max-width:1050px) { .vagas-panel-root .vagas-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .vagas-panel-root .vagas-kpis { gap:10px; } .vagas-panel-root .vagas-kpi { padding:13px; } }
-@media(max-width:700px) { .vagas-panel-root .vagas-filters { grid-template-columns:minmax(0,1fr); gap:10px; padding:13px; } .vagas-panel-root .vagas-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; } .vagas-panel-root .vagas-kpi { min-height:80px; padding:12px; } .vagas-panel-root .vagas-kpi span { font-size:10px; } .vagas-panel-root .vagas-kpi strong { font-size:23px; } .vagas-panel-root .vagas-charts { grid-template-columns:minmax(0,1fr); gap:11px; } .vagas-panel-root .vagas-panel-wide { grid-column:auto; } .vagas-panel-root .vagas-panel { padding:13px; } .vagas-panel-root .vagas-chart-area { height:180px; } .vagas-panel-root .vagas-chart-tall { height:200px; } .vagas-panel-root .vagas-table-heading { align-items:flex-start; } }
+@media(max-width:700px) { .vagas-panel-root .vagas-filters { grid-template-columns:minmax(0,1fr); gap:10px; padding:13px; } .vagas-panel-root .vagas-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; } .vagas-panel-root .vagas-kpi { min-height:80px; padding:12px; } .vagas-panel-root .vagas-kpi span { font-size:10px; } .vagas-panel-root .vagas-kpi strong { font-size:23px; } .vagas-panel-root .vagas-charts { grid-template-columns:minmax(0,1fr); gap:11px; } .vagas-panel-root .vagas-panel-wide { grid-column:auto; } .vagas-panel-root .vagas-panel { padding:13px; } .vagas-panel-root .vagas-chart-area { height:180px; } .vagas-panel-root .vagas-chart-tall { height:200px; } .vagas-panel-root .vagas-chart-cursos { height:280px; } .vagas-panel-root .vagas-table-heading { align-items:flex-start; } }
 @media(prefers-reduced-motion:reduce) { .vagas-panel-root * { transition-duration:.01ms !important; } }
 
 
