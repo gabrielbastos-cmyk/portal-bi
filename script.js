@@ -13,7 +13,6 @@ let currentAccess = { module_keys: [], subsedes: [], dashboard_ids: [] };
 const SUB_VIEW = "vw_substituicoes_bi";
 const SUB_PAGE_SIZE = 20;
 const EAD_TABLE = "ead_analise_geografica";
-const PRESENCIAL_TABLE = "presencial_cursos_geografica";
 const EAD_PAGE_SIZE = 20;
 
 const SUB_FIELDS = [
@@ -45,8 +44,6 @@ let subPaginaAtual = 1;
 let eadRegistros = [];
 let eadInicializado = false;
 let eadPaginaAtual = 1;
-let presencialRegistros = [];
-let analiseFonteAtual = "todos";
 
 // ==================================================
 // FUNÇÕES GERAIS
@@ -1477,19 +1474,10 @@ function configurarAcessoEaD() {
     eadInicializado = true;
     prepararInterfaceEaD();
     carregarAnaliseEaD().catch(error => mostrarMensagemEaD(friendlyError(error), "error"));
-    carregarAnalisePresencial().catch(error => mostrarMensagemPresencial(friendlyError(error), "error"));
   }
 }
 
 function prepararInterfaceEaD() {
-  ["analise-fonte-todos", "analise-fonte-ead", "analise-fonte-presencial"].forEach(id => {
-    const botao = $(id);
-    if (botao) botao.addEventListener("click", () => alternarFonteAnalise(botao.dataset.fonte));
-  });
-  if ($("presencial-atualizar")) $("presencial-atualizar").addEventListener("click", () => carregarAnalisePresencial().catch(e => mostrarMensagemPresencial(friendlyError(e), "error")));
-  ["presencial-filtro-municipio", "presencial-filtro-uf", "presencial-filtro-situacao", "presencial-filtro-status"].forEach(id => {
-    const el = $(id); if (el) el.addEventListener(id.includes("municipio") ? "input" : "change", renderizarPresencial);
-  });
   if ($("ead-atualizar")) {
     $("ead-atualizar").addEventListener("click", async () => {
       const button = $("ead-atualizar");
@@ -1602,86 +1590,6 @@ function obterRegistrosEaDFiltrados() {
     (!distancia || String(r.classificacao_distancia || "") === distancia) &&
     (!potencial || String(r.classificacao_potencial || "") === potencial)
   );
-}
-
-// ==================================================
-// PRESENCIAL — INTEGRAÇÃO COM A TABELA GEOGRÁFICA
-// Mantém o grão original por curso; unidades físicas são contadas por unidade_id.
-// ==================================================
-function mostrarMensagemPresencial(message, type = "success") {
-  const el = $("presencial-message");
-  if (!el) return;
-  el.textContent = message;
-  el.className = type === "error" ? "message-error" : "message-success";
-}
-
-async function carregarAnalisePresencial() {
-  if (!sb || !currentUser || !currentProfile) return;
-  mostrarMensagemPresencial("Carregando cursos e unidades presenciais...");
-  const registros = [];
-  const pageSize = 1000;
-  let offset = 0;
-  const campos = "id,municipio,uf,subsede,endereco,cnpj,curso,cbo,protocolo,data_protocolo,validade,status_original,status_normalizado,situacao_unidade,unidade_ativa,atualizado_em,unidade_id,nome_unidade,latitude,longitude,geocode_status,status_mapa,total_cursos_unidade,endereco_normalizado";
-  while (true) {
-    const { data, error } = await sb.from(PRESENCIAL_TABLE).select(campos).order("municipio").range(offset, offset + pageSize - 1);
-    if (error) throw error;
-    const pagina = data || []; registros.push(...pagina);
-    if (pagina.length < pageSize) break;
-    offset += pageSize;
-  }
-  const permitidas = new Set((currentAccess.subsedes || []).map(normalize));
-  presencialRegistros = currentProfile?.role === "supervisor"
-    ? registros.filter(r => permitidas.has(normalize(r.subsede))) : registros;
-  preencherSelectDinamico({ id: "presencial-filtro-uf", values: presencialRegistros.map(r => r.uf), placeholder: "Todas as UFs" });
-  preencherSelectDinamico({ id: "presencial-filtro-status", values: presencialRegistros.map(r => r.status_normalizado), placeholder: "Todos os status" });
-  renderizarPresencial();
-  mostrarMensagemPresencial(`${presencialRegistros.length.toLocaleString("pt-BR")} registros de cursos presenciais carregados.`);
-}
-
-function alternarFonteAnalise(fonte) {
-  analiseFonteAtual = fonte || "todos";
-  ["analise-fonte-todos", "analise-fonte-ead", "analise-fonte-presencial"].forEach(id => {
-    const b = $(id); if (b) b.classList.toggle("active", b.dataset.fonte === analiseFonteAtual);
-  });
-  const mostrarEad = analiseFonteAtual !== "presencial";
-  const mostrarPresencial = analiseFonteAtual !== "ead";
-  ["ead-filtros", "ead-kpis", "ead-mapa-painel", "ead-tabela", "ead-paginacao", "ead-aviso"].forEach(id => {
-    const el = $(id); if (el) el.hidden = !mostrarEad;
-  });
-  const painel = $("presencial-painel"); if (painel) painel.hidden = !mostrarPresencial;
-  if (mostrarEad) renderizarAnaliseEaD();
-  if (mostrarPresencial) renderizarPresencial();
-}
-
-function obterPresencialFiltrado() {
-  const municipio = normalize($("presencial-filtro-municipio")?.value || "");
-  const uf = $("presencial-filtro-uf")?.value || "";
-  const situacao = $("presencial-filtro-situacao")?.value || "";
-  const status = $("presencial-filtro-status")?.value || "";
-  return presencialRegistros.filter(r =>
-    (!municipio || normalize(r.municipio).includes(municipio)) &&
-    (!uf || r.uf === uf) && (!situacao || String(r.situacao_unidade || "") === situacao) &&
-    (!status || String(r.status_normalizado || "") === status)
-  );
-}
-
-function renderizarPresencial() {
-  const dados = obterPresencialFiltrado();
-  const unidades = new Set(dados.map(r => r.unidade_id || [r.municipio,r.uf,r.endereco].join("|")).filter(Boolean));
-  const ativos = new Set(dados.filter(r => r.unidade_ativa === true).map(r => r.unidade_id || [r.municipio,r.uf,r.endereco].join("|")).filter(Boolean));
-  if ($("presencial-total-cursos")) $("presencial-total-cursos").textContent = dados.length.toLocaleString("pt-BR");
-  if ($("presencial-total-unidades")) $("presencial-total-unidades").textContent = unidades.size.toLocaleString("pt-BR");
-  if ($("presencial-unidades-ativas")) $("presencial-unidades-ativas").textContent = ativos.size.toLocaleString("pt-BR");
-  const tbody = $("presencial-tabela-corpo"); if (!tbody) return;
-  tbody.replaceChildren();
-  dados.slice(0, 500).forEach(r => {
-    const tr = document.createElement("tr");
-    [r.municipio,r.uf,r.subsede,r.nome_unidade,r.endereco,r.curso,r.protocolo,r.status_normalizado,r.validade,r.situacao_unidade,r.geocode_status].forEach(v => {
-      const td = document.createElement("td"); td.textContent = valorTexto(v); tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  const cont = $("presencial-contagem"); if (cont) cont.textContent = `${dados.length.toLocaleString("pt-BR")} cursos · ${unidades.size.toLocaleString("pt-BR")} unidades físicas`;
 }
 
 // ==================================================
@@ -1828,7 +1736,7 @@ function eadMapaPrepararElemento() {
   conteudo.append(mapa, detalhes);
   painel.append(titulo, descricao, legenda, conteudo, aviso);
 
-  const tabela = $("ead-tabela");
+  const tabela = section.querySelector(".ead-tabela");
   if (tabela) section.insertBefore(painel, tabela);
   else section.appendChild(painel);
 
