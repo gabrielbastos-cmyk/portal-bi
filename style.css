@@ -2332,3 +2332,29 @@ textarea:focus {
     min-height: 250px;
   }
 }
+
+
+/* Ranking de cursos: cinco barras por página com setas de navegação */
+.vagas-panel-root .vagas-chart-cursos { height:230px; min-height:230px; }
+.vagas-panel-root .vagas-cursos-paginacao {
+  display:flex; align-items:center; justify-content:flex-end; gap:12px;
+  min-height:42px; padding:5px 2px 0;
+}
+.vagas-panel-root .vagas-cursos-paginacao[hidden] { display:none !important; }
+.vagas-panel-root .vagas-cursos-pagina-info {
+  color:#778397; font-size:12px; font-weight:600; font-variant-numeric:tabular-nums;
+}
+.vagas-panel-root .vagas-cursos-pagina-acoes { display:flex; align-items:center; gap:7px; }
+.vagas-panel-root .vagas-cursos-pagina-acoes button {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:32px; padding:0; border:1px solid #dce4ec;
+  border-radius:8px; background:#fff; color:#17365d;
+  font-size:23px; line-height:1; cursor:pointer;
+}
+.vagas-panel-root .vagas-cursos-pagina-acoes button:hover:not(:disabled) {
+  background:#edf4fb; border-color:#9db8d4;
+}
+.vagas-panel-root .vagas-cursos-pagina-acoes button:disabled { opacity:.35; cursor:not-allowed; }
+@media(max-width:700px) {
+  .vagas-panel-root .vagas-chart-cursos { height:245px; min-height:245px; }
+}
