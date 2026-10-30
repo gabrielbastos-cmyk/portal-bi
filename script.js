@@ -3675,6 +3675,12 @@ function criarGrafico(id, tipo, labels, valores, titulo, horizontal = false) {
           ticks: { autoSkip: false }
         }
       } : {
+        x: id === "vagas-graficoCursosAbertas" ? {
+          ticks: { autoSkip: false, maxRotation: 55, minRotation: 35, font: { size: 10 } },
+          grid: { display: false }
+        } : {
+          ticks: { autoSkip: true }
+        },
         y: {
           beginAtZero: true,
           ticks: { precision: 0 }
@@ -3850,42 +3856,35 @@ function atualizarGraficos(lista) {
     "Vagas por faixa etária"
   );
 
-  // Sem status selecionado: mostra todas as vagas em aberto por curso.
-  // Com status selecionado: o gráfico passa a mostrar aquele status por curso.
-  // Todos os cursos presentes nos registros filtrados aparecem, inclusive os
-  // que tenham zero vagas abertas, evitando esconder cursos do relatório.
-  const statusSelecionado = $("vagas-filtroStatus")?.value || "";
-  const baseCursos = statusSelecionado
-    ? lista
-    : lista.filter(ehVagaAberta);
-
-  const nomesTodosCursos = [...new Set(
-    lista
-      .map(cursoRegistro)
-      .filter(nome => nome && nome !== "Não informado")
-  )];
-
+  // O gráfico representa as vagas solicitadas/abertas no período filtrado,
+  // e não apenas as que continuam com status ABERTA hoje. Assim, vagas
+  // solicitadas em junho/julho continuam contabilizadas mesmo se depois
+  // foram fechadas ou concluídas. Se o usuário selecionar um status, a lista
+  // já chega filtrada por esse status através de aplicarFiltros().
   const contagemPorCurso = new Map();
-  baseCursos.forEach(registro => {
+  lista.forEach(registro => {
     const nome = cursoRegistro(registro);
     if (!nome || nome === "Não informado") return;
     contagemPorCurso.set(nome, (contagemPorCurso.get(nome) || 0) + 1);
   });
 
-  const cursosAbertos = nomesTodosCursos
-    .map(nome => [nome, contagemPorCurso.get(nome) || 0])
-    .sort((a, b) => a[1] - b[1] || b[0].localeCompare(a[0], "pt-BR"));
+  // Maior quantidade primeiro; em empate, ordena pelo nome do curso.
+  const cursosAbertos = [...contagemPorCurso.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
 
-  // A altura acompanha a quantidade de cursos para que todos os nomes
-  // e valores fiquem legíveis, sem limitar o ranking aos 12 primeiros.
+  // O gráfico mostra cinco cursos na largura inicial. Os demais ficam
+  // disponíveis por rolagem horizontal, sem esticar a altura do painel.
   const areaCursos = $("vagas-graficoCursosAbertas")?.parentElement;
   if (areaCursos) {
-    areaCursos.style.height = `${Math.min(760, Math.max(300, cursosAbertos.length * 34 + 48))}px`;
+    const larguraPorCurso = 145;
+    areaCursos.style.width = `${Math.max(720, cursosAbertos.length * larguraPorCurso)}px`;
+    areaCursos.style.minWidth = `${Math.max(720, cursosAbertos.length * larguraPorCurso)}px`;
+    areaCursos.style.height = "300px";
   }
 
   const tituloCursos = statusSelecionado
-    ? `Vagas por curso · ${statusRegistro(lista.find(r => statusRegistro(r) === statusSelecionado) || { status_simplificado: statusSelecionado })}`
-    : "Vagas em aberto por curso";
+    ? `Vagas por curso · ${statusSelecionado}`
+    : "Vagas abertas por curso no período";
 
   criarGrafico(
     "vagas-graficoCursosAbertas",
@@ -3893,7 +3892,7 @@ function atualizarGraficos(lista) {
     cursosAbertos.map(item => item[0]),
     cursosAbertos.map(item => item[1]),
     tituloCursos,
-    true
+    false
   );
 }
 
