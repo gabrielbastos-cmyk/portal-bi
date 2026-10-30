@@ -3320,15 +3320,43 @@ async function carregarDados() {
   }
 
   const todos = [];
+  const MAX_PAGINAS = 100;
   let inicio = 0;
+  let totalEsperado = null;
+  let pagina = 0;
 
-  while (true) {
+  while (pagina < MAX_PAGINAS) {
+    pagina += 1;
     const fim = inicio + PAGE_SIZE - 1;
 
-    const { data, error } = await sb
+    // A ordenação estável evita que registros mudem de posição entre páginas.
+    let consulta = sb
       .from(VIEW)
-      .select("*")
+      .select("*", { count: "exact" })
+      .order("id_registro", { ascending: true })
       .range(inicio, fim);
+
+    let resposta;
+    let temporizador;
+    try {
+      resposta = await Promise.race([
+        consulta,
+        new Promise((_, reject) => {
+          temporizador = setTimeout(
+            () => reject(new Error("A consulta ao Supabase demorou mais de 30 segundos. Verifique a conexão e tente novamente.")),
+            30000
+          );
+        })
+      ]);
+    } catch (erro) {
+      throw new Error(
+        `Falha ao carregar a página ${pagina} da view ${VIEW}: ${erro.message || erro}`
+      );
+    } finally {
+      clearTimeout(temporizador);
+    }
+
+    const { data, error, count } = resposta;
 
     if (error) {
       throw new Error(
@@ -3336,15 +3364,41 @@ async function carregarDados() {
       );
     }
 
-    const lote = data || [];
-
-    todos.push(...lote);
-
-    if (lote.length < PAGE_SIZE) {
-      break;
+    if (Number.isFinite(count)) {
+      totalEsperado = count;
     }
 
-    inicio += PAGE_SIZE;
+    const lote = data || [];
+    if (lote.length === 0) break;
+
+    todos.push(...lote);
+    inicio += lote.length;
+
+    // Com a contagem exata, o laço termina mesmo se a view tiver exatamente
+    // múltiplos de 1.000 registros. Sem count, termina pelo tamanho do lote.
+    if (totalEsperado !== null && inicio >= totalEsperado) break;
+    if (lote.length < PAGE_SIZE) break;
+
+    const mensagem = $("vagas-mensagem");
+    if (mensagem) {
+      const totalTexto = totalEsperado === null
+        ? ""
+        : ` de ${totalEsperado.toLocaleString("pt-BR")}`;
+      mensagem.textContent =
+        `Carregando informações... ${inicio.toLocaleString("pt-BR")}${totalTexto} registros`;
+    }
+  }
+
+  if (pagina >= MAX_PAGINAS && (totalEsperado === null || todos.length < totalEsperado)) {
+    throw new Error(
+      `A consulta ultrapassou o limite de ${MAX_PAGINAS} páginas. Verifique a paginação e a view ${VIEW}.`
+    );
+  }
+
+  if (totalEsperado !== null && todos.length < totalEsperado) {
+    throw new Error(
+      `A view informa ${totalEsperado.toLocaleString("pt-BR")} registros, mas só foram carregados ${todos.length.toLocaleString("pt-BR")}. Tente atualizar novamente.`
+    );
   }
 
   return todos;
@@ -3675,12 +3729,6 @@ function criarGrafico(id, tipo, labels, valores, titulo, horizontal = false) {
           ticks: { autoSkip: false }
         }
       } : {
-        x: id === "vagas-graficoCursosAbertas" ? {
-          ticks: { autoSkip: false, maxRotation: 55, minRotation: 35, font: { size: 10 } },
-          grid: { display: false }
-        } : {
-          ticks: { autoSkip: true }
-        },
         y: {
           beginAtZero: true,
           ticks: { precision: 0 }
@@ -3856,35 +3904,42 @@ function atualizarGraficos(lista) {
     "Vagas por faixa etária"
   );
 
-  // O gráfico representa as vagas solicitadas/abertas no período filtrado,
-  // e não apenas as que continuam com status ABERTA hoje. Assim, vagas
-  // solicitadas em junho/julho continuam contabilizadas mesmo se depois
-  // foram fechadas ou concluídas. Se o usuário selecionar um status, a lista
-  // já chega filtrada por esse status através de aplicarFiltros().
+  // Sem status selecionado: mostra todas as vagas em aberto por curso.
+  // Com status selecionado: o gráfico passa a mostrar aquele status por curso.
+  // Todos os cursos presentes nos registros filtrados aparecem, inclusive os
+  // que tenham zero vagas abertas, evitando esconder cursos do relatório.
+  const statusSelecionado = $("vagas-filtroStatus")?.value || "";
+  const baseCursos = statusSelecionado
+    ? lista
+    : lista.filter(ehVagaAberta);
+
+  const nomesTodosCursos = [...new Set(
+    lista
+      .map(cursoRegistro)
+      .filter(nome => nome && nome !== "Não informado")
+  )];
+
   const contagemPorCurso = new Map();
-  lista.forEach(registro => {
+  baseCursos.forEach(registro => {
     const nome = cursoRegistro(registro);
     if (!nome || nome === "Não informado") return;
     contagemPorCurso.set(nome, (contagemPorCurso.get(nome) || 0) + 1);
   });
 
-  // Maior quantidade primeiro; em empate, ordena pelo nome do curso.
-  const cursosAbertos = [...contagemPorCurso.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
+  const cursosAbertos = nomesTodosCursos
+    .map(nome => [nome, contagemPorCurso.get(nome) || 0])
+    .sort((a, b) => a[1] - b[1] || b[0].localeCompare(a[0], "pt-BR"));
 
-  // O gráfico mostra cinco cursos na largura inicial. Os demais ficam
-  // disponíveis por rolagem horizontal, sem esticar a altura do painel.
+  // A altura acompanha a quantidade de cursos para que todos os nomes
+  // e valores fiquem legíveis, sem limitar o ranking aos 12 primeiros.
   const areaCursos = $("vagas-graficoCursosAbertas")?.parentElement;
   if (areaCursos) {
-    const larguraPorCurso = 145;
-    areaCursos.style.width = `${Math.max(720, cursosAbertos.length * larguraPorCurso)}px`;
-    areaCursos.style.minWidth = `${Math.max(720, cursosAbertos.length * larguraPorCurso)}px`;
-    areaCursos.style.height = "300px";
+    areaCursos.style.height = `${Math.min(760, Math.max(300, cursosAbertos.length * 34 + 48))}px`;
   }
 
   const tituloCursos = statusSelecionado
-    ? `Vagas por curso · ${statusSelecionado}`
-    : "Vagas abertas por curso no período";
+    ? `Vagas por curso · ${statusRegistro(lista.find(r => statusRegistro(r) === statusSelecionado) || { status_simplificado: statusSelecionado })}`
+    : "Vagas em aberto por curso";
 
   criarGrafico(
     "vagas-graficoCursosAbertas",
@@ -3892,7 +3947,7 @@ function atualizarGraficos(lista) {
     cursosAbertos.map(item => item[0]),
     cursosAbertos.map(item => item[1]),
     tituloCursos,
-    false
+    true
   );
 }
 
