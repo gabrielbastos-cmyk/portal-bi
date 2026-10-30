@@ -10,14 +10,14 @@
   <!-- Logo oficial GERAR incorporada neste arquivo para não depender de imagem externa -->
 
   <!-- CSS principal -->
-  <link rel="stylesheet" href="./style.css?v=20261030-vagas-curso-idade-v1">
+  <link rel="stylesheet" href="./style.css?v=20261030-vagas-abertas-periodo-v2">
 
   <!-- Bibliotecas e configurações existentes -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-  <script src="./script.js?v=20261030-vagas-curso-idade-v1" defer></script>
+  <script src="./script.js?v=20261030-vagas-abertas-periodo-v2" defer></script>
 
   <style>
 
@@ -699,8 +699,7 @@
     <div class="vagas-field"><label for="vagas-filtroCurso">Curso</label><select id="vagas-filtroCurso"><option value="">Todos os cursos</option></select></div>
     <div class="vagas-field"><label for="vagas-filtroEmpresa">Empresa</label><select id="vagas-filtroEmpresa"><option value="">Todas as empresas</option></select></div>
     <div class="vagas-field"><label for="vagas-filtroSolicitante">Solicitado por</label><select id="vagas-filtroSolicitante"><option value="">Todos os solicitantes</option></select></div>
-    <div class="vagas-field"><label for="vagas-dataInicial">Data inicial da solicitação</label><input id="vagas-dataInicial" type="date"></div>
-    <div class="vagas-field"><label for="vagas-dataFinal">Data final da solicitação</label><input id="vagas-dataFinal" type="date"></div>
+    <div class="vagas-field"><label for="vagas-filtroPeriodo">Período do relatório</label><select id="vagas-filtroPeriodo"><option value="">Todos os períodos</option></select></div>
     <button id="vagas-btnLimpar" class="vagas-btn-secondary" type="button">Limpar filtros</button>
   </section>
   <section class="vagas-kpis" aria-label="Indicadores das vagas">
@@ -714,6 +713,7 @@
     <article class="vagas-panel"><h3>Vagas por subsede</h3><div class="vagas-chart-area"><canvas id="vagas-graficoSubsede" role="img" aria-label="Quantidade de vagas por subsede"></canvas></div></article>
     <article class="vagas-panel vagas-panel-wide"><h3>Evolução mensal das solicitações</h3><p class="vagas-subtitle">Quantidade de vagas solicitadas ao longo do tempo.</p><div class="vagas-chart-area vagas-chart-tall"><canvas id="vagas-graficoMensal" role="img" aria-label="Evolução mensal das vagas solicitadas"></canvas></div></article>
     <article class="vagas-panel"><h3>Vagas por faixa etária</h3><p class="vagas-subtitle">Menores: 14 a 18 anos · Maiores: 18 a 24 anos.</p><div class="vagas-chart-area"><canvas id="vagas-graficoIdade" role="img" aria-label="Quantidade de vagas por faixa etária de 14 a 24 anos"></canvas></div><p class="vagas-subtitle" id="vagas-idade-aviso" aria-live="polite"></p></article>
+    <article class="vagas-panel"><h3>Vagas em aberto por curso</h3><p class="vagas-subtitle">Cursos com maior quantidade de vagas atualmente em aberto.</p><div class="vagas-chart-area vagas-chart-cursos"><canvas id="vagas-graficoCursosAbertas" role="img" aria-label="Ranking dos cursos com mais vagas em aberto"></canvas></div></article>
   </section>
   <section class="vagas-panel vagas-table-panel">
     <div class="vagas-table-heading"><div><h3>Detalhamento das vagas</h3><p id="vagas-contadorTabela">0 registros</p></div><button id="vagas-btnExportar" class="vagas-btn-secondary" type="button">Exportar CSV</button></div>
