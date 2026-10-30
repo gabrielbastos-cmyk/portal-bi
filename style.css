@@ -2316,3 +2316,19 @@ textarea:focus {
 
 /* Controle de Vagas Aprendiz — gráfico adicional de faixa etária */
 .vagas-panel-root #vagas-graficoIdade { min-height: 190px; }
+
+
+/* Ajuste de proporção dos gráficos do Controle de Vagas Aprendiz */
+.vagas-panel-root .vagas-chart-idade {
+  height: 300px;
+  min-height: 300px;
+}
+.vagas-panel-root .vagas-chart-idade canvas {
+  height: 100% !important;
+}
+@media (max-width: 700px) {
+  .vagas-panel-root .vagas-chart-idade {
+    height: 250px;
+    min-height: 250px;
+  }
+}
