@@ -3850,19 +3850,49 @@ function atualizarGraficos(lista) {
     "Vagas por faixa etária"
   );
 
-  // Ranking dos cursos com mais vagas abertas, limitado aos 12 primeiros
-  // para manter os nomes legíveis. Usa o mesmo critério do KPI de vagas abertas.
-  const cursosAbertos = contarPor(
-    lista.filter(ehVagaAberta),
-    cursoRegistro
-  ).filter(([nome]) => nome && nome !== "Não informado").slice(0, 12).reverse();
+  // Sem status selecionado: mostra todas as vagas em aberto por curso.
+  // Com status selecionado: o gráfico passa a mostrar aquele status por curso.
+  // Todos os cursos presentes nos registros filtrados aparecem, inclusive os
+  // que tenham zero vagas abertas, evitando esconder cursos do relatório.
+  const statusSelecionado = $("vagas-filtroStatus")?.value || "";
+  const baseCursos = statusSelecionado
+    ? lista
+    : lista.filter(ehVagaAberta);
+
+  const nomesTodosCursos = [...new Set(
+    lista
+      .map(cursoRegistro)
+      .filter(nome => nome && nome !== "Não informado")
+  )];
+
+  const contagemPorCurso = new Map();
+  baseCursos.forEach(registro => {
+    const nome = cursoRegistro(registro);
+    if (!nome || nome === "Não informado") return;
+    contagemPorCurso.set(nome, (contagemPorCurso.get(nome) || 0) + 1);
+  });
+
+  const cursosAbertos = nomesTodosCursos
+    .map(nome => [nome, contagemPorCurso.get(nome) || 0])
+    .sort((a, b) => a[1] - b[1] || b[0].localeCompare(a[0], "pt-BR"));
+
+  // A altura acompanha a quantidade de cursos para que todos os nomes
+  // e valores fiquem legíveis, sem limitar o ranking aos 12 primeiros.
+  const areaCursos = $("vagas-graficoCursosAbertas")?.parentElement;
+  if (areaCursos) {
+    areaCursos.style.height = `${Math.min(760, Math.max(300, cursosAbertos.length * 34 + 48))}px`;
+  }
+
+  const tituloCursos = statusSelecionado
+    ? `Vagas por curso · ${statusRegistro(lista.find(r => statusRegistro(r) === statusSelecionado) || { status_simplificado: statusSelecionado })}`
+    : "Vagas em aberto por curso";
 
   criarGrafico(
     "vagas-graficoCursosAbertas",
     "bar",
     cursosAbertos.map(item => item[0]),
     cursosAbertos.map(item => item[1]),
-    "Vagas em aberto por curso",
+    tituloCursos,
     true
   );
 }
