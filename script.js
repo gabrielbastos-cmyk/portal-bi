@@ -3176,7 +3176,28 @@ function solicitanteRegistro(r) {
 }
 
 function cursoRegistro(r) {
-  return String(r.curso || r.tipo_curso || "Não informado");
+  // A view vw_vagas_aprendiz_bi fornece o nome padronizado em curso_bi.
+  // Ele tem prioridade para evitar exibir localidade ou categoria genérica.
+  const valor = r.curso_bi || r.nome_curso || r.curso_nome || r.nome_do_curso ||
+    r.curso || r.tipo_curso || r.curso_area || "Não informado";
+  let nome = String(valor).replace(/\s+/g, " ").trim();
+
+  // Remove a localidade apenas quando ela aparece como sufixo e corresponde
+  // a um campo de local conhecido no próprio registro.
+  const locais = [r.local_atendimento, r.cidade, r.cidade_uf, r.subsede]
+    .filter(Boolean)
+    .map(v => String(v).trim().toLocaleUpperCase("pt-BR"));
+  for (const separador of [" — ", " | ", " - "]) {
+    const partes = nome.split(separador);
+    if (partes.length > 1) {
+      const sufixo = partes.slice(1).join(separador).trim().toLocaleUpperCase("pt-BR");
+      if (locais.includes(sufixo)) {
+        nome = partes[0].trim();
+        break;
+      }
+    }
+  }
+  return nome || "Não informado";
 }
 
 function dataSolicitacaoRegistro(r) {
@@ -3360,8 +3381,12 @@ function aplicarFiltros() {
       r.cidade_uf,
       r.cidade,
       r.subsede,
+      r.curso_bi,
       r.curso,
       r.tipo_curso,
+      r.nome_curso,
+      r.curso_nome,
+      r.nome_do_curso,
       r.angariador,
       r.solicitado_por,
       r.status,
@@ -3477,9 +3502,11 @@ const pluginRotulosValores = {
         ctx.textBaseline = "middle";
 
         if (tipo === "doughnut" || tipo === "pie") {
-          /*
-           * Posiciona o número no centro de cada fatia.
-           */
+          // Fatias muito pequenas não recebem rótulo para evitar sobreposição.
+          const total = dataset.data.reduce((soma, item) => soma + (Number(item) || 0), 0);
+          if (!total || (Number(valor) / total) < 0.045) return;
+
+          /* Posiciona o número no centro de cada fatia. */
           const propriedades = elemento.getProps(
             [
               "x",
@@ -3598,14 +3625,14 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
        * A interação por tooltip continua disponível.
        */
       plugins: {
+        // ChartDataLabels é utilizado em outro módulo. Desativado neste painel
+        // para não duplicar os valores desenhados por pluginRotulosValores.
+        datalabels: { display: false },
         legend: {
           display: tipo === "doughnut",
           position: "bottom"
         },
-
-        tooltip: {
-          enabled: true
-        }
+        tooltip: { enabled: true }
       },
 
       layout: {
@@ -3628,6 +3655,65 @@ function criarGrafico(id, tipo, labels, valores, titulo) {
       }
     }
   });
+}
+
+/* =====================================================
+   FAIXAS ETÁRIAS
+   Aceita colunas agregadas (14–18 / 18–24) ou idade/faixa por registro.
+===================================================== */
+
+function chaveNormalizada(valor) {
+  return normalizar(valor).replace(/[^A-Z0-9]/g, "");
+}
+
+function valorFaixaEtaria(valor) {
+  if (valor === true) return 1;
+  if (valor === false || valor == null || valor === "") return 0;
+  const numero = Number(String(valor).replace(",", "."));
+  if (Number.isFinite(numero)) return Math.max(0, numero);
+  return ["SIM", "S", "TRUE", "YES", "X"].includes(normalizar(valor)) ? 1 : 0;
+}
+
+function obterContagemIdades(lista) {
+  const resultado = { menores: 0, maiores: 0 };
+  let encontrouCampoIdade = false;
+
+  lista.forEach(registro => {
+    // Nome real confirmado na view: faixa_etaria.
+    const valor = registro?.faixa_etaria ??
+      registro?.faixaEtaria ??
+      registro?.faixa_idade ??
+      registro?.idade_faixa ??
+      null;
+
+    if (valor === null || valor === undefined || String(valor).trim() === "") {
+      return;
+    }
+
+    encontrouCampoIdade = true;
+    const texto = normalizar(valor).replace(/\s+/g, "");
+
+    if (/14(A|ATE|-)18/.test(texto)) {
+      resultado.menores += 1;
+      return;
+    }
+
+    if (/18(A|ATE|-)24/.test(texto)) {
+      resultado.maiores += 1;
+      return;
+    }
+
+    // Compatibilidade caso a view passe uma idade numérica em vez da faixa.
+    const idade = Number(String(valor).replace(",", ".").match(/\d+(?:\.\d+)?/)?.[0]);
+    if (Number.isFinite(idade) && idade >= 14 && idade < 18) {
+      resultado.menores += 1;
+    } else if (Number.isFinite(idade) && idade >= 18 && idade <= 24) {
+      resultado.maiores += 1;
+    }
+  });
+
+  resultado.encontrouDados = encontrouCampoIdade;
+  return resultado;
 }
 
 /* =====================================================
@@ -3712,6 +3798,21 @@ function atualizarGraficos(lista) {
     mesesOrdenados.map(([, total]) => total),
 
     "Vagas solicitadas por mês"
+  );
+
+  const idades = obterContagemIdades(lista);
+  const avisoIdade = $("vagas-idade-aviso");
+  if (avisoIdade) {
+    avisoIdade.textContent = idades.encontrouDados
+      ? "Faixas calculadas pelo campo faixa_etaria da view vw_vagas_aprendiz_bi."
+      : "A view não retornou valores no campo faixa_etaria. Confira os registros e as permissões no Supabase.";
+  }
+  criarGrafico(
+    "vagas-graficoIdade",
+    "bar",
+    ["Menores · 14 a 18 anos", "Maiores · 18 a 24 anos"],
+    [idades.menores, idades.maiores],
+    "Vagas por faixa etária"
   );
 }
 
@@ -4157,7 +4258,7 @@ async function iniciarCarregamento() {
     preencherFiltro(
       "vagas-filtroCurso",
       registros.map(cursoRegistro),
-      "Todas as áreas"
+      "Todos os cursos"
     );
 
     preencherFiltro(
