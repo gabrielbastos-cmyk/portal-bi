@@ -994,8 +994,29 @@
 
         <p id="ead-message" role="status" aria-live="polite"></p>
 
+        <div class="analise-fonte-switch" role="group" aria-label="Selecionar fonte da análise">
+          <button id="analise-fonte-todos" type="button" class="active" data-fonte="todos">Todos</button>
+          <button id="analise-fonte-ead" type="button" data-fonte="ead">EaD</button>
+          <button id="analise-fonte-presencial" type="button" data-fonte="presencial">Presencial</button>
+        </div>
+
+        <section id="presencial-painel" class="presencial-painel">
+          <div class="presencial-topo"><div><h3>Análise geográfica — Presencial</h3><p class="muted">Cursos e unidades físicas. Os cursos são contabilizados por registro; unidades são deduplicadas por unidade_id.</p></div><button id="presencial-atualizar" type="button">↻ Atualizar Presencial</button></div>
+          <p id="presencial-message" role="status" aria-live="polite"></p>
+          <div class="presencial-filtros">
+            <label>Município<input id="presencial-filtro-municipio" type="search" placeholder="Buscar município..."></label>
+            <label>UF<select id="presencial-filtro-uf"><option value="">Todas as UFs</option></select></label>
+            <label>Situação da unidade<select id="presencial-filtro-situacao"><option value="">Todas</option><option value="ATIVA">ATIVA</option><option value="INATIVA">INATIVA</option></select></label>
+            <label>Status do curso<select id="presencial-filtro-status"><option value="">Todos os status</option></select></label>
+          </div>
+          <div class="presencial-kpis"><article><span>Registros de cursos</span><strong id="presencial-total-cursos">0</strong></article><article><span>Unidades físicas</span><strong id="presencial-total-unidades">0</strong></article><article><span>Unidades ativas</span><strong id="presencial-unidades-ativas">0</strong></article></div>
+          <article id="presencial-tabela" class="ead-tabela"><div class="ead-tabela-topo"><div><h3>Detalhamento dos cursos presenciais</h3><p class="muted">Endereço e unidade identificam o local físico; cursos e protocolos permanecem em linhas próprias.</p></div><span id="presencial-contagem">0 registros</span></div>
+            <div class="ead-tabela-scroll"><table><thead><tr><th>Município</th><th>UF</th><th>Subsede</th><th>Unidade</th><th>Endereço</th><th>Curso</th><th>Protocolo</th><th>Status</th><th>Validade</th><th>Situação unidade</th><th>Geocodificação</th></tr></thead><tbody id="presencial-tabela-corpo"><tr><td colspan="11">Aguardando carregamento dos dados.</td></tr></tbody></table></div>
+          </article>
+        </section>
+
         <!-- FILTROS EaD -->
-        <div class="ead-filtros">
+        <div id="ead-filtros" class="ead-filtros">
           <label for="ead-filtro-municipio">
             Município
             <input
@@ -1028,7 +1049,7 @@
         </div>
 
         <!-- INDICADORES EaD -->
-        <div class="ead-kpis">
+        <div id="ead-kpis" class="ead-kpis">
           <article class="ead-card">
             <span>Municípios encontrados</span>
             <strong id="ead-total">0</strong>
@@ -1051,7 +1072,7 @@
         </div>
 
         <!-- TABELA EaD -->
-        <article class="ead-tabela">
+        <article id="ead-tabela" class="ead-tabela">
           <div class="ead-tabela-topo">
             <div>
               <h3>Detalhamento por município</h3>
@@ -1115,7 +1136,7 @@
           </div>
         </article>
 
-        <p class="ead-aviso">
+        <p id="ead-aviso" class="ead-aviso">
           A análise geográfica é um apoio à avaliação. A distância e o
           potencial calculados não representam aprovação automática para
           atendimento EaD. Casos que exijam análise adicional devem ser
