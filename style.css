@@ -2312,3 +2312,6 @@ textarea:focus {
 .permission-choice-actions .secondary-button:hover {
   background: #e1eaf6;
 }
+
+/* Controle de Vagas Aprendiz — gráfico adicional de faixa etária */
+.vagas-panel-root #vagas-graficoIdade { min-height: 190px; }
