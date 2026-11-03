@@ -15,6 +15,11 @@
     const EAD_TABLE = "ead_analise_geografica";
     const PRESENCIAL_GEO_TABLE = "presencial_cursos_geografica";
     const EAD_PAGE_SIZE = 20;
+    const PRESENCIAL_PROTOCOLOS_TABLE = "presencial_protocolos_documentos";
+    const PRESENCIAL_PROTOCOLOS_BUCKET = "presencial-protocolos";
+    let presencialProtocolosCache = new Map();
+    let presencialProtocolosTabelaDisponivel = false;
+    let presencialUltimaConsulta = null;
 
     const SUB_FIELDS = [
       "id", "subsede", "cidade", "angariador", "jovem", "empresa", "motivo",
@@ -185,6 +190,10 @@
           subPaginaAtual = 1;
 
           eadRegistros = [];
+          presencialGeoRegistros = [];
+          presencialProtocolosCache = new Map();
+          presencialProtocolosTabelaDisponivel = false;
+          presencialUltimaConsulta = null;
           eadInicializado = false;
           eadPaginaAtual = 1;
 
@@ -1604,6 +1613,10 @@
         presencialGeoRegistros = presencialRows;
       }
 
+      // Documentos são carregados separadamente dos registros geográficos.
+      // A ausência da tabela não interrompe o mapa nem os indicadores.
+      await presencialCarregarProtocolos();
+
       eadPaginaAtual = 1;
       preencherFiltrosEaD();
       renderizarAnaliseEaD();
@@ -2274,6 +2287,27 @@
         .join("");
     }
 
+    function protocoloRegistroKey(row) {
+      return String(row?._protocolo_key || row?.id || "");
+    }
+
+    function protocoloOrigem(row) {
+      return row?._document_origin === "ead" ? "ead" : "presencial";
+    }
+
+    function eadChaveDocumento(registro, municipio, uf, indice) {
+      const valor = campo => String(registro && typeof registro === "object" ? (registro[campo] ?? "") : "").trim();
+      const curso = valor("curso") || valor("nome_curso") || valor("curso_nome") || (typeof registro === "string" ? registro : "Curso");
+      const protocolo = valor("protocolo") || valor("numero_protocolo") || valor("numero");
+      // Chave determinística: não depende da posição do item na lista.
+      const base = [normalize(municipio), normalize(uf), normalize(curso), normalize(protocolo)].join("|");
+      return `ead:${base}`;
+    }
+
+    let eadMunicipioContexto = "";
+    let eadUfContexto = "";
+    let eadSubsedeContexto = "";
+
     function eadHtmlSecaoRegistros(titulo, registros, tipo) {
       const listaOriginal = eadConverterLista(registros).filter(eadRegistroTemInformacao);
       const vistos = new Set();
@@ -2294,6 +2328,13 @@
 
       const cards = lista.map((registro, indice) => {
         const numero = lista.length > 1 ? ` ${indice + 1}` : "";
+        const registroDocumento = (tipo === "Curso" || normalize(tipo).includes("curso"))
+          ? { ...(registro && typeof registro === "object" ? registro : { curso: String(registro) }),
+              _protocolo_key: eadChaveDocumento(registro, eadMunicipioContexto, eadUfContexto, indice),
+              _document_origin: "ead", municipio: eadMunicipioContexto, uf: eadUfContexto,
+              subsede: eadSubsedeContexto }
+          : null;
+        const chaveDocumento = registroDocumento ? escaparHTML(registroDocumento._protocolo_key) : "";
 
         return `
           <article style="
@@ -2309,6 +2350,7 @@
             <div class="ead-detalhe-grade">
               ${eadHtmlCartoesInformacoes(registro)}
             </div>
+            ${registroDocumento ? `<div class="ead-presencial-protocolo-link ead-presencial-protocolo-acoes" data-ead-documento="${chaveDocumento}"></div>` : ""}
           </article>
         `;
       }).join("");
@@ -2710,6 +2752,277 @@
       return "";
     }
 
+    async function presencialCarregarProtocolos() {
+      presencialProtocolosCache = new Map();
+      presencialProtocolosTabelaDisponivel = false;
+      if (!sb || !currentUser) return;
+      try {
+        const { data, error } = await sb
+          .from(PRESENCIAL_PROTOCOLOS_TABLE)
+          .select("id, registro_id, origem, unidade_id, municipio, uf, subsede, curso, protocolo, nome_arquivo, storage_path, mime_type, tamanho_bytes, created_at")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        presencialProtocolosTabelaDisponivel = true;
+        const permitidos = currentProfile?.role === "supervisor"
+          ? new Set((currentAccess.subsedes || []).map(normalize))
+          : null;
+        (data || []).forEach(doc => {
+          if (permitidos && !permitidos.has(normalize(doc.subsede))) return;
+          if (doc.registro_id) presencialProtocolosCache.set(String(doc.registro_id), doc);
+        });
+      } catch (error) {
+        console.warn("Documentos de protocolos presenciais ainda não configurados:", error);
+      }
+    }
+
+    function presencialModalProtocoloGarantir() {
+      let modal = $("presencial-protocolo-modal");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.id = "presencial-protocolo-modal";
+      modal.className = "presencial-protocolo-modal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="presencial-protocolo-modal-fundo" data-protocolo-fechar></div>
+        <section class="presencial-protocolo-modal-card" role="dialog" aria-modal="true" aria-labelledby="presencial-protocolo-titulo">
+          <div class="presencial-protocolo-modal-topo">
+            <div><span class="section-kicker">GESTÃO DE DOCUMENTOS</span><h3 id="presencial-protocolo-titulo">Adicionar protocolo</h3></div>
+            <button type="button" class="presencial-protocolo-fechar" aria-label="Fechar" data-protocolo-fechar>×</button>
+          </div>
+          <div id="presencial-protocolo-contexto" class="presencial-protocolo-contexto"></div>
+          <form id="presencial-protocolo-form">
+            <label for="presencial-protocolo-arquivo">Arquivo PDF do protocolo</label>
+            <input id="presencial-protocolo-arquivo" name="arquivo" type="file" accept="application/pdf,.pdf" required>
+            <small>Somente PDF · tamanho máximo de 20 MB.</small>
+            <p id="presencial-protocolo-mensagem" role="status" aria-live="polite"></p>
+            <div class="presencial-protocolo-acoes">
+              <button type="button" class="presencial-protocolo-cancelar" data-protocolo-fechar>Cancelar</button>
+              <button type="submit" class="presencial-protocolo-salvar">Enviar protocolo</button>
+            </div>
+          </form>
+        </section>`;
+      document.body.appendChild(modal);
+      modal.querySelectorAll("[data-protocolo-fechar]").forEach(btn => btn.addEventListener("click", () => {
+        modal.hidden = true;
+        $("presencial-protocolo-form")?.reset();
+      }));
+      $("presencial-protocolo-form")?.addEventListener("submit", presencialSalvarProtocolo);
+      return modal;
+    }
+
+    let presencialRegistroEmEdicao = null;
+
+    function presencialAbrirModalProtocolo(row) {
+      if (currentProfile?.role !== "admin") {
+        alert("Somente administradores podem adicionar ou substituir protocolos.");
+        return;
+      }
+      if (!protocoloRegistroKey(row)) {
+        alert("Este registro não possui um identificador único. Não é possível vincular o PDF com segurança.");
+        return;
+      }
+      presencialRegistroEmEdicao = row;
+      const modal = presencialModalProtocoloGarantir();
+      const existente = presencialProtocolosCache.get(protocoloRegistroKey(row));
+      $("presencial-protocolo-titulo").textContent = existente ? "Substituir protocolo" : "Adicionar protocolo";
+      $("presencial-protocolo-contexto").textContent = [
+        row.nome_unidade || row.municipio,
+        `${row.municipio || ""} - ${row.uf || ""}`,
+        row.subsede ? `Subsede ${row.subsede}` : "",
+        row.curso || "Curso não informado",
+        row.protocolo ? `Protocolo ${row.protocolo}` : ""
+      ].filter(Boolean).join(" · ");
+      $("presencial-protocolo-mensagem").textContent = existente
+        ? `Documento atual: ${existente.nome_arquivo || "PDF cadastrado"}. Selecione outro PDF para substituí-lo.`
+        : "O PDF ficará vinculado somente a este curso e a esta unidade.";
+      $("presencial-protocolo-arquivo").value = "";
+      modal.hidden = false;
+    }
+
+    async function presencialSalvarProtocolo(event) {
+      event.preventDefault();
+      const mensagem = $("presencial-protocolo-mensagem");
+      const form = $("presencial-protocolo-form");
+      const botao = form?.querySelector('button[type="submit"]');
+      const arquivo = $("presencial-protocolo-arquivo")?.files?.[0];
+      const row = presencialRegistroEmEdicao;
+      if (currentProfile?.role !== "admin") return;
+      if (!protocoloRegistroKey(row)) return;
+      if (!arquivo) { if (mensagem) mensagem.textContent = "Selecione um arquivo PDF."; return; }
+      if (!(arquivo.type === "application/pdf" || /\.pdf$/i.test(arquivo.name))) {
+        if (mensagem) mensagem.textContent = "Formato inválido. Envie somente arquivos PDF.";
+        return;
+      }
+      if (arquivo.size > 20 * 1024 * 1024) {
+        if (mensagem) mensagem.textContent = "O arquivo ultrapassa o limite de 20 MB.";
+        return;
+      }
+      if (!sb?.storage) { if (mensagem) mensagem.textContent = "O Storage do Supabase não está disponível."; return; }
+
+      setLoading(botao, true, "Enviando PDF...");
+      if (mensagem) mensagem.textContent = "Enviando documento com segurança...";
+      let novoCaminho = "";
+      try {
+        const registroKey = protocoloRegistroKey(row);
+        const origem = protocoloOrigem(row);
+        const antigo = presencialProtocolosCache.get(registroKey);
+        const nomeSeguro = arquivo.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "protocolo.pdf";
+        novoCaminho = `${origem}/protocolos/${encodeURIComponent(registroKey).replace(/%/g, "_")}/${Date.now()}-${nomeSeguro}`;
+        const { error: uploadError } = await sb.storage.from(PRESENCIAL_PROTOCOLOS_BUCKET)
+          .upload(novoCaminho, arquivo, { contentType: "application/pdf", upsert: false });
+        if (uploadError) throw uploadError;
+
+        const payload = {
+          registro_id: registroKey,
+          origem,
+          unidade_id: String(row.unidade_id || ""),
+          municipio: String(row.municipio || ""),
+          uf: String(row.uf || ""),
+          subsede: String(row.subsede || row.subsede_responsavel || ""),
+          curso: String(row.curso || ""),
+          protocolo: String(row.protocolo || row.numero_protocolo || ""),
+          nome_arquivo: arquivo.name,
+          storage_path: novoCaminho,
+          mime_type: "application/pdf",
+          tamanho_bytes: arquivo.size,
+          created_by: currentUser.id,
+          updated_at: new Date().toISOString()
+        };
+        const { error: saveError } = await sb.from(PRESENCIAL_PROTOCOLOS_TABLE)
+          .upsert(payload, { onConflict: "registro_id" });
+        if (saveError) throw saveError;
+
+        presencialProtocolosCache.set(registroKey, { ...payload, created_at: new Date().toISOString() });
+        if (antigo?.storage_path && antigo.storage_path !== novoCaminho) {
+          const { error: removeError } = await sb.storage.from(PRESENCIAL_PROTOCOLOS_BUCKET).remove([antigo.storage_path]);
+          if (removeError) console.warn("O protocolo anterior permaneceu no Storage:", removeError);
+        }
+        if (mensagem) mensagem.textContent = "Protocolo salvo! Atualizando a consulta...";
+        $("presencial-protocolo-modal").hidden = true;
+        if (origem === "ead") {
+          eadVincularGerenciadorProtocolos();
+        } else if (presencialUltimaConsulta) {
+          presencialRenderizarCursosDoMunicipio(
+            presencialUltimaConsulta.municipio,
+            presencialUltimaConsulta.uf,
+            presencialUltimaConsulta.subsede
+          );
+        }
+      } catch (error) {
+        if (novoCaminho) {
+          await sb.storage.from(PRESENCIAL_PROTOCOLOS_BUCKET).remove([novoCaminho]).catch(() => {});
+        }
+        console.error("Erro ao salvar protocolo presencial:", error);
+        if (mensagem) mensagem.textContent = `Não foi possível salvar: ${friendlyError(error)}. Confira se executou o SQL de configuração.`;
+      } finally {
+        setLoading(botao, false);
+      }
+    }
+
+    async function presencialBaixarProtocolo(row) {
+      const chave = protocoloRegistroKey(row);
+      const doc = chave ? presencialProtocolosCache.get(chave) : null;
+      if (!doc?.storage_path) {
+        alert("Ainda não há PDF cadastrado para este curso.");
+        return;
+      }
+      try {
+        const { data, error } = await sb.storage.from(PRESENCIAL_PROTOCOLOS_BUCKET)
+          .createSignedUrl(doc.storage_path, 60);
+        if (error) throw error;
+        const link = document.createElement("a");
+        link.href = data.signedUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.download = doc.nome_arquivo || "protocolo.pdf";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (error) {
+        console.error("Erro ao gerar link do protocolo:", error);
+        alert(`Não foi possível abrir o PDF: ${friendlyError(error)}`);
+      }
+    }
+
+    function eadVincularGerenciadorProtocolos() {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+      container.querySelectorAll("[data-ead-documento]").forEach(area => {
+        const chave = area.dataset.eadDocumento;
+        const partesChave = chave.split("|");
+        const row = { _protocolo_key: chave, _document_origin: "ead", municipio: eadMunicipioContexto,
+          uf: eadUfContexto, subsede_responsavel: eadSubsedeContexto,
+          curso: partesChave[2] || "Curso EaD", protocolo: partesChave[3] || "" };
+        const doc = presencialProtocolosCache.get(chave);
+        area.replaceChildren();
+        if (doc?.storage_path) {
+          const nome = document.createElement("span");
+          nome.className = "ead-presencial-documento-nome";
+          nome.textContent = doc.nome_arquivo || "PDF disponível";
+          area.appendChild(nome);
+          const baixar = document.createElement("button");
+          baixar.type = "button";
+          baixar.className = "ead-presencial-baixar-protocolo";
+          baixar.textContent = "↓ Baixar PDF";
+          baixar.addEventListener("click", () => presencialBaixarProtocolo(row));
+          area.appendChild(baixar);
+        } else {
+          const aviso = document.createElement("span");
+          aviso.className = "ead-presencial-link-indisponivel";
+          aviso.textContent = "PDF ainda não cadastrado";
+          area.appendChild(aviso);
+        }
+        if (currentProfile?.role === "admin") {
+          const adicionar = document.createElement("button");
+          adicionar.type = "button";
+          adicionar.className = "ead-presencial-adicionar-protocolo";
+          adicionar.textContent = doc ? "Substituir PDF" : "+ Adicionar PDF";
+          adicionar.addEventListener("click", () => presencialAbrirModalProtocolo(row));
+          area.appendChild(adicionar);
+        }
+      });
+    }
+
+    function presencialVincularGerenciadorProtocolos(registrosMunicipio) {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+      const cards = container.querySelectorAll(".ead-presencial-curso");
+      cards.forEach((card, index) => {
+        const row = registrosMunicipio[index];
+        if (!row) return;
+        const area = card.querySelector(".ead-presencial-protocolo-link");
+        if (!area) return;
+        area.replaceChildren();
+        area.classList.add("ead-presencial-protocolo-acoes");
+        const doc = row.id ? presencialProtocolosCache.get(String(row.id)) : null;
+        if (doc?.storage_path) {
+          const nome = document.createElement("span");
+          nome.className = "ead-presencial-documento-nome";
+          nome.textContent = doc.nome_arquivo || "Protocolo PDF disponível";
+          area.appendChild(nome);
+          const baixar = document.createElement("button");
+          baixar.type = "button";
+          baixar.className = "ead-presencial-baixar-protocolo";
+          baixar.textContent = "↓ Baixar protocolo";
+          baixar.addEventListener("click", () => presencialBaixarProtocolo(row));
+          area.appendChild(baixar);
+        } else {
+          const aviso = document.createElement("span");
+          aviso.className = "ead-presencial-link-indisponivel";
+          aviso.textContent = "PDF ainda não cadastrado";
+          area.appendChild(aviso);
+        }
+        if (currentProfile?.role === "admin") {
+          const adicionar = document.createElement("button");
+          adicionar.type = "button";
+          adicionar.className = "ead-presencial-adicionar-protocolo";
+          adicionar.textContent = doc ? "Substituir PDF" : "+ Adicionar PDF";
+          adicionar.addEventListener("click", () => presencialAbrirModalProtocolo(row));
+          area.appendChild(adicionar);
+        }
+      });
+    }
+
     function presencialSubsedeCompativel(valorRegistro, valorFiltro) {
       const registro = normalize(valorRegistro);
       const filtro = normalize(valorFiltro);
@@ -2848,6 +3161,7 @@
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
+      presencialUltimaConsulta = { municipio, uf, subsede };
       const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
 
       const cursosHtml = registros.map((row, index) => {
@@ -2895,6 +3209,8 @@
           ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município e subsede.</p>'}
         </div>
       `;
+
+      presencialVincularGerenciadorProtocolos(registros);
 
       $("ead-presencial-voltar-subsede")?.addEventListener("click", () => {
         const registroEad = eadRegistros.find(row =>
@@ -3004,6 +3320,10 @@
         ? `Ponto localizado no mapa: ${ponto[1]} - ${ponto[2]}.`
         : "Não foi possível localizar uma coordenada correspondente ao ponto informado. A conexão não foi desenhada para evitar indicar um local incorreto.";
 
+      eadMunicipioContexto = String(r.municipio || "");
+      eadUfContexto = String(r.uf || "");
+      eadSubsedeContexto = String(r.subsede_responsavel || "");
+
       const secaoCursos = eadHtmlSecaoRegistros(
         "Cursos validados",
         r.cursos_validados,
@@ -3053,6 +3373,8 @@
         ${secaoProximos}
         ${presencialRenderizarBlocoSubsede(r, ponto)}
       `;
+
+      eadVincularGerenciadorProtocolos();
 
       const limpar = $("ead-mapa-limpar-selecao");
 
