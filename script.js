@@ -2306,16 +2306,20 @@
       const protocolo = normalize(row?.protocolo || row?.numero_protocolo || row?.numero);
       if (!municipio || !uf) return null;
 
-      const documentosEad = Array.from(presencialProtocolosCache.values()).filter(doc =>
-        doc?.storage_path && normalize(doc.origem) === "ead" &&
-        normalize(doc.municipio) === municipio && normalize(doc.uf) === uf
-      );
+      // Considera documentos das origens presencial e ead.
+      const documentosDisponiveis = [...new Map(
+        Array.from(presencialProtocolosCache.values())
+          .filter(doc => doc?.storage_path &&
+            normalize(doc.municipio) === municipio &&
+            normalize(doc.uf) === uf)
+          .map(doc => [String(doc.id || doc.registro_id || doc.storage_path), doc])
+      ).values()];
 
       // O número do protocolo é o identificador mais forte: se existir nos
       // dois lados, ele precisa coincidir. Isso evita associar PDFs de cursos
       // diferentes apenas porque o nome é parecido.
       if (protocolo) {
-        const porProtocolo = documentosEad.find(doc =>
+        const porProtocolo = documentosDisponiveis.find(doc =>
           normalize(doc.protocolo) === protocolo
         );
         if (porProtocolo) return porProtocolo;
@@ -2324,7 +2328,7 @@
       // Quando um dos lados não possui número de protocolo, usa curso exato
       // + município + UF como alternativa. Não faz correspondência aproximada.
       if (!curso) return null;
-      return documentosEad.find(doc => {
+      return documentosDisponiveis.find(doc => {
         const protocoloDoc = normalize(doc.protocolo);
         if (protocolo && protocoloDoc && protocolo !== protocoloDoc) return false;
         return normalize(doc.curso) === curso;
@@ -2522,11 +2526,14 @@
           title: `${tipo}: ${municipio} - ${uf}`
         });
 
-        const cursosMunicipio = presencialRegistrosAprovados().filter(row =>
+        const cursosDoMunicipio = presencialRegistrosAprovados().filter(row =>
           normalize(row.municipio) === normalize(municipio) &&
-          normalize(row.uf) === normalize(uf) &&
+          normalize(row.uf) === normalize(uf)
+        );
+        const cursosDaSubsede = cursosDoMunicipio.filter(row =>
           presencialSubsedeCompativel(row.subsede, subsede)
         );
+        const cursosMunicipio = cursosDaSubsede.length ? cursosDaSubsede : cursosDoMunicipio;
         const qtdCursos = cursosMunicipio.length;
         const acaoConsulta = qtdCursos
           ? `<button type="button" class="ead-presencial-popup-consultar" data-presencial-ponto-municipio="${escaparHTML(municipio)}" data-presencial-ponto-uf="${escaparHTML(uf)}" data-presencial-ponto-subsede="${escaparHTML(subsede)}">Consultar ${qtdCursos} curso(s) validado(s)</button>`
@@ -2811,6 +2818,7 @@
         (data || []).forEach(doc => {
           if (permitidos && !permitidos.has(normalize(doc.subsede))) return;
           if (doc.registro_id) presencialProtocolosCache.set(String(doc.registro_id), doc);
+          if (doc.id) presencialProtocolosCache.set(`doc:${String(doc.id)}`, doc);
         });
       } catch (error) {
         console.warn("Documentos de protocolos presenciais ainda não configurados:", error);
@@ -3220,11 +3228,15 @@
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
-      const registros = presencialRegistrosAprovados().filter(row =>
+      const registrosMunicipio = presencialRegistrosAprovados().filter(row =>
         normalize(row.municipio) === normalize(municipio) &&
-        normalize(row.uf) === normalize(uf) &&
+        normalize(row.uf) === normalize(uf)
+      );
+      const registrosDaSubsede = registrosMunicipio.filter(row =>
         presencialSubsedeCompativel(row.subsede, subsede)
-      ).sort((a, b) =>
+      );
+      const registros = (registrosDaSubsede.length ? registrosDaSubsede : registrosMunicipio)
+        .sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
@@ -3250,9 +3262,7 @@
               <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
               ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
               <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
-              <div class="ead-presencial-protocolo-link">${presencialLinkProtocolo(row)
-                ? `<a href="${escaparHTML(presencialLinkProtocolo(row))}" target="_blank" rel="noopener noreferrer" class="ead-presencial-baixar-protocolo" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
-                : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`}</div>
+              <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
             </div>
           </article>
         `;
