@@ -2295,6 +2295,32 @@
       return row?._document_origin === "ead" ? "ead" : "presencial";
     }
 
+    function presencialDocumentoDoRegistro(row) {
+      const chave = protocoloRegistroKey(row);
+      const exato = chave ? presencialProtocolosCache.get(chave) : null;
+      if (exato?.storage_path) return exato;
+
+      const municipio = normalize(row?.municipio);
+      const uf = normalize(row?.uf);
+      const curso = normalize(row?.curso || row?.nome_curso || row?.curso_nome);
+      const protocolo = normalize(row?.protocolo || row?.numero_protocolo || row?.numero);
+      if (!municipio || !uf || !curso) return null;
+
+      // O documento cadastrado no EaD pode ser reutilizado na ficha presencial
+      // do mesmo curso, desde que município, UF e curso coincidam. Se houver
+      // protocolo nos dois registros, ele também precisa coincidir.
+      for (const doc of presencialProtocolosCache.values()) {
+        if (!doc?.storage_path || normalize(doc.origem) !== "ead") continue;
+        if (normalize(doc.municipio) !== municipio ||
+            normalize(doc.uf) !== uf ||
+            normalize(doc.curso) !== curso) continue;
+        const protocoloDoc = normalize(doc.protocolo);
+        if (protocolo && protocoloDoc && protocolo !== protocoloDoc) continue;
+        return doc;
+      }
+      return null;
+    }
+
     function eadChaveDocumento(registro, municipio, uf, indice) {
       const valor = campo => String(registro && typeof registro === "object" ? (registro[campo] ?? "") : "").trim();
       const curso = valor("curso") || valor("nome_curso") || valor("curso_nome") || (typeof registro === "string" ? registro : "Curso");
@@ -2685,25 +2711,31 @@
     // ==================================================
 
     function presencialStatusAprovado(row) {
-      const status = normalize(
-        row?.status_normalizado ||
-        row?.status_mapa ||
-        row?.status_original ||
-        row?.status ||
-        ""
-      );
-      return ["aprovado", "validado", "deferido"].includes(status);
+      const camposStatus = [
+        "status_normalizado", "status_mapa", "status_original", "status",
+        "situacao", "situacao_curso", "situacao_aprovacao",
+        "status_aprovacao", "resultado_aprovacao"
+      ];
+      return camposStatus.some(campo => {
+        const status = normalize(row?.[campo]);
+        return ["aprovado", "validado", "deferido"].includes(status) ||
+          /(^|\\s)aprovado($|\\s)/.test(status);
+      });
     }
 
     function presencialChaveUnidade(row) {
-      return String(
-        row?.unidade_id ||
-        row?.cnpj ||
-        row?.endereco_normalizado ||
-        row?.endereco ||
-        row?.id ||
-        ""
-      ).trim().toLowerCase();
+      const identificador = String(row?.unidade_id || row?.cnpj || "").trim();
+      if (identificador) return identificador.toLowerCase();
+
+      const partes = [
+        row?.subsede,
+        row?.municipio,
+        row?.uf,
+        row?.nome_unidade || row?.unidade || row?.nome,
+        row?.endereco_normalizado || row?.endereco
+      ].map(valor => normalize(valor)).filter(Boolean);
+
+      return partes.join("|") || String(row?.id || "").trim().toLowerCase();
     }
 
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
@@ -2823,7 +2855,7 @@
       }
       presencialRegistroEmEdicao = row;
       const modal = presencialModalProtocoloGarantir();
-      const existente = presencialProtocolosCache.get(protocoloRegistroKey(row));
+      const existente = presencialDocumentoDoRegistro(row);
       $("presencial-protocolo-titulo").textContent = existente ? "Substituir protocolo" : "Adicionar protocolo";
       $("presencial-protocolo-contexto").textContent = [
         row.nome_unidade || row.municipio,
@@ -2921,7 +2953,7 @@
 
     async function presencialBaixarProtocolo(row) {
       const chave = protocoloRegistroKey(row);
-      const doc = chave ? presencialProtocolosCache.get(chave) : null;
+      const doc = presencialDocumentoDoRegistro(row);
       if (!doc?.storage_path) {
         alert("Ainda não há PDF cadastrado para este curso.");
         return;
@@ -2953,7 +2985,7 @@
         const row = { _protocolo_key: chave, _document_origin: "ead", municipio: eadMunicipioContexto,
           uf: eadUfContexto, subsede_responsavel: eadSubsedeContexto,
           curso: partesChave[2] || "Curso EaD", protocolo: partesChave[3] || "" };
-        const doc = presencialProtocolosCache.get(chave);
+        const doc = presencialDocumentoDoRegistro(row);
         area.replaceChildren();
         if (doc?.storage_path) {
           const nome = document.createElement("span");
@@ -2994,7 +3026,7 @@
         if (!area) return;
         area.replaceChildren();
         area.classList.add("ead-presencial-protocolo-acoes");
-        const doc = row.id ? presencialProtocolosCache.get(String(row.id)) : null;
+        const doc = presencialDocumentoDoRegistro(row);
         if (doc?.storage_path) {
           const nome = document.createElement("span");
           nome.className = "ead-presencial-documento-nome";
@@ -3027,10 +3059,14 @@
       const registro = normalize(valorRegistro);
       const filtro = normalize(valorFiltro);
       if (!filtro) return true;
-      if (registro === filtro) return true;
-      // A base pode separar Curitiba Matriz e Polos Curitiba, mas ambos
-      // pertencem ao mesmo agrupamento regional no mapa.
-      return filtro === "curitiba" && ["curitiba", "polos curitiba"].includes(registro);
+      return registro === filtro;
+    }
+
+    function presencialEnderecoExibicao(row) {
+      if (normalize(row?.municipio) === "maringa" && normalize(row?.uf) === "pr") {
+        return "Avenida Carneiro Leão, 294 - Loja 04 - Zona 01 - CEP 87014-010";
+      }
+      return valorTexto(row?.endereco);
     }
 
     function presencialFormatarDataPortal(valor) {
@@ -3182,7 +3218,7 @@
               <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
               <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
               ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
-              <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(valorTexto(row.endereco))}</strong></div>
+              <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
               <div class="ead-presencial-protocolo-link">${presencialLinkProtocolo(row)
                 ? `<a href="${escaparHTML(presencialLinkProtocolo(row))}" target="_blank" rel="noopener noreferrer" class="ead-presencial-baixar-protocolo" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
                 : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`}</div>
