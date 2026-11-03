@@ -2444,12 +2444,42 @@
           title: `${tipo}: ${municipio} - ${uf}`
         });
 
+        const cursosMunicipio = presencialRegistrosAprovados().filter(row =>
+          normalize(row.municipio) === normalize(municipio) &&
+          normalize(row.uf) === normalize(uf) &&
+          presencialSubsedeCompativel(row.subsede, subsede)
+        );
+        const qtdCursos = cursosMunicipio.length;
+        const acaoConsulta = qtdCursos
+          ? `<button type="button" class="ead-presencial-popup-consultar" data-presencial-ponto-municipio="${escaparHTML(municipio)}" data-presencial-ponto-uf="${escaparHTML(uf)}" data-presencial-ponto-subsede="${escaparHTML(subsede)}">Consultar ${qtdCursos} curso(s) validado(s)</button>`
+          : `<div class="ead-presencial-popup-sem-curso">Nenhum curso presencial aprovado cadastrado para este município.</div>`;
+
         marcador.bindPopup(
           `<div class="ead-popup-titulo">${escaparHTML(municipio)} - ${escaparHTML(uf)}</div>` +
           `<div class="ead-popup-linha"><strong>Tipo:</strong> ${escaparHTML(tipo)}</div>` +
           `<div class="ead-popup-linha"><strong>Subsede responsável:</strong> ${escaparHTML(subsede)}</div>` +
-          `<div style="font-size:11px;color:#667085;margin-top:6px">Coordenada aproximada do município; não representa necessariamente o endereço físico.</div>`
+          `<div class="ead-popup-linha"><strong>Cursos presenciais aprovados:</strong> ${qtdCursos.toLocaleString("pt-BR")}</div>` +
+          acaoConsulta +
+          `<div style="font-size:11px;color:#667085;margin-top:7px">Coordenada aproximada do município; não representa necessariamente o endereço físico.</div>`
         );
+        marcador.on("popupopen", evento => {
+          const popupEl = evento.popup.getElement();
+          const botao = popupEl?.querySelector("[data-presencial-ponto-municipio]");
+          if (!botao || botao.dataset.eventoVinculado === "sim") return;
+          botao.dataset.eventoVinculado = "sim";
+          botao.addEventListener("click", () => {
+            const cidade = botao.dataset.presencialPontoMunicipio;
+            const estado = botao.dataset.presencialPontoUf;
+            const responsavel = botao.dataset.presencialPontoSubsede;
+            if (normalize(tipo) === "SUBSEDE") {
+              presencialRenderizarListaMunicipiosSubsede(responsavel);
+            } else {
+              presencialRenderizarCursosDoMunicipio(cidade, estado, responsavel);
+            }
+            marcador.closePopup();
+            $("ead-mapa-detalhes")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        });
 
         marcador.addTo(eadMapaMarcadoresAtendimento);
       });
@@ -2655,6 +2685,41 @@
       );
     }
 
+    // Localiza a URL pública/assinada do PDF do protocolo. A tabela pode usar
+    // qualquer um dos nomes conhecidos abaixo; campos sem URL HTTP(S) são ignorados.
+    function presencialLinkProtocolo(row) {
+      const campos = [
+        "link_protocolo", "url_protocolo", "protocolo_url", "arquivo_protocolo_url",
+        "documento_protocolo_url", "link_documento_protocolo", "url_documento_protocolo",
+        "link_pdf", "url_pdf", "pdf_protocolo", "arquivo_url", "documento_url",
+        "anexo_url", "protocolo_arquivo", "arquivo_protocolo", "documento_protocolo"
+      ];
+      for (const campo of campos) {
+        const bruto = row?.[campo];
+        const valor = typeof bruto === "string"
+          ? bruto.trim()
+          : (bruto && typeof bruto === "object"
+            ? String(bruto.url || bruto.href || bruto.publicUrl || bruto.signedUrl || bruto.download_url || "").trim()
+            : "");
+        if (!valor) continue;
+        try {
+          const url = new URL(valor, window.location.href);
+          if (url.protocol === "https:" || url.protocol === "http:") return url.href;
+        } catch (_) { /* ignora campos que não contenham uma URL válida */ }
+      }
+      return "";
+    }
+
+    function presencialSubsedeCompativel(valorRegistro, valorFiltro) {
+      const registro = normalize(valorRegistro);
+      const filtro = normalize(valorFiltro);
+      if (!filtro) return true;
+      if (registro === filtro) return true;
+      // A base pode separar Curitiba Matriz e Polos Curitiba, mas ambos
+      // pertencem ao mesmo agrupamento regional no mapa.
+      return filtro === "curitiba" && ["curitiba", "polos curitiba"].includes(registro);
+    }
+
     function presencialFormatarDataPortal(valor) {
       if (!valor) return "Não informado";
       const texto = String(valor).trim();
@@ -2678,7 +2743,7 @@
 
     function presencialAgruparMunicipiosDaSubsede(subsede) {
       const aprovados = presencialRegistrosAprovados().filter(row =>
-        normalize(row.subsede) === normalize(subsede)
+        presencialSubsedeCompativel(row.subsede, subsede)
       );
       const grupos = new Map();
 
@@ -2778,7 +2843,7 @@
       const registros = presencialRegistrosAprovados().filter(row =>
         normalize(row.municipio) === normalize(municipio) &&
         normalize(row.uf) === normalize(uf) &&
-        normalize(row.subsede) === normalize(subsede)
+        presencialSubsedeCompativel(row.subsede, subsede)
       ).sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
@@ -2804,6 +2869,9 @@
               <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
               ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
               <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(valorTexto(row.endereco))}</strong></div>
+              <div class="ead-presencial-protocolo-link">${presencialLinkProtocolo(row)
+                ? `<a href="${escaparHTML(presencialLinkProtocolo(row))}" target="_blank" rel="noopener noreferrer" class="ead-presencial-baixar-protocolo" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
+                : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`}</div>
             </div>
           </article>
         `;
@@ -3249,10 +3317,29 @@
             item.rows.push(row);
           });
 
+          // Se Sede e Centro compartilharem a mesma coordenada municipal,
+          // desloca os pinos alguns pixels em círculo para que ambos possam ser clicados.
+          const unidadesPorCoordenada = new Map();
+          porUnidade.forEach(item => {
+            const baseLat = numeroSeguro(item.row.latitude);
+            const baseLng = numeroSeguro(item.row.longitude);
+            const chaveCoordenada = `${baseLat.toFixed(5)}|${baseLng.toFixed(5)}`;
+            if (!unidadesPorCoordenada.has(chaveCoordenada)) unidadesPorCoordenada.set(chaveCoordenada, []);
+            unidadesPorCoordenada.get(chaveCoordenada).push(item);
+          });
+
           porUnidade.forEach(({ row, cursos, rows }) => {
-            const lat = numeroSeguro(row.latitude);
-            const lng = numeroSeguro(row.longitude);
-            const ativa = row.unidade_ativa === true && normalize(row.situacao_unidade || "ATIVA") !== "fechada";
+            const baseLat = numeroSeguro(row.latitude);
+            const baseLng = numeroSeguro(row.longitude);
+            const chaveCoordenada = `${baseLat.toFixed(5)}|${baseLng.toFixed(5)}`;
+            const grupoMesmoPonto = unidadesPorCoordenada.get(chaveCoordenada) || [];
+            const indiceNoPonto = grupoMesmoPonto.findIndex(item => item.row === row);
+            const deslocamento = grupoMesmoPonto.length > 1 ? 0.00042 : 0;
+            const angulo = (2 * Math.PI * Math.max(0, indiceNoPonto)) / Math.max(1, grupoMesmoPonto.length);
+            const lat = baseLat + Math.sin(angulo) * deslocamento;
+            const lng = baseLng + Math.cos(angulo) * deslocamento;
+            const situacaoUnidade = normalize(row.situacao_unidade || "");
+            const ativa = row.unidade_ativa === true || situacaoUnidade === "ativa";
             const cor = ativa ? "#16835b" : "#c62828";
             const nome = row.nome_unidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`;
             const endereco = row.endereco || "Endereço não informado";
@@ -3274,11 +3361,11 @@
                 const statusTexto = item => String(item.status_original || item.status_normalizado || item.status_mapa || "Sem status").replace(/_/g, " ");
                 const statusClasse = item => {
                   const st = normalize(statusTexto(item));
-                  if (st.includes("aprovado")) return "ead-status-aprovado";
+                  if (st.includes("aprovado") || st.includes("validado") || st.includes("deferido")) return "ead-status-aprovado";
                   if (st.includes("pendente") || st.includes("aguardando")) return "ead-status-pendente";
                   return "ead-status-outro";
                 };
-                const aprovados = rows.filter(item => normalize(statusTexto(item)).includes("aprovado")).length;
+                const aprovados = rows.filter(item => presencialStatusAprovado(item)).length;
                 const cnpj = row.cnpj ? safe(row.cnpj) : "Não informado";
                 const cursosHtml = rows.map((item, index) => {
                   const campos = [
@@ -3294,12 +3381,17 @@
                   const dados = campos.length
                     ? campos.map(([label, value]) => `<div class="ead-curso-dado"><small>${safe(label)}</small><strong>${safe(value)}</strong></div>`).join("")
                     : `<div class="ead-curso-dado"><small>Detalhes</small><strong>Não há protocolo ou validação informado para este registro.</strong></div>`;
+                  const linkProtocolo = presencialStatusAprovado(item) ? presencialLinkProtocolo(item) : "";
+                  const acaoProtocolo = linkProtocolo
+                    ? `<a class="ead-presencial-baixar-protocolo" href="${safe(linkProtocolo)}" target="_blank" rel="noopener noreferrer" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
+                    : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`;
                   return `<details class="ead-curso-card" ${index === 0 ? "open" : ""}>
                     <summary class="ead-curso-resumo">
                       <span class="ead-curso-nome">${safe(item.curso || "Curso não informado")}</span>
                       <span class="ead-status ${statusClasse(item)}">${safe(statusTexto(item))}</span>
                     </summary>
                     <div class="ead-curso-dados">${dados}</div>
+                    <div class="ead-presencial-protocolo-link">${acaoProtocolo}</div>
                   </details>`;
                 }).join("");
 
