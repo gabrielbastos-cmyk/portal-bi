@@ -2564,3 +2564,70 @@
     width: 100%;
   }
 }
+
+
+/* Ações de consulta e download dos protocolos presenciais */
+.ead-presencial-popup-consultar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 9px;
+  padding: 7px 11px;
+  border: 1px solid #159b83;
+  border-radius: 8px;
+  background: #e9faf6;
+  color: #087963;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ead-presencial-popup-consultar:hover {
+  background: #d2f4eb;
+}
+.ead-presencial-popup-sem-curso {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+#ead-mapa-detalhes .ead-presencial-protocolo-link {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #e7eef6;
+}
+#ead-mapa-detalhes .ead-presencial-baixar-protocolo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid #159b83;
+  border-radius: 8px;
+  background: #e9faf6;
+  color: #087963;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .15s ease, transform .15s ease;
+}
+#ead-mapa-detalhes .ead-presencial-baixar-protocolo:hover {
+  background: #d2f4eb;
+  transform: translateY(-1px);
+}
+#ead-mapa-detalhes .ead-presencial-baixar-protocolo span {
+  font-size: 16px;
+  line-height: 1;
+}
+#ead-mapa-detalhes .ead-presencial-link-indisponivel {
+  color: #8a6470;
+  font-size: 11px;
+  font-style: italic;
+}
+@media (max-width: 640px) {
+  #ead-mapa-detalhes .ead-presencial-baixar-protocolo {
+    width: 100%;
+    justify-content: center;
+  }
+}
