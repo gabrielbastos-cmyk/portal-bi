@@ -2380,3 +2380,187 @@
 /* Análise geográfica integrada EaD + unidades presenciais */
 #ead-filtro-fonte { font-weight: 600; }
 #ead-mapa-painel .ead-popup-linha { overflow-wrap: anywhere; }
+
+
+
+/* =========================================================
+   PRESENCIAL — CARDS E CONSULTA POR SUBSEDE
+   ========================================================= */
+#ead-section .ead-kpis {
+  align-items: stretch;
+}
+#ead-section .ead-card {
+  min-height: 112px;
+}
+#ead-mapa-detalhes .ead-presencial-subsede {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #dce7f2;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+#ead-mapa-detalhes .ead-presencial-subsede-topo,
+#ead-mapa-detalhes .ead-presencial-detalhe-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dce7f2;
+}
+#ead-mapa-detalhes .ead-presencial-subsede-topo h4,
+#ead-mapa-detalhes .ead-presencial-detalhe-topo h4 {
+  margin: 0;
+  color: #174a7e;
+  font-size: 16px;
+}
+#ead-mapa-detalhes .ead-presencial-subsede-topo p,
+#ead-mapa-detalhes .ead-presencial-detalhe-topo p {
+  margin: 5px 0 0;
+  color: #60758b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#ead-mapa-detalhes .ead-presencial-contagem {
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: #e9faf6;
+  color: #087963;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+#ead-mapa-detalhes .ead-presencial-resumo {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+#ead-mapa-detalhes .ead-presencial-resumo span {
+  padding: 9px 12px;
+  border: 1px solid #e0eaf4;
+  border-radius: 9px;
+  background: #fff;
+  color: #60758b;
+  font-size: 12px;
+}
+#ead-mapa-detalhes .ead-presencial-resumo strong {
+  color: #174a7e;
+  font-size: 15px;
+}
+#ead-mapa-detalhes .ead-presencial-nota {
+  margin: 8px 0 10px;
+  color: #60758b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#ead-mapa-detalhes .ead-presencial-municipio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  padding: 13px 14px;
+  border: 1px solid #dce7f2;
+  border-radius: 10px;
+  background: #fff;
+}
+#ead-mapa-detalhes .ead-presencial-municipio-info {
+  min-width: 0;
+  flex: 1;
+}
+#ead-mapa-detalhes .ead-presencial-municipio-info strong {
+  display: block;
+  color: #174a7e;
+  font-size: 13px;
+}
+#ead-mapa-detalhes .ead-presencial-municipio-info small {
+  display: block;
+  margin-top: 4px;
+  color: #60758b;
+  font-size: 12px;
+}
+#ead-mapa-detalhes .ead-presencial-consultar {
+  padding: 8px 14px;
+  border: 1px solid #159b83;
+  border-radius: 8px;
+  background: #e9faf6;
+  color: #087963;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+#ead-mapa-detalhes .ead-presencial-consultar:hover {
+  background: #d2f4eb;
+}
+#ead-mapa-detalhes .ead-presencial-lista-cursos {
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 3px;
+}
+#ead-mapa-detalhes .ead-presencial-curso {
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid #dce7f2;
+  border-radius: 10px;
+  background: #fff;
+}
+#ead-mapa-detalhes .ead-presencial-curso-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+#ead-mapa-detalhes .ead-presencial-curso-topo strong {
+  color: #174a7e;
+  font-size: 13px;
+}
+#ead-mapa-detalhes .ead-presencial-curso-topo span {
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #e9faf6;
+  color: #087963;
+  font-size: 11px;
+  font-weight: 700;
+}
+#ead-mapa-detalhes .ead-presencial-curso-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 10px 14px;
+  margin-top: 12px;
+}
+#ead-mapa-detalhes .ead-presencial-curso-grade small {
+  display: block;
+  margin-bottom: 3px;
+  color: #60758b;
+  font-size: 11px;
+}
+#ead-mapa-detalhes .ead-presencial-curso-grade strong {
+  display: block;
+  color: #243b53;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+#ead-mapa-detalhes .ead-presencial-endereco {
+  grid-column: 1 / -1;
+}
+#ead-mapa-detalhes .ead-presencial-vazio {
+  margin: 12px 0 0;
+  color: #60758b;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  #ead-mapa-detalhes .ead-presencial-subsede {
+    padding: 12px;
+  }
+  #ead-mapa-detalhes .ead-presencial-municipio {
+    align-items: stretch;
+  }
+  #ead-mapa-detalhes .ead-presencial-consultar {
+    width: 100%;
+  }
+}
