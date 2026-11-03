@@ -9,14 +9,14 @@
       <!-- Logo oficial GERAR incorporada neste arquivo para não depender de imagem externa -->
 
       <!-- CSS principal -->
-      <link rel="stylesheet" href="./style.css?v=20261103-cnpj-selecao-v1">
+      <link rel="stylesheet" href="./style.css?v=20261103-cnpj-layout-v2">
 
       <!-- Bibliotecas e configurações existentes -->
       <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
       <script src="./config.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-      <script src="./script.js?v=20261103-cnpj-selecao-v1" defer></script>
+      <script src="./script.js?v=20261103-cnpj-layout-v2" defer></script>
 
       <style>
 
@@ -729,6 +729,123 @@
               <button type="button" class="access-pill" id="cc-atualizar">Atualizar dados ↻</button>
             </div>
             <style>
+
+              /* Ajuste visual do seletor de CNPJs: painel em largura total, acima dos filtros */
+              #carteira-consultores-section .cc-cnpj-picker{
+                display:grid;
+                grid-template-columns:minmax(190px,.75fr) minmax(260px,1.2fr) auto;
+                grid-template-areas:
+                  "topo busca acoes"
+                  "lista lista lista"
+                  "ajuda ajuda ajuda";
+                align-items:center;
+                gap:10px 14px;
+                width:100%;
+                min-width:0;
+                box-sizing:border-box;
+                margin:18px 0 12px;
+                padding:14px 16px;
+                border:1px solid #dfe6ef;
+                border-radius:12px;
+                background:linear-gradient(135deg,#ffffff 0%,#f9fbfe 100%);
+                box-shadow:0 3px 12px rgba(23,54,93,.045);
+              }
+              #carteira-consultores-section .cc-cnpj-picker-topo{
+                grid-area:topo;
+                justify-content:flex-start;
+                flex-wrap:wrap;
+                margin:0;
+                gap:6px 10px;
+              }
+              #carteira-consultores-section .cc-cnpj-picker-topo strong{font-size:13px}
+              #carteira-consultores-section #cc-cnpj-contagem{
+                display:inline-flex;
+                align-items:center;
+                padding:4px 8px;
+                border-radius:20px;
+                background:#edf3fa;
+                color:#315477;
+                font-size:11px;
+                text-align:left;
+              }
+              #carteira-consultores-section #cc-cnpj-busca{
+                grid-area:busca;
+                width:100%;
+                min-width:0;
+                min-height:40px;
+                margin:0;
+                padding:9px 12px;
+                border:1px solid #dce4ee;
+                border-radius:8px;
+                background:#fff;
+                font-size:12px;
+              }
+              #carteira-consultores-section .cc-cnpj-acoes{
+                grid-area:acoes;
+                justify-content:flex-end;
+                margin:0;
+              }
+              #carteira-consultores-section .cc-cnpj-acoes button{
+                min-height:34px;
+                padding:7px 11px;
+                border-radius:8px;
+                font-size:11px;
+                white-space:nowrap;
+                cursor:pointer;
+                transition:background .15s ease,border-color .15s ease;
+              }
+              #carteira-consultores-section .cc-cnpj-acoes button:hover{
+                background:#edf4fb;
+                border-color:#b8c9dc;
+              }
+              #carteira-consultores-section .cc-cnpj-lista{
+                grid-area:lista;
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+                gap:3px 8px;
+                max-height:118px;
+                min-height:42px;
+                padding:6px;
+                background:#fff;
+                border:1px solid #e8edf3;
+                border-radius:8px;
+              }
+              #carteira-consultores-section .cc-cnpj-opcao{
+                min-width:0;
+                padding:7px 8px;
+              }
+              #carteira-consultores-section .cc-cnpj-opcao:hover{background:#f2f6fb}
+              #carteira-consultores-section .cc-cnpj-opcao-texto strong{font-size:11px}
+              #carteira-consultores-section .cc-cnpj-opcao-texto small{font-size:10px}
+              #carteira-consultores-section .cc-cnpj-ajuda{
+                grid-area:ajuda;
+                padding:0;
+                font-size:11px;
+              }
+              #carteira-consultores-section .cc-filtros{
+                grid-template-columns:repeat(auto-fit,minmax(175px,1fr));
+                align-items:end;
+                gap:13px;
+                margin:14px 0 20px;
+              }
+              @media(max-width:900px){
+                #carteira-consultores-section .cc-cnpj-picker{
+                  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+                  grid-template-areas:
+                    "topo topo"
+                    "busca busca"
+                    "acoes acoes"
+                    "lista lista"
+                    "ajuda ajuda";
+                }
+                #carteira-consultores-section .cc-cnpj-acoes{justify-content:flex-start}
+              }
+              @media(max-width:520px){
+                #carteira-consultores-section .cc-cnpj-picker{padding:11px;gap:9px}
+                #carteira-consultores-section .cc-cnpj-lista{grid-template-columns:1fr;max-height:145px}
+                #carteira-consultores-section .cc-cnpj-acoes button{flex:1}
+                #carteira-consultores-section .cc-filtros{grid-template-columns:1fr}
+              }
               #carteira-consultores-section .cc-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:20px 0;align-items:end}
               #carteira-consultores-section .cc-filtros label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--text,#182538)}
               #carteira-consultores-section .cc-filtros input,#carteira-consultores-section .cc-filtros select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--border,#e3e8f0);border-radius:8px;background:#fff;color:var(--text,#182538);font:inherit}
@@ -756,13 +873,6 @@
               @media(max-width:1100px){#carteira-consultores-section .cc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){#carteira-consultores-section .cc-kpis{grid-template-columns:1fr 1fr}#carteira-consultores-section .cc-graficos{grid-template-columns:1fr}#carteira-consultores-section .cc-graficos .cc-painel-wide{grid-column:auto}}@media(max-width:420px){#carteira-consultores-section .cc-kpis{grid-template-columns:1fr}}
             </style>
             <p id="cc-mensagem" role="status" aria-live="polite">Aguardando carregamento…</p>
-            <div class="cc-filtros">
-              <label>Período<select id="cc-filtro-periodo"><option value="">Todos os períodos</option></select></label>
-              <label>Consultor<select id="cc-filtro-consultor"><option value="">Todos os consultores</option></select></label>
-              <label>Subsede<select id="cc-filtro-subsede"><option value="">Todas as subsedes</option></select></label>
-              <label>Cidade<select id="cc-filtro-cidade"><option value="">Todas as cidades</option></select></label>
-              <label>Status<select id="cc-filtro-status"><option value="">Todos</option><option value="true">Ativos</option><option value="false">Inativos</option></select></label>
-              <label>Empresa / CNPJ / Aprendiz<input id="cc-filtro-empresa" type="search" placeholder="Digite para filtrar…"></label>
               <div class="cc-cnpj-picker" aria-label="Seleção individual de CNPJs">
                 <div class="cc-cnpj-picker-topo">
                   <strong>Selecionar CNPJs</strong>
@@ -778,6 +888,13 @@
                 </div>
                 <small class="cc-cnpj-ajuda">Sem CNPJs marcados, o painel considera todas as empresas. Ao marcar, somente os CNPJs escolhidos entram nos indicadores e na exportação.</small>
               </div>
+            <div class="cc-filtros">
+              <label>Período<select id="cc-filtro-periodo"><option value="">Todos os períodos</option></select></label>
+              <label>Consultor<select id="cc-filtro-consultor"><option value="">Todos os consultores</option></select></label>
+              <label>Subsede<select id="cc-filtro-subsede"><option value="">Todas as subsedes</option></select></label>
+              <label>Cidade<select id="cc-filtro-cidade"><option value="">Todas as cidades</option></select></label>
+              <label>Status<select id="cc-filtro-status"><option value="">Todos</option><option value="true">Ativos</option><option value="false">Inativos</option></select></label>
+              <label>Empresa / CNPJ / Aprendiz<input id="cc-filtro-empresa" type="search" placeholder="Digite para filtrar…"></label>
               <button type="button" id="cc-limpar" class="access-pill">Limpar filtros</button>
             </div>
             <div class="cc-kpis">
