@@ -1581,7 +1581,7 @@
       const presencialPageSize = 1000;
       while (true) {
         const { data: pData, error: pError } = await sb.from(PRESENCIAL_GEO_TABLE)
-          .select("id,municipio,uf,subsede,endereco,curso,situacao_unidade,unidade_ativa,nome_unidade,unidade_id,latitude,longitude,status_mapa,total_cursos_unidade,validade,status_original,status_normalizado")
+          .select("*")
           .range(presencialOffset, presencialOffset + presencialPageSize - 1);
         if (pError) {
           presencialGeoRegistros = [];
@@ -2534,6 +2534,291 @@
     // EaD — DETALHES DO MUNICÍPIO SELECIONADO
     // ==================================================
 
+
+    // ==================================================
+    // PRESENCIAL — INDICADORES E CONSULTA POR SUBSEDE
+    // ==================================================
+
+    function presencialStatusAprovado(row) {
+      const status = normalize(
+        row?.status_normalizado ||
+        row?.status_mapa ||
+        row?.status_original ||
+        row?.status ||
+        ""
+      );
+      return ["aprovado", "validado", "deferido"].includes(status);
+    }
+
+    function presencialChaveUnidade(row) {
+      return String(
+        row?.unidade_id ||
+        row?.cnpj ||
+        row?.endereco_normalizado ||
+        row?.endereco ||
+        row?.id ||
+        ""
+      ).trim().toLowerCase();
+    }
+
+    function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
+      const unicos = new Map();
+      (registros || []).forEach(row => {
+        if (!presencialStatusAprovado(row)) return;
+        const chave = String(row.id || [
+          row.unidade_id, row.curso, row.cbo, row.protocolo
+        ].map(v => String(v ?? "").trim()).join("|"));
+        if (!unicos.has(chave)) unicos.set(chave, row);
+      });
+      return [...unicos.values()];
+    }
+
+    function presencialFormatarCnpjPortal(valor) {
+      const digitos = String(valor ?? "").replace(/\D/g, "");
+      if (digitos.length !== 14) return valorTexto(valor, "Não informado");
+      return digitos.replace(
+        /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+        "$1.$2.$3/$4-$5"
+      );
+    }
+
+    function presencialFormatarDataPortal(valor) {
+      if (!valor) return "Não informado";
+      const texto = String(valor).trim();
+      const dataIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (dataIso) return `${dataIso[3]}/${dataIso[2]}/${dataIso[1]}`;
+      return texto;
+    }
+
+    function presencialSubsedeDoMunicipio(registroEad, ponto = null) {
+      const subsedeEad = String(registroEad?.subsede_responsavel || ponto?.[3] || "").trim();
+      if (subsedeEad) return subsedeEad;
+
+      const registroPresencial = presencialGeoRegistros.find(row =>
+        normalize(row.municipio) === normalize(registroEad?.municipio) &&
+        normalize(row.uf) === normalize(registroEad?.uf) &&
+        String(row.subsede || "").trim()
+      );
+
+      return String(registroPresencial?.subsede || "").trim();
+    }
+
+    function presencialAgruparMunicipiosDaSubsede(subsede) {
+      const aprovados = presencialRegistrosAprovados().filter(row =>
+        normalize(row.subsede) === normalize(subsede)
+      );
+      const grupos = new Map();
+
+      aprovados.forEach(row => {
+        const municipio = String(row.municipio || "").trim();
+        const uf = String(row.uf || "").trim();
+        const chave = `${normalize(municipio)}|${normalize(uf)}`;
+        if (!municipio || !uf) return;
+
+        if (!grupos.has(chave)) {
+          grupos.set(chave, {
+            municipio,
+            uf,
+            registros: [],
+            unidades: new Set(),
+            cursos: new Set()
+          });
+        }
+
+        const grupo = grupos.get(chave);
+        grupo.registros.push(row);
+
+        const unidade = presencialChaveUnidade(row);
+        if (unidade) grupo.unidades.add(unidade);
+
+        const curso = normalize(row.curso);
+        if (curso) grupo.cursos.add(curso);
+      });
+
+      return [...grupos.values()].map(grupo => ({
+        ...grupo,
+        totalCursosAprovados: grupo.registros.length,
+        totalCursosDiferentes: grupo.cursos.size,
+        totalUnidades: grupo.unidades.size
+      })).sort((a, b) =>
+        a.municipio.localeCompare(b.municipio, "pt-BR")
+      );
+    }
+
+    function presencialRenderizarBlocoSubsede(registroEad, ponto = null) {
+      const subsede = presencialSubsedeDoMunicipio(registroEad, ponto);
+      if (!subsede) return "";
+
+      const municipios = presencialAgruparMunicipiosDaSubsede(subsede);
+      const totalCursos = municipios.reduce((total, item) => total + item.totalCursosAprovados, 0);
+      const totalUnidades = new Set(
+        municipios.flatMap(item => [...item.unidades])
+      ).size;
+
+      const itens = municipios.map(item => `
+        <article class="ead-presencial-municipio">
+          <div class="ead-presencial-municipio-info">
+            <strong>${escaparHTML(item.municipio)} - ${escaparHTML(item.uf)}</strong>
+            <small>
+              ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
+              · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
+            </small>
+          </div>
+          <button
+            type="button"
+            class="ead-presencial-consultar"
+            data-presencial-municipio="${escaparHTML(item.municipio)}"
+            data-presencial-uf="${escaparHTML(item.uf)}"
+            data-presencial-subsede="${escaparHTML(subsede)}"
+          >Consultar</button>
+        </article>
+      `).join("");
+
+      return `
+        <section class="ead-presencial-subsede">
+          <div class="ead-presencial-subsede-topo">
+            <div>
+              <h4>Municípios vinculados à Subsede ${escaparHTML(subsede)}</h4>
+              <p>Consulte os cursos presenciais aprovados nos municípios atendidos por esta subsede.</p>
+            </div>
+            <span class="ead-presencial-contagem">${municipios.length} encontrados</span>
+          </div>
+
+          <div class="ead-presencial-resumo">
+            <span><strong>${totalCursos.toLocaleString("pt-BR")}</strong> cursos aprovados</span>
+            <span><strong>${totalUnidades.toLocaleString("pt-BR")}</strong> unidades</span>
+          </div>
+
+          <p class="ead-presencial-nota">
+            O vínculo é definido pela Subsede cadastrada na base presencial, sem aplicar raio de distância.
+          </p>
+
+          ${itens || '<p class="ead-presencial-vazio">Nenhum curso aprovado foi encontrado para esta subsede.</p>'}
+        </section>
+      `;
+    }
+
+    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede) {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+
+      const registros = presencialRegistrosAprovados().filter(row =>
+        normalize(row.municipio) === normalize(municipio) &&
+        normalize(row.uf) === normalize(uf) &&
+        normalize(row.subsede) === normalize(subsede)
+      ).sort((a, b) =>
+        String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
+      );
+
+      const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
+
+      const cursosHtml = registros.map((row, index) => {
+        const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
+        const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
+        return `
+          <article class="ead-presencial-curso">
+            <div class="ead-presencial-curso-topo">
+              <strong>${index + 1}. ${escaparHTML(valorTexto(row.curso, "Curso não informado"))}</strong>
+              <span>${escaparHTML(status)}</span>
+            </div>
+            <div class="ead-presencial-curso-grade">
+              <div><small>Unidade</small><strong>${escaparHTML(valorTexto(row.nome_unidade, row.municipio))}</strong></div>
+              <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
+              <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
+              <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
+              <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
+              <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
+              <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
+              ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
+              <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(valorTexto(row.endereco))}</strong></div>
+            </div>
+          </article>
+        `;
+      }).join("");
+
+      container.innerHTML = `
+        <div class="ead-presencial-detalhe-topo">
+          <div>
+            <h4>${escaparHTML(municipio)} - ${escaparHTML(uf)}</h4>
+            <p>Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
+          </div>
+          <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar aos municípios</button>
+        </div>
+
+        <div class="ead-presencial-resumo">
+          <span><strong>${registros.length.toLocaleString("pt-BR")}</strong> cursos aprovados</span>
+          <span><strong>${unidades.size.toLocaleString("pt-BR")}</strong> unidades</span>
+        </div>
+
+        <div class="ead-presencial-lista-cursos">
+          ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município e subsede.</p>'}
+        </div>
+      `;
+
+      $("ead-presencial-voltar-subsede")?.addEventListener("click", () => {
+        const registroEad = eadRegistros.find(row =>
+          normalize(row.municipio) === normalize(municipio) &&
+          normalize(row.uf) === normalize(uf)
+        );
+        if (registroEad) {
+          eadMapaRenderizarDetalhes(registroEad, null);
+        } else {
+          presencialRenderizarListaMunicipiosSubsede(subsede);
+        }
+      });
+    }
+
+    function presencialRenderizarListaMunicipiosSubsede(subsede) {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+      const municipios = presencialAgruparMunicipiosDaSubsede(subsede);
+      const totalCursos = municipios.reduce((total, item) => total + item.totalCursosAprovados, 0);
+
+      container.innerHTML = `
+        <div class="ead-presencial-detalhe-topo">
+          <div>
+            <h4>Municípios vinculados à Subsede ${escaparHTML(subsede)}</h4>
+            <p>Cursos presenciais aprovados por município.</p>
+          </div>
+          <span class="ead-presencial-contagem">${municipios.length} encontrados</span>
+        </div>
+        <div class="ead-presencial-resumo">
+          <span><strong>${totalCursos.toLocaleString("pt-BR")}</strong> cursos aprovados</span>
+        </div>
+        ${municipios.map(item => `
+          <article class="ead-presencial-municipio">
+            <div class="ead-presencial-municipio-info">
+              <strong>${escaparHTML(item.municipio)} - ${escaparHTML(item.uf)}</strong>
+              <small>${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados · ${item.totalUnidades.toLocaleString("pt-BR")} unidades</small>
+            </div>
+            <button type="button" class="ead-presencial-consultar"
+              data-presencial-municipio="${escaparHTML(item.municipio)}"
+              data-presencial-uf="${escaparHTML(item.uf)}"
+              data-presencial-subsede="${escaparHTML(subsede)}">Consultar</button>
+          </article>
+        `).join("") || '<p class="ead-presencial-vazio">Nenhum curso aprovado foi encontrado para esta subsede.</p>'}
+      `;
+
+      presencialVincularBotoesConsulta();
+    }
+
+    function presencialVincularBotoesConsulta() {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+
+      container.querySelectorAll("[data-presencial-municipio]").forEach(botao => {
+        if (botao.dataset.vinculado === "sim") return;
+        botao.dataset.vinculado = "sim";
+        botao.addEventListener("click", () => {
+          presencialRenderizarCursosDoMunicipio(
+            botao.dataset.presencialMunicipio,
+            botao.dataset.presencialUf,
+            botao.dataset.presencialSubsede
+          );
+        });
+      });
+    }
+
     function eadMapaRenderizarDetalhes(r, ponto = null) {
       const container = $("ead-mapa-detalhes");
       if (!container) return;
@@ -2625,6 +2910,7 @@
         ${secaoCursos}
         ${secaoProtocolos}
         ${secaoProximos}
+        ${presencialRenderizarBlocoSubsede(r, ponto)}
       `;
 
       const limpar = $("ead-mapa-limpar-selecao");
@@ -2641,6 +2927,7 @@
       }
 
       eadMapaVincularBotoesProximos();
+      presencialVincularBotoesConsulta();
     }
 
     // ==================================================
@@ -3132,15 +3419,19 @@
       });
 
       if (modoFonte === "presencial") {
-        const unidadesAtivas = [...unidades.values()].filter(item => item.rows.some(row =>
-          row.unidade_ativa === true ||
-          ["ativa", "ativo", "aberta", "aberto"].includes(normalize(row.situacao_unidade))
-        )).length;
-        const cursos = new Set(registrosPresenciais.map(r => normalize(r.curso)).filter(Boolean)).size;
-        setCard("ead-total", "Unidades presenciais", unidades.size);
-        setCard("ead-ate70", "Unidades ativas", unidadesAtivas);
-        setCard("ead-acima70", "Unidades não ativas / sem status", Math.max(0, unidades.size - unidadesAtivas));
-        setCard("ead-potencial99", "Cursos cadastrados", cursos);
+        const aprovados = presencialRegistrosAprovados(registrosPresenciais);
+        const unidadesAprovadas = new Set(aprovados.map(presencialChaveUnidade).filter(Boolean));
+        const municipiosAprovados = new Set(
+          aprovados.map(row => `${normalize(row.municipio)}|${normalize(row.uf)}`).filter(Boolean)
+        );
+        const cursosDiferentes = new Set(
+          aprovados.map(row => normalize(row.curso)).filter(Boolean)
+        );
+
+        setCard("ead-total", "Cursos aprovados", aprovados.length);
+        setCard("ead-ate70", "Unidades com cursos aprovados", unidadesAprovadas.size);
+        setCard("ead-acima70", "Municípios atendidos", municipiosAprovados.size);
+        setCard("ead-potencial99", "Cursos diferentes", cursosDiferentes.size);
       } else if (modoFonte === "todos") {
         setCard("ead-total", "Municípios EaD", registrosEaD.length);
         setCard("ead-ate70", "Unidades presenciais", unidades.size);
