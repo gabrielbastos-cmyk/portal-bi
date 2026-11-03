@@ -1496,7 +1496,9 @@
 
       if ($("ead-filtro-fonte")) {
         $("ead-filtro-fonte").addEventListener("change", () => {
-          atualizarMapaEaD(obterRegistrosEaDFiltrados());
+          eadPaginaAtual = 1;
+          eadPresencialUltimaSelecao = "";
+          renderizarAnaliseEaD();
         });
       }
 
@@ -1580,7 +1582,7 @@
       const presencialPageSize = 1000;
       while (true) {
         const { data: pData, error: pError } = await sb.from(PRESENCIAL_GEO_TABLE)
-          .select("id,municipio,uf,subsede,endereco,curso,situacao_unidade,unidade_ativa,nome_unidade,unidade_id,latitude,longitude,status_mapa,total_cursos_unidade,validade,status_original,status_normalizado")
+          .select("*")
           .range(presencialOffset, presencialOffset + presencialPageSize - 1);
         if (pError) throw pError;
         const pPage = pData || [];
@@ -1596,6 +1598,7 @@
       }
 
       eadPaginaAtual = 1;
+      eadPresencialUltimaSelecao = "";
       preencherFiltrosEaD();
       renderizarAnaliseEaD();
 
@@ -1603,7 +1606,8 @@
     }
 
     function preencherFiltrosEaD() {
-      preencherSelectDinamico({ id: "ead-filtro-uf", values: eadRegistros.map(r => r.uf), placeholder: "Todas as UFs" });
+      const ufs = [...eadRegistros.map(r => r.uf), ...presencialGeoRegistros.map(r => r.uf)];
+      preencherSelectDinamico({ id: "ead-filtro-uf", values: ufs, placeholder: "Todas as UFs" });
       preencherSelectDinamico({ id: "ead-filtro-distancia", values: eadRegistros.map(r => r.classificacao_distancia), placeholder: "Todas as classificações de distância" });
       preencherSelectDinamico({ id: "ead-filtro-potencial", values: eadRegistros.map(r => r.classificacao_potencial), placeholder: "Todas as classificações de potencial" });
     }
@@ -1635,6 +1639,7 @@
     let eadMapaCarregamento = null;
     let eadMapaPreparado = false;
     let eadMapaUltimaSelecao = "";
+    let eadPresencialUltimaSelecao = "";
 
     const EAD_RAIO_PROXIMIDADE_KM = 50;
 
@@ -2807,6 +2812,157 @@
     }
 
     // ==================================================
+    // PRESENCIAL — FILTROS, AGRUPAMENTO E DETALHAMENTO
+    // ==================================================
+
+    function eadChaveUnidadePresencial(row) {
+      const id = String(row?.unidade_id ?? "").trim();
+      if (id) return `id:${normalize(id)}`;
+      const endereco = normalize(row?.endereco_normalizado || row?.endereco || "");
+      const nome = normalize(row?.nome_unidade || "");
+      const municipio = normalize(row?.municipio || "");
+      const uf = normalize(row?.uf || "");
+      const subsede = normalize(row?.subsede || "");
+      return `local:${endereco || nome}|${municipio}|${uf}|${subsede}`;
+    }
+
+    function obterRegistrosPresenciaisFiltrados() {
+      const municipio = normalize($("ead-filtro-municipio")?.value || "");
+      const uf = $("ead-filtro-uf")?.value || "";
+      return presencialGeoRegistros.filter(row =>
+        (!municipio || normalize(row.municipio).includes(municipio) ||
+          normalize(row.nome_unidade).includes(municipio) ||
+          normalize(row.subsede).includes(municipio)) &&
+        (!uf || String(row.uf || "") === uf)
+      );
+    }
+
+    function agruparUnidadesPresenciais(registros = obterRegistrosPresenciaisFiltrados()) {
+      const grupos = new Map();
+      registros.forEach(row => {
+        const key = eadChaveUnidadePresencial(row);
+        if (!grupos.has(key)) grupos.set(key, { key, row, rows: [], cursos: new Set() });
+        const grupo = grupos.get(key);
+        grupo.rows.push(row);
+        if (temValor(row.curso)) grupo.cursos.add(String(row.curso).trim());
+      });
+      return [...grupos.values()];
+    }
+
+    function eadPresencialCampoLabel(key) {
+      const labels = {
+        protocolo: "Protocolo", numero_protocolo: "Número do protocolo",
+        protocolos: "Protocolos", processo: "Processo",
+        numero_processo: "Número do processo", curso: "Curso",
+        cursos: "Cursos", validade: "Validade", validacao: "Validação",
+        status_validacao: "Status da validação",
+        situacao_validacao: "Situação da validação",
+        curso_validado: "Curso validado", cursos_validados: "Cursos validados",
+        data_validacao: "Data da validação", status_original: "Status original",
+        status_normalizado: "Status normalizado", status_mapa: "Status no mapa",
+        situacao_unidade: "Situação da unidade", unidade_ativa: "Unidade ativa"
+      };
+      return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function eadPresencialValorCampo(value) {
+      if (value === null || value === undefined || value === "") return "";
+      if (Array.isArray(value)) return value.map(eadPresencialValorCampo).filter(Boolean).join(" · ");
+      if (typeof value === "object") {
+        return Object.entries(value)
+          .map(([k, v]) => `${eadPresencialCampoLabel(k)}: ${eadPresencialValorCampo(v)}`)
+          .filter(Boolean).join(" · ");
+      }
+      if (typeof value === "boolean") return value ? "Sim" : "Não";
+      return String(value).trim();
+    }
+
+    function eadPresencialRenderizarDetalhes(grupo) {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+
+      if (!grupo) {
+        container.innerHTML = `
+          <h4 style="margin:0 0 8px;color:#174a7e;font-size:15px">Detalhamento presencial</h4>
+          <p style="margin:0;color:#60758b;font-size:13px;line-height:1.6">
+            Clique em um marcador verde ou vermelho para consultar os dados da unidade,
+            cursos, validações e protocolos disponíveis na base.
+          </p>`;
+        return;
+      }
+
+      const row = grupo.row || {};
+      const situacao = row.situacao_unidade || (row.unidade_ativa === true ? "Ativa" : "Não informada");
+      const dadosBase = [
+        ["Unidade", row.nome_unidade || row.subsede || row.municipio],
+        ["Município", [row.municipio, row.uf].filter(Boolean).join(" - ")],
+        ["Endereço", row.endereco], ["Subsede", row.subsede],
+        ["Situação", situacao], ["Registros vinculados", grupo.rows.length],
+        ["Cursos distintos", grupo.cursos.size], ["Unidade ativa", row.unidade_ativa]
+      ].filter(([, value]) => value !== null && value !== undefined && value !== "");
+
+      const ignorar = new Set([
+        "id", "unidade_id", "latitude", "longitude", "created_at", "updated_at",
+        "geom", "geometria", "endereco_normalizado", "municipio", "uf",
+        "subsede", "endereco", "nome_unidade", "unidade_ativa",
+        "situacao_unidade", "curso"
+      ]);
+      const chavesRelevantes = new Set();
+      grupo.rows.forEach(item => Object.keys(item).forEach(key => {
+        if (!ignorar.has(key) &&
+            /(protocolo|processo|valid|validad|status|situacao|validade|data|numero|portaria)/i.test(normalize(key))) {
+          chavesRelevantes.add(key);
+        }
+      }));
+
+      const detalhesTecnicos = [...chavesRelevantes].map(key => {
+        const valores = [...new Set(grupo.rows.map(item =>
+          eadPresencialValorCampo(item[key])).filter(Boolean))];
+        return valores.length ? [eadPresencialCampoLabel(key), valores.join(" · ")] : null;
+      }).filter(Boolean);
+
+      const cursos = [...grupo.cursos];
+      const renderGrade = itens => itens.map(([label, value]) => `
+        <div class="ead-detalhe-item">
+          <span class="ead-detalhe-label">${escaparHTML(label)}</span>
+          <span class="ead-detalhe-valor">${escaparHTML(eadPresencialValorCampo(value) || "—")}</span>
+        </div>`).join("");
+
+      container.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <h4 style="margin:0 0 5px;color:#174a7e;font-size:16px">
+              ${escaparHTML(row.nome_unidade || row.subsede || row.municipio || "Unidade presencial")}
+            </h4>
+            <p style="margin:0;color:#60758b;font-size:12px">Detalhamento da unidade presencial selecionada</p>
+          </div>
+          <button type="button" id="ead-presencial-limpar-selecao" class="ead-mapa-botao">Ver mapa geral</button>
+        </div>
+        <div class="ead-detalhe-grade">${renderGrade(dadosBase)}</div>
+        <section style="margin-top:18px">
+          <h4 style="margin:0 0 9px;color:#174a7e;font-size:14px">Cursos cadastrados na unidade</h4>
+          ${cursos.length
+            ? `<ul style="margin:0;padding-left:20px;line-height:1.8">${cursos.map(c => `<li>${escaparHTML(c)}</li>`).join("")}</ul>`
+            : `<p style="margin:0;color:#60758b">Nenhum curso informado nos registros desta unidade.</p>`}
+        </section>
+        <section style="margin-top:18px">
+          <h4 style="margin:0 0 9px;color:#174a7e;font-size:14px">Validações, protocolos e situação</h4>
+          ${detalhesTecnicos.length
+            ? `<div class="ead-detalhe-grade">${renderGrade(detalhesTecnicos)}</div>`
+            : `<p style="margin:0;color:#60758b;line-height:1.6">
+                A base consultada não retornou campos de validação ou protocolo para esta unidade.
+                Todos os campos disponíveis foram consultados.
+              </p>`}
+        </section>`;
+
+      $("ead-presencial-limpar-selecao")?.addEventListener("click", () => {
+        eadPresencialUltimaSelecao = "";
+        eadPresencialRenderizarDetalhes(null);
+        atualizarMapaEaD(obterRegistrosEaDFiltrados());
+      });
+    }
+
+    // ==================================================
     // EaD — ATUALIZAÇÃO DO MAPA
     // ==================================================
 
@@ -2849,42 +3005,51 @@
         const mostrarEaD = modoFonte === "ead" || modoFonte === "todos";
         const mostrarPresencial = modoFonte === "presencial" || modoFonte === "todos";
 
+        if (mostrarEaD) eadMapaAdicionarPontosAtendimento();
+        else eadMapaMarcadoresAtendimento?.clearLayers();
+
+        const gruposPresenciais = agruparUnidadesPresenciais();
+
         if (mostrarPresencial && eadMapaMarcadoresPresencial) {
-          const porUnidade = new Map();
-          presencialGeoRegistros.forEach(row => {
+          gruposPresenciais.forEach(grupo => {
+            const { row, cursos, rows, key } = grupo;
             const latitude = numeroSeguro(row.latitude);
             const longitude = numeroSeguro(row.longitude);
             if (latitude === null || longitude === null) return;
-            const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
-            if (!key) return;
-            if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
-            const item = porUnidade.get(key);
-            if (row.curso) item.cursos.add(String(row.curso).trim());
-            item.rows.push(row);
-          });
 
-          porUnidade.forEach(({ row, cursos, rows }) => {
-            const lat = numeroSeguro(row.latitude);
-            const lng = numeroSeguro(row.longitude);
-            const ativa = row.unidade_ativa === true && normalize(row.situacao_unidade || "ATIVA") !== "fechada";
+            const ativa = row.unidade_ativa === true &&
+              !["fechada", "inativa", "inativo"].includes(normalize(row.situacao_unidade));
             const cor = ativa ? "#16835b" : "#c62828";
             const nome = row.nome_unidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`;
             const endereco = row.endereco || "Endereço não informado";
-            const cursosTexto = [...cursos].slice(0, 12).join(", ") || "Não informado";
-            const escape = value => String(value ?? "").replace(/[&<>\\"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;","'":"&#39;"}[ch]));
+            const cursosTexto = [...cursos].join(", ") || "Não informado";
+            const escape = value => String(value ?? "").replace(/[&<>"']/g, ch =>
+              ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
             const popup = `<div class="ead-popup-titulo">${escape(nome)}</div>` +
-              `<div class="ead-popup-linha"><strong>Situação:</strong> ${ativa ? "✅ Unidade ativa" : "🚫 UNIDADE FECHADA"}</div>` +
+              `<div class="ead-popup-linha"><strong>Situação:</strong> ${escape(row.situacao_unidade || (ativa ? "Ativa" : "Não informada"))}</div>` +
               `<div class="ead-popup-linha"><strong>Município:</strong> ${escape(row.municipio)} - ${escape(row.uf)}</div>` +
               `<div class="ead-popup-linha"><strong>Endereço:</strong> ${escape(endereco)}</div>` +
-              `<div class="ead-popup-linha"><strong>Sub-sede:</strong> ${escape(row.subsede || "Não informado")}</div>` +
-              `<div class="ead-popup-linha"><strong>Cursos na unidade:</strong> ${cursos.size || rows.length}</div>` +
-              `<div class="ead-popup-linha"><strong>Cursos:</strong> ${escape(cursosTexto)}</div>`;
-            const marker = window.L.marker([lat, lng], { icon: eadMapaIcone(cor), title: `${nome} — ${ativa ? "Ativa" : "Fechada"}` });
+              `<div class="ead-popup-linha"><strong>Subsede:</strong> ${escape(row.subsede || "Não informado")}</div>` +
+              `<div class="ead-popup-linha"><strong>Cursos na unidade:</strong> ${cursos.size}</div>` +
+              `<div class="ead-popup-linha"><strong>Cursos:</strong> ${escape(cursosTexto)}</div>` +
+              `<div style="margin-top:8px;color:#174a7e;font-size:11px">Clique no marcador para abrir validações e protocolos.</div>`;
+
+            const marker = window.L.marker([latitude, longitude], {
+              icon: eadMapaIcone(cor, key === eadPresencialUltimaSelecao),
+              title: `${nome} — ${ativa ? "Ativa" : "Fechada"}`
+            });
             marker.bindPopup(popup);
+            marker.on("click", () => {
+              eadPresencialUltimaSelecao = key;
+              eadPresencialRenderizarDetalhes(grupo);
+              if ($("ead-mapa-aviso")) {
+                $("ead-mapa-aviso").textContent =
+                  `Unidade selecionada: ${nome}. ${rows.length} registro(s) e ${cursos.size} curso(s) vinculado(s).`;
+              }
+            });
             marker.addTo(eadMapaMarcadoresPresencial);
           });
         }
-
         if (!mostrarEaD) eadMapaMarcadoresMunicipios.clearLayers();
 
         const selecao = mostrarEaD ? eadMapaObterSelecao(registros) : null;
@@ -2948,7 +3113,17 @@
           validos++;
         });
 
-        if (selecao) {
+        if (modoFonte === "presencial") {
+          eadMapaLimparSelecao();
+          eadMapaUltimaSelecao = "";
+          const unidadeSelecionada = gruposPresenciais.find(grupo => grupo.key === eadPresencialUltimaSelecao);
+          eadPresencialRenderizarDetalhes(unidadeSelecionada || null);
+          const boundsPresencial = eadMapaMarcadoresPresencial?.getBounds();
+          if (boundsPresencial?.isValid()) {
+            eadMapa.fitBounds(boundsPresencial.pad(0.08), { maxZoom: 14, animate: true });
+          }
+        } else if (selecao) {
+          eadPresencialUltimaSelecao = "";
           eadMapaSelecionarMunicipio(selecao, true);
 
           if (aviso) {
@@ -2961,7 +3136,12 @@
         } else {
           eadMapaLimparSelecao();
           eadMapaUltimaSelecao = "";
-          eadMapaRenderizarDetalhes(null);
+          const unidadeSelecionada = gruposPresenciais.find(grupo => grupo.key === eadPresencialUltimaSelecao);
+          if (mostrarPresencial && unidadeSelecionada) {
+            eadPresencialRenderizarDetalhes(unidadeSelecionada);
+          } else {
+            eadMapaRenderizarDetalhes(null);
+          }
 
           const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
           const pontosPresenciais = eadMapaMarcadoresPresencial?.getLayers().length || 0;
@@ -3039,36 +3219,63 @@
 
     function renderizarAnaliseEaD() {
       const registros = obterRegistrosEaDFiltrados();
+      const modoFonte = $("ead-filtro-fonte")?.value || "ead";
+      const presenciais = obterRegistrosPresenciaisFiltrados();
+      const unidadesPresenciais = agruparUnidadesPresenciais(presenciais);
 
-      const total = registros.length;
+      const setCard = (id, label, value) => {
+        const valueEl = $(id);
+        if (valueEl) valueEl.textContent = Number(value || 0).toLocaleString("pt-BR");
+        const labelEl = valueEl?.previousElementSibling;
+        if (labelEl) labelEl.textContent = label;
+      };
 
       const ate70 = registros.filter(r => {
         const d = numeroSeguro(r.distancia_km);
         return d !== null && d <= 70;
       }).length;
-
       const acima70 = registros.filter(r => {
         const d = numeroSeguro(r.distancia_km);
         return d !== null && d > 70;
       }).length;
-
       const potencialAte99 = registros.filter(r => {
         const p = numeroSeguro(r.potencial_cota);
         return p !== null && p <= 99;
       }).length;
 
-      const indicadores = {
-        "ead-total": total,
-        "ead-ate70": ate70,
-        "ead-acima70": acima70,
-        "ead-potencial99": potencialAte99
-      };
+      if (modoFonte === "presencial") {
+        const ativas = unidadesPresenciais.filter(g => g.rows.some(r => {
+          const situacao = normalize(r.situacao_unidade);
+          return (r.unidade_ativa === true && !["fechada", "inativa", "inativo"].includes(situacao)) ||
+            ["ativa", "ativo", "aberta", "aberto"].includes(situacao);
+        })).length;
+        const fechadas = Math.max(0, unidadesPresenciais.length - ativas);
+        const cursos = new Set(presenciais.map(r => normalize(r.curso)).filter(Boolean)).size;
+        setCard("ead-total", "Unidades presenciais", unidadesPresenciais.length);
+        setCard("ead-ate70", "Unidades ativas", ativas);
+        setCard("ead-acima70", "Unidades não ativas / sem status", fechadas);
+        setCard("ead-potencial99", "Cursos cadastrados", cursos);
+      } else if (modoFonte === "todos") {
+        const cursosPresenciais = new Set(presenciais.map(r => normalize(r.curso)).filter(Boolean)).size;
+        setCard("ead-total", "Municípios EaD", registros.length);
+        setCard("ead-ate70", "Unidades presenciais", unidadesPresenciais.length);
+        setCard("ead-acima70", "Municípios EaD até 70 km", ate70);
+        setCard("ead-potencial99", "Cursos presenciais", cursosPresenciais);
+      } else {
+        setCard("ead-total", "Municípios encontrados", registros.length);
+        setCard("ead-ate70", "Até 70 km", ate70);
+        setCard("ead-acima70", "Acima de 70 km", acima70);
+        setCard("ead-potencial99", "Potencial até 99", potencialAte99);
+      }
 
-      Object.entries(indicadores).forEach(([id, valor]) => {
-        if ($(id)) $(id).textContent = valor.toLocaleString("pt-BR");
-      });
+      const apenasPresencial = modoFonte === "presencial";
+      if ($("ead-filtro-distancia")) $("ead-filtro-distancia").disabled = apenasPresencial;
+      if ($("ead-filtro-potencial")) $("ead-filtro-potencial").disabled = apenasPresencial;
 
-      renderizarTabelaEaD(registros);
+      const tabela = document.querySelector("#ead-section .ead-tabela");
+      if (tabela) tabela.hidden = apenasPresencial;
+      if (!apenasPresencial) renderizarTabelaEaD(registros);
+
       atualizarMapaEaD(registros);
     }
 
