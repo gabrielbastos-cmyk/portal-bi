@@ -13,6 +13,7 @@
     const SUB_VIEW = "vw_substituicoes_bi";
     const SUB_PAGE_SIZE = 20;
     const EAD_TABLE = "ead_analise_geografica";
+    const PRESENCIAL_GEO_TABLE = "presencial_cursos_geografica";
     const EAD_PAGE_SIZE = 20;
 
     const SUB_FIELDS = [
@@ -42,6 +43,7 @@
     let subPaginaAtual = 1;
 
     let eadRegistros = [];
+    let presencialGeoRegistros = [];
     let eadInicializado = false;
     let eadPaginaAtual = 1;
 
@@ -1492,6 +1494,12 @@
         });
       }
 
+      if ($("ead-filtro-fonte")) {
+        $("ead-filtro-fonte").addEventListener("change", () => {
+          atualizarMapaEaD(obterRegistrosEaDFiltrados());
+        });
+      }
+
       ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
         if ($(id)) $(id).addEventListener("change", () => {
           eadPaginaAtual = 1;
@@ -1565,6 +1573,28 @@
       } else {
         eadRegistros = registros;
       }
+      // Carrega também as unidades presenciais, agrupadas visualmente por endereço/unidade.
+      // Os dados permanecem separados da tabela EaD para não misturar indicadores municipais.
+      const presencialRows = [];
+      let presencialOffset = 0;
+      const presencialPageSize = 1000;
+      while (true) {
+        const { data: pData, error: pError } = await sb.from(PRESENCIAL_GEO_TABLE)
+          .select("id,municipio,uf,subsede,endereco,curso,situacao_unidade,unidade_ativa,nome_unidade,unidade_id,latitude,longitude,status_mapa,total_cursos_unidade,validade,status_original,status_normalizado")
+          .range(presencialOffset, presencialOffset + presencialPageSize - 1);
+        if (pError) throw pError;
+        const pPage = pData || [];
+        presencialRows.push(...pPage);
+        if (pPage.length < presencialPageSize) break;
+        presencialOffset += presencialPageSize;
+      }
+      if (currentProfile?.role === "supervisor") {
+        const allowedSubsedes = new Set((currentAccess.subsedes || []).map(normalize));
+        presencialGeoRegistros = presencialRows.filter(row => allowedSubsedes.has(normalize(row.subsede)));
+      } else {
+        presencialGeoRegistros = presencialRows;
+      }
+
       eadPaginaAtual = 1;
       preencherFiltrosEaD();
       renderizarAnaliseEaD();
@@ -1599,6 +1629,7 @@
     let eadMapa = null;
     let eadMapaMarcadoresMunicipios = null;
     let eadMapaMarcadoresAtendimento = null;
+    let eadMapaMarcadoresPresencial = null;
     let eadMapaCamadaSelecao = null;
     let eadMapaLinhaConexao = null;
     let eadMapaCarregamento = null;
@@ -1683,7 +1714,7 @@
       ].join(";");
 
       const titulo = document.createElement("h3");
-      titulo.textContent = "Mapa geográfico — EaD";
+      titulo.textContent = "Mapa geográfico — EaD e Presencial";
       titulo.style.cssText = "margin:0 0 6px;font-size:20px;font-weight:700;color:#174a7e";
 
       const descricao = document.createElement("p");
@@ -2803,6 +2834,7 @@
 
           eadMapaMarcadoresMunicipios = window.L.featureGroup().addTo(eadMapa);
           eadMapaMarcadoresAtendimento = window.L.featureGroup().addTo(eadMapa);
+          eadMapaMarcadoresPresencial = window.L.featureGroup().addTo(eadMapa);
           eadMapaCamadaSelecao = window.L.featureGroup().addTo(eadMapa);
 
           eadMapaAdicionarPontosAtendimento();
@@ -2811,15 +2843,58 @@
         }
 
         eadMapaMarcadoresMunicipios.clearLayers();
+        if (eadMapaMarcadoresPresencial) eadMapaMarcadoresPresencial.clearLayers();
 
-        const selecao = eadMapaObterSelecao(registros);
+        const modoFonte = $("ead-filtro-fonte")?.value || "ead";
+        const mostrarEaD = modoFonte === "ead" || modoFonte === "todos";
+        const mostrarPresencial = modoFonte === "presencial" || modoFonte === "todos";
+
+        if (mostrarPresencial && eadMapaMarcadoresPresencial) {
+          const porUnidade = new Map();
+          presencialGeoRegistros.forEach(row => {
+            const latitude = numeroSeguro(row.latitude);
+            const longitude = numeroSeguro(row.longitude);
+            if (latitude === null || longitude === null) return;
+            const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
+            if (!key) return;
+            if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
+            const item = porUnidade.get(key);
+            if (row.curso) item.cursos.add(String(row.curso).trim());
+            item.rows.push(row);
+          });
+
+          porUnidade.forEach(({ row, cursos, rows }) => {
+            const lat = numeroSeguro(row.latitude);
+            const lng = numeroSeguro(row.longitude);
+            const ativa = row.unidade_ativa === true && normalize(row.situacao_unidade || "ATIVA") !== "fechada";
+            const cor = ativa ? "#16835b" : "#c62828";
+            const nome = row.nome_unidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`;
+            const endereco = row.endereco || "Endereço não informado";
+            const cursosTexto = [...cursos].slice(0, 12).join(", ") || "Não informado";
+            const escape = value => String(value ?? "").replace(/[&<>\\"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;","'":"&#39;"}[ch]));
+            const popup = `<div class="ead-popup-titulo">${escape(nome)}</div>` +
+              `<div class="ead-popup-linha"><strong>Situação:</strong> ${ativa ? "✅ Unidade ativa" : "🚫 UNIDADE FECHADA"}</div>` +
+              `<div class="ead-popup-linha"><strong>Município:</strong> ${escape(row.municipio)} - ${escape(row.uf)}</div>` +
+              `<div class="ead-popup-linha"><strong>Endereço:</strong> ${escape(endereco)}</div>` +
+              `<div class="ead-popup-linha"><strong>Sub-sede:</strong> ${escape(row.subsede || "Não informado")}</div>` +
+              `<div class="ead-popup-linha"><strong>Cursos na unidade:</strong> ${cursos.size || rows.length}</div>` +
+              `<div class="ead-popup-linha"><strong>Cursos:</strong> ${escape(cursosTexto)}</div>`;
+            const marker = window.L.marker([lat, lng], { icon: eadMapaIcone(cor), title: `${nome} — ${ativa ? "Ativa" : "Fechada"}` });
+            marker.bindPopup(popup);
+            marker.addTo(eadMapaMarcadoresPresencial);
+          });
+        }
+
+        if (!mostrarEaD) eadMapaMarcadoresMunicipios.clearLayers();
+
+        const selecao = mostrarEaD ? eadMapaObterSelecao(registros) : null;
         const proximos = selecao ? eadMapaObterMunicipiosProximos(selecao) : [];
 
         // Com um município selecionado, mantemos no mapa os municípios filtrados,
         // o município selecionado e os municípios próximos com cursos validados.
         const mapaPorChave = new Map();
 
-        registros.forEach(r => mapaPorChave.set(eadChaveMunicipio(r), r));
+        if (mostrarEaD) registros.forEach(r => mapaPorChave.set(eadChaveMunicipio(r), r));
 
         if (selecao) {
           mapaPorChave.set(eadChaveMunicipio(selecao), selecao);
@@ -2889,9 +2964,13 @@
           eadMapaRenderizarDetalhes(null);
 
           const pontosVisiveis = eadMapaMarcadoresMunicipios.getLayers().length;
+          const pontosPresenciais = eadMapaMarcadoresPresencial?.getLayers().length || 0;
           const todosPontos = eadMapaMarcadoresAtendimento.getLayers().length;
 
-          if (pontosVisiveis > 0) {
+          if (pontosPresenciais > 0 && (modoFonte === "presencial" || modoFonte === "todos") && pontosVisiveis === 0) {
+            const bounds = eadMapaMarcadoresPresencial.getBounds();
+            if (bounds.isValid()) eadMapa.fitBounds(bounds.pad(0.08), { maxZoom: 14, animate: true });
+          } else if (pontosVisiveis > 0) {
             const bounds = eadMapaMarcadoresMunicipios.getBounds();
 
             if (bounds.isValid()) {
@@ -2915,9 +2994,10 @@
 
           if (aviso) {
             aviso.textContent =
-              `${validos.toLocaleString("pt-BR")} municípios com coordenadas válidas no mapa. ` +
-              `${todosPontos} pontos de atendimento aproximados. ` +
-              "Digite ou selecione um município para consultar os cursos, protocolos e municípios próximos.";
+              `${mostrarEaD ? validos.toLocaleString("pt-BR") + " municípios EaD" : "EaD oculto"} no mapa. ` +
+              `${mostrarPresencial ? (eadMapaMarcadoresPresencial?.getLayers().length || 0) + " unidades presenciais" : "Presencial oculto"}. ` +
+              `${todosPontos} pontos de atendimento EaD aproximados. ` +
+              (modoFonte === "presencial" ? "Clique nos marcadores presenciais para ver endereço, situação e cursos da unidade." : "Digite ou selecione um município para consultar os detalhes EaD.");
           }
         }
 
@@ -2939,6 +3019,7 @@
       eadMapa = null;
       eadMapaMarcadoresMunicipios = null;
       eadMapaMarcadoresAtendimento = null;
+      eadMapaMarcadoresPresencial = null;
       eadMapaCamadaSelecao = null;
       eadMapaLinhaConexao = null;
       eadMapaCarregamento = null;
