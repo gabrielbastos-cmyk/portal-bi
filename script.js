@@ -2304,21 +2304,31 @@
       const uf = normalize(row?.uf);
       const curso = normalize(row?.curso || row?.nome_curso || row?.curso_nome);
       const protocolo = normalize(row?.protocolo || row?.numero_protocolo || row?.numero);
-      if (!municipio || !uf || !curso) return null;
+      if (!municipio || !uf) return null;
 
-      // O documento cadastrado no EaD pode ser reutilizado na ficha presencial
-      // do mesmo curso, desde que município, UF e curso coincidam. Se houver
-      // protocolo nos dois registros, ele também precisa coincidir.
-      for (const doc of presencialProtocolosCache.values()) {
-        if (!doc?.storage_path || normalize(doc.origem) !== "ead") continue;
-        if (normalize(doc.municipio) !== municipio ||
-            normalize(doc.uf) !== uf ||
-            normalize(doc.curso) !== curso) continue;
-        const protocoloDoc = normalize(doc.protocolo);
-        if (protocolo && protocoloDoc && protocolo !== protocoloDoc) continue;
-        return doc;
+      const documentosEad = Array.from(presencialProtocolosCache.values()).filter(doc =>
+        doc?.storage_path && normalize(doc.origem) === "ead" &&
+        normalize(doc.municipio) === municipio && normalize(doc.uf) === uf
+      );
+
+      // O número do protocolo é o identificador mais forte: se existir nos
+      // dois lados, ele precisa coincidir. Isso evita associar PDFs de cursos
+      // diferentes apenas porque o nome é parecido.
+      if (protocolo) {
+        const porProtocolo = documentosEad.find(doc =>
+          normalize(doc.protocolo) === protocolo
+        );
+        if (porProtocolo) return porProtocolo;
       }
-      return null;
+
+      // Quando um dos lados não possui número de protocolo, usa curso exato
+      // + município + UF como alternativa. Não faz correspondência aproximada.
+      if (!curso) return null;
+      return documentosEad.find(doc => {
+        const protocoloDoc = normalize(doc.protocolo);
+        if (protocolo && protocoloDoc && protocolo !== protocoloDoc) return false;
+        return normalize(doc.curso) === curso;
+      }) || null;
     }
 
     function eadChaveDocumento(registro, municipio, uf, indice) {
@@ -2895,9 +2905,13 @@
       if (mensagem) mensagem.textContent = "Enviando documento com segurança...";
       let novoCaminho = "";
       try {
-        const registroKey = protocoloRegistroKey(row);
-        const origem = protocoloOrigem(row);
-        const antigo = presencialProtocolosCache.get(registroKey);
+        const documentoCorrespondente = presencialDocumentoDoRegistro(row);
+        const documentoEaD = documentoCorrespondente && normalize(documentoCorrespondente.origem) === "ead"
+          ? documentoCorrespondente
+          : null;
+        const registroKey = String(documentoEaD?.registro_id || protocoloRegistroKey(row));
+        const origem = documentoEaD ? "ead" : protocoloOrigem(row);
+        const antigo = presencialProtocolosCache.get(registroKey) || documentoCorrespondente;
         const nomeSeguro = arquivo.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "protocolo.pdf";
         novoCaminho = `${origem}/protocolos/${encodeURIComponent(registroKey).replace(/%/g, "_")}/${Date.now()}-${nomeSeguro}`;
         const { error: uploadError } = await sb.storage.from(PRESENCIAL_PROTOCOLOS_BUCKET)
@@ -2907,12 +2921,12 @@
         const payload = {
           registro_id: registroKey,
           origem,
-          unidade_id: String(row.unidade_id || ""),
-          municipio: String(row.municipio || ""),
-          uf: String(row.uf || ""),
-          subsede: String(row.subsede || row.subsede_responsavel || ""),
-          curso: String(row.curso || ""),
-          protocolo: String(row.protocolo || row.numero_protocolo || ""),
+          unidade_id: String(documentoEaD?.unidade_id || row.unidade_id || ""),
+          municipio: String(documentoEaD?.municipio || row.municipio || ""),
+          uf: String(documentoEaD?.uf || row.uf || ""),
+          subsede: String(documentoEaD?.subsede || row.subsede || row.subsede_responsavel || ""),
+          curso: String(documentoEaD?.curso || row.curso || ""),
+          protocolo: String(documentoEaD?.protocolo || row.protocolo || row.numero_protocolo || ""),
           nome_arquivo: arquivo.name,
           storage_path: novoCaminho,
           mime_type: "application/pdf",
@@ -2933,6 +2947,13 @@
         $("presencial-protocolo-modal").hidden = true;
         if (origem === "ead") {
           eadVincularGerenciadorProtocolos();
+          if (presencialUltimaConsulta) {
+            presencialRenderizarCursosDoMunicipio(
+              presencialUltimaConsulta.municipio,
+              presencialUltimaConsulta.uf,
+              presencialUltimaConsulta.subsede
+            );
+          }
         } else if (presencialUltimaConsulta) {
           presencialRenderizarCursosDoMunicipio(
             presencialUltimaConsulta.municipio,
@@ -3063,7 +3084,17 @@
     }
 
     function presencialEnderecoExibicao(row) {
-      if (normalize(row?.municipio) === "maringa" && normalize(row?.uf) === "pr") {
+      // O endereco informado para a unidade de Maringa nao deve substituir
+      // o endereco de outras unidades da regiao (ex.: Jandaia do Sul).
+      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || "");
+      const municipio = normalize(row?.municipio || "");
+      const uf = normalize(row?.uf || "");
+
+      if (
+        uf === "pr" &&
+        municipio === "maringa" &&
+        (nomeUnidade === "maringa" || nomeUnidade === "unidade maringa")
+      ) {
         return "Avenida Carneiro Leão, 294 - Loja 04 - Zona 01 - CEP 87014-010";
       }
       return valorTexto(row?.endereco);
