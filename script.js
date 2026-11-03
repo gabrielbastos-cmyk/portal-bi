@@ -1821,11 +1821,84 @@
             margin: 3px 0;
           }
 
+          #ead-mapa-detalhes { line-height: 1.5; }
+
+          #ead-mapa-detalhes .ead-detalhe-cabecalho {
+            display:flex; justify-content:space-between; align-items:flex-start;
+            flex-wrap:wrap; gap:10px; margin-bottom:14px;
+          }
+          #ead-mapa-detalhes .ead-detalhe-titulo {
+            margin:0; color:#174a7e; font-size:19px; font-weight:800;
+          }
+          #ead-mapa-detalhes .ead-detalhe-endereco {
+            margin:4px 0 0; color:#60758b; font-size:13px;
+          }
           #ead-mapa-detalhes .ead-detalhe-grade {
-            display: grid;
-            grid-template-columns: repeat(auto-fit,minmax(145px,1fr));
-            gap: 10px;
-            margin-top: 12px;
+            display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+            gap:10px; margin:14px 0 18px;
+          }
+          #ead-mapa-detalhes .ead-detalhe-item {
+            background:#fff; border:1px solid #e0eaf4; border-radius:10px;
+            padding:12px; min-width:0;
+          }
+          #ead-mapa-detalhes .ead-detalhe-label {
+            display:block; font-size:11px; color:#60758b; margin-bottom:5px;
+            text-transform:uppercase; letter-spacing:.04em; font-weight:700;
+          }
+          #ead-mapa-detalhes .ead-detalhe-valor {
+            display:block; font-size:14px; font-weight:700; color:#174a7e;
+            overflow-wrap:anywhere;
+          }
+          #ead-mapa-detalhes .ead-detalhe-secao {
+            display:flex; justify-content:space-between; align-items:center;
+            flex-wrap:wrap; gap:8px; margin:18px 0 10px;
+          }
+          #ead-mapa-detalhes .ead-detalhe-secao h5 {
+            margin:0; color:#174a7e; font-size:15px;
+          }
+          #ead-mapa-detalhes .ead-detalhe-contador {
+            color:#087963; background:#e7f8f3; border-radius:20px;
+            padding:4px 10px; font-size:11px; font-weight:800;
+          }
+          #ead-mapa-detalhes .ead-curso-lista {
+            display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+            gap:10px;
+          }
+          #ead-mapa-detalhes .ead-curso-card {
+            background:#fff; border:1px solid #dce7f2; border-radius:10px;
+            overflow:hidden; min-width:0;
+          }
+          #ead-mapa-detalhes .ead-curso-card[open] { border-color:#9bbbd8; }
+          #ead-mapa-detalhes .ead-curso-resumo {
+            display:flex; align-items:flex-start; justify-content:space-between;
+            gap:10px; padding:12px; cursor:pointer; list-style:none;
+          }
+          #ead-mapa-detalhes .ead-curso-resumo::-webkit-details-marker { display:none; }
+          #ead-mapa-detalhes .ead-curso-nome {
+            color:#243b53; font-size:13px; font-weight:700; overflow-wrap:anywhere;
+          }
+          #ead-mapa-detalhes .ead-status {
+            display:inline-flex; flex:0 0 auto; align-items:center;
+            border-radius:20px; padding:4px 8px; font-size:10px;
+            font-weight:800; white-space:nowrap;
+          }
+          #ead-mapa-detalhes .ead-status-aprovado { color:#08734f; background:#e5f7ef; }
+          #ead-mapa-detalhes .ead-status-pendente { color:#9a5b00; background:#fff4dc; }
+          #ead-mapa-detalhes .ead-status-outro { color:#526579; background:#edf2f7; }
+          #ead-mapa-detalhes .ead-curso-dados {
+            display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+            gap:8px; padding:0 12px 12px;
+          }
+          #ead-mapa-detalhes .ead-curso-dado {
+            background:#f7faff; border-radius:7px; padding:8px;
+            min-width:0; overflow-wrap:anywhere;
+          }
+          #ead-mapa-detalhes .ead-curso-dado small {
+            display:block; color:#71849a; font-size:10px; font-weight:700;
+            text-transform:uppercase; margin-bottom:3px;
+          }
+          #ead-mapa-detalhes .ead-curso-dado strong {
+            display:block; color:#29445f; font-size:12px; font-weight:700;
           }
 
           #ead-mapa-detalhes .ead-detalhe-item {
@@ -3183,48 +3256,77 @@
             const cor = ativa ? "#16835b" : "#c62828";
             const nome = row.nome_unidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`;
             const endereco = row.endereco || "Endereço não informado";
-            const cursosTexto = [...cursos].slice(0, 12).join(", ") || "Não informado";
             const escape = value => String(value ?? "").replace(/[&<>\\"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;","'":"&#39;"}[ch]));
             const popup = `<div class="ead-popup-titulo">${escape(nome)}</div>` +
               `<div class="ead-popup-linha"><strong>Situação:</strong> ${ativa ? "✅ Unidade ativa" : "🚫 UNIDADE FECHADA"}</div>` +
               `<div class="ead-popup-linha"><strong>Município:</strong> ${escape(row.municipio)} - ${escape(row.uf)}</div>` +
               `<div class="ead-popup-linha"><strong>Endereço:</strong> ${escape(endereco)}</div>` +
               `<div class="ead-popup-linha"><strong>Sub-sede:</strong> ${escape(row.subsede || "Não informado")}</div>` +
-              `<div class="ead-popup-linha"><strong>Cursos na unidade:</strong> ${cursos.size || rows.length}</div>` +
-              `<div class="ead-popup-linha"><strong>Cursos:</strong> ${escape(cursosTexto)}</div>`;
+              `<div class="ead-popup-linha"><strong>Cursos vinculados:</strong> ${cursos.size || rows.length}</div>` +
+              `<div class="ead-popup-linha" style="margin-top:7px;color:#60758b">Clique no marcador para consultar os cursos e protocolos.</div>`;
             const marker = window.L.marker([lat, lng], { icon: eadMapaIcone(cor), title: `${nome} — ${ativa ? "Ativa" : "Fechada"}` });
             marker.bindPopup(popup);
             marker.on("click", () => {
-              const linhas = rows.map(item => {
-                const campos = [
-                  ["Curso", item.curso],
-                  ["Validade", item.validade],
-                  ["Status original", item.status_original],
-                  ["Status normalizado", item.status_normalizado],
-                  ["Status no mapa", item.status_mapa],
-                  ["Total de cursos na unidade", item.total_cursos_unidade]
-                ].filter(([, value]) => value !== null && value !== undefined && value !== "");
-                return campos.map(([label, value]) => `${label}: ${value}`).join(" | ");
-              }).filter(Boolean);
-
               const detalhes = $("ead-mapa-detalhes");
               if (detalhes) {
                 const safe = value => escaparHTML(String(value ?? ""));
+                const valor = value => value !== null && value !== undefined && String(value).trim() !== "" ? safe(value) : "Não informado";
+                const statusTexto = item => String(item.status_original || item.status_normalizado || item.status_mapa || "Sem status").replace(/_/g, " ");
+                const statusClasse = item => {
+                  const st = normalize(statusTexto(item));
+                  if (st.includes("aprovado")) return "ead-status-aprovado";
+                  if (st.includes("pendente") || st.includes("aguardando")) return "ead-status-pendente";
+                  return "ead-status-outro";
+                };
+                const aprovados = rows.filter(item => normalize(statusTexto(item)).includes("aprovado")).length;
+                const cnpj = row.cnpj ? safe(row.cnpj) : "Não informado";
+                const cursosHtml = rows.map((item, index) => {
+                  const campos = [
+                    ["Protocolo", item.protocolo],
+                    ["Data de aprovação / protocolo", item.data_aprovacao || item.data_protocolo],
+                    ["Validade", item.validade],
+                    ["CBO", item.cbo],
+                    ["Portaria", item.portaria],
+                    ["Status original", item.status_original],
+                    ["Status normalizado", item.status_normalizado],
+                    ["Status no mapa", item.status_mapa]
+                  ].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "");
+                  const dados = campos.length
+                    ? campos.map(([label, value]) => `<div class="ead-curso-dado"><small>${safe(label)}</small><strong>${safe(value)}</strong></div>`).join("")
+                    : `<div class="ead-curso-dado"><small>Detalhes</small><strong>Não há protocolo ou validação informado para este registro.</strong></div>`;
+                  return `<details class="ead-curso-card" ${index === 0 ? "open" : ""}>
+                    <summary class="ead-curso-resumo">
+                      <span class="ead-curso-nome">${safe(item.curso || "Curso não informado")}</span>
+                      <span class="ead-status ${statusClasse(item)}">${safe(statusTexto(item))}</span>
+                    </summary>
+                    <div class="ead-curso-dados">${dados}</div>
+                  </details>`;
+                }).join("");
+
                 detalhes.innerHTML = `
-                  <h4 style="margin:0 0 8px;color:#174a7e;font-size:16px">${safe(nome)}</h4>
-                  <p style="margin:0 0 12px;color:#60758b;font-size:13px">
-                    ${safe(row.municipio)} - ${safe(row.uf)} · ${safe(endereco)}
-                  </p>
-                  <div class="ead-detalhe-grade">
-                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Subsede</span><span class="ead-detalhe-valor">${safe(row.subsede || "Não informado")}</span></div>
-                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Situação</span><span class="ead-detalhe-valor">${safe(row.situacao_unidade || (ativa ? "Ativa" : "Fechada"))}</span></div>
-                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Cursos vinculados</span><span class="ead-detalhe-valor">${safe([...cursos].join(", ") || "Não informado")}</span></div>
+                  <div class="ead-detalhe-cabecalho">
+                    <div>
+                      <h4 class="ead-detalhe-titulo">${safe(nome)}</h4>
+                      <p class="ead-detalhe-endereco">${safe(row.municipio)} - ${safe(row.uf)} · ${safe(endereco)}</p>
+                    </div>
+                    <span class="ead-status ${ativa ? "ead-status-aprovado" : "ead-status-outro"}">${ativa ? "UNIDADE ATIVA" : "UNIDADE INATIVA"}</span>
                   </div>
-                  <h4 style="margin:16px 0 8px;color:#174a7e;font-size:14px">Validações e protocolos disponíveis</h4>
-                  ${linhas.length
-                    ? `<ul style="margin:0;padding-left:20px;line-height:1.8">${linhas.map(item => `<li>${safe(item)}</li>`).join("")}</ul>`
-                    : `<p style="margin:0;color:#60758b">A consulta atual não retornou campos de protocolo ou validação além dos dados básicos de curso e situação.</p>`}
+                  <div class="ead-detalhe-grade">
+                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Subsede</span><span class="ead-detalhe-valor">${valor(row.subsede)}</span></div>
+                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Situação da unidade</span><span class="ead-detalhe-valor">${valor(row.situacao_unidade || (ativa ? "ATIVA" : "INATIVA"))}</span></div>
+                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">CNPJ</span><span class="ead-detalhe-valor">${cnpj}</span></div>
+                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Cursos cadastrados</span><span class="ead-detalhe-valor">${rows.length}</span></div>
+                    <div class="ead-detalhe-item"><span class="ead-detalhe-label">Cursos aprovados</span><span class="ead-detalhe-valor">${aprovados}</span></div>
+                  </div>
+                  <div class="ead-detalhe-secao">
+                    <h5>Cursos e validações</h5>
+                    <span class="ead-detalhe-contador">${rows.length} registro(s) · ${aprovados} aprovado(s)</span>
+                  </div>
+                  <div class="ead-curso-lista">
+                    ${cursosHtml || `<p style="color:#60758b">Nenhum curso vinculado encontrado para esta unidade.</p>`}
+                  </div>
                 `;
+                detalhes.scrollIntoView({ behavior: "smooth", block: "nearest" });
               }
             });
             marker.addTo(eadMapaMarcadoresPresencial);
