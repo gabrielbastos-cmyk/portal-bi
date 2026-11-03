@@ -2376,3 +2376,7 @@
     #carteira-consultores-section .cc-cnpj-vazio,#carteira-consultores-section .cc-cnpj-ajuda{display:block;padding:7px;color:#778397;font-size:10px;line-height:1.5}
     #carteira-consultores-section .cc-cnpj-ajuda{padding:8px 0 0}
     @media(max-width:760px){#carteira-consultores-section .cc-cnpj-picker{min-width:0}}
+
+/* Análise geográfica integrada EaD + unidades presenciais */
+#ead-filtro-fonte { font-weight: 600; }
+#ead-mapa-painel .ead-popup-linha { overflow-wrap: anywhere; }
