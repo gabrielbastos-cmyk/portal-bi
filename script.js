@@ -2533,7 +2533,9 @@
         const cursosDaSubsede = cursosDoMunicipio.filter(row =>
           presencialSubsedeCompativel(row.subsede, subsede)
         );
-        const cursosMunicipio = cursosDaSubsede.length ? cursosDaSubsede : cursosDoMunicipio;
+        // Não amplia a consulta para todos os registros do município:
+        // o ponto deve mostrar somente os cursos da subsede selecionada.
+        const cursosMunicipio = cursosDaSubsede;
         const qtdCursos = cursosMunicipio.length;
         const acaoConsulta = qtdCursos
           ? `<button type="button" class="ead-presencial-popup-consultar" data-presencial-ponto-municipio="${escaparHTML(municipio)}" data-presencial-ponto-uf="${escaparHTML(uf)}" data-presencial-ponto-subsede="${escaparHTML(subsede)}">Consultar ${qtdCursos} curso(s) validado(s)</button>`
@@ -2727,30 +2729,49 @@
     // PRESENCIAL — INDICADORES E CONSULTA POR SUBSEDE
     // ==================================================
 
+    const PRESENCIAL_CAMPOS_STATUS = [
+      "status_normalizado", "status_mapa", "status_original", "status",
+      "situacao", "situacao_curso", "situacao_aprovacao",
+      "status_aprovacao", "resultado_aprovacao"
+    ];
+
+    function presencialValorStatusAprovado(valor) {
+      const status = normalize(valor);
+      if (!status) return false;
+      if (/(^|\s)(nao aprovado|reprovado|indeferido|cancelado|suspenso)(\s|$)/.test(status)) {
+        return false;
+      }
+      return /(^|\s)(aprovado|validado|deferido)(\s|$)/.test(status);
+    }
+
     function presencialStatusAprovado(row) {
-      const camposStatus = [
-        "status_normalizado", "status_mapa", "status_original", "status",
-        "situacao", "situacao_curso", "situacao_aprovacao",
-        "status_aprovacao", "resultado_aprovacao"
-      ];
-      return camposStatus.some(campo => {
-        const status = normalize(row?.[campo]);
-        return ["aprovado", "validado", "deferido"].includes(status) ||
-          /(^|\\s)aprovado($|\\s)/.test(status);
-      });
+      return PRESENCIAL_CAMPOS_STATUS.some(campo =>
+        presencialValorStatusAprovado(row?.[campo])
+      );
+    }
+
+    function presencialStatusExibicao(row) {
+      const campoAprovado = PRESENCIAL_CAMPOS_STATUS.find(campo =>
+        presencialValorStatusAprovado(row?.[campo])
+      );
+      const campoPreenchido = PRESENCIAL_CAMPOS_STATUS.find(campo =>
+        row?.[campo] !== null && row?.[campo] !== undefined && String(row[campo]).trim()
+      );
+      const valor = campoAprovado ? row[campoAprovado] : campoPreenchido ? row[campoPreenchido] : "Sem status";
+      return String(valor).replace(/_/g, " ");
     }
 
     function presencialIdentificadorUnidadeCuritiba(row) {
       const municipio = normalize(row?.municipio || "");
-      const subsede = normalize(row?.subsede || "");
-      const nome = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
-      const ehCuritiba = municipio === "curitiba" || subsede === "curitiba";
-      if (!ehCuritiba) return "";
+      if (municipio !== "curitiba") return "";
 
-      // A base pode repetir unidade_id/CNPJ/endereço para Centro e Sede.
-      // O identificador complementar impede que essas duas unidades se misturem.
-      if (nome.includes("centro")) return "curitiba-centro";
-      if (nome.includes("sede")) return "curitiba-sede";
+      const nomesUnidade = [
+        row?.nome_unidade, row?.unidade, row?.nome
+      ].map(normalize).filter(Boolean).join(" ");
+
+      // Só separa Centro/Sede quando a própria linha presencial identifica a unidade.
+      if (nomesUnidade.includes("centro")) return "curitiba-centro";
+      if (nomesUnidade.includes("sede")) return "curitiba-sede";
       return "";
     }
 
@@ -2821,7 +2842,7 @@
       try {
         const { data, error } = await sb
           .from(PRESENCIAL_PROTOCOLOS_TABLE)
-          .select("id, registro_id, origem, unidade_id, municipio, uf, subsede, curso, protocolo, nome_arquivo, storage_path, mime_type, tamanho_bytes, created_at")
+          .select("id, registro_id, origem, unidade_id, municipio, uf, subsede, curso, protocolo, nome_arquivo, storage_path, created_at")
           .order("created_at", { ascending: false });
         if (error) throw error;
         presencialProtocolosTabelaDisponivel = true;
@@ -2830,8 +2851,12 @@
           : null;
         (data || []).forEach(doc => {
           if (permitidos && !permitidos.has(normalize(doc.subsede))) return;
-          if (doc.registro_id) presencialProtocolosCache.set(String(doc.registro_id), doc);
-          if (doc.id) presencialProtocolosCache.set(`doc:${String(doc.id)}`, doc);
+          if (doc.registro_id && !presencialProtocolosCache.has(String(doc.registro_id))) {
+            presencialProtocolosCache.set(String(doc.registro_id), doc);
+          }
+          if (doc.id && !presencialProtocolosCache.has(`doc:${String(doc.id)}`)) {
+            presencialProtocolosCache.set(`doc:${String(doc.id)}`, doc);
+          }
         });
       } catch (error) {
         console.warn("Documentos de protocolos presenciais ainda não configurados:", error);
@@ -2949,11 +2974,7 @@
           curso: String(documentoEaD?.curso || row.curso || ""),
           protocolo: String(documentoEaD?.protocolo || row.protocolo || row.numero_protocolo || ""),
           nome_arquivo: arquivo.name,
-          storage_path: novoCaminho,
-          mime_type: "application/pdf",
-          tamanho_bytes: arquivo.size,
-          created_by: currentUser.id,
-          updated_at: new Date().toISOString()
+          storage_path: novoCaminho
         };
         const { error: saveError } = await sb.from(PRESENCIAL_PROTOCOLOS_TABLE)
           .upsert(payload, { onConflict: "registro_id" });
@@ -2972,7 +2993,8 @@
             presencialRenderizarCursosDoMunicipio(
               presencialUltimaConsulta.municipio,
               presencialUltimaConsulta.uf,
-              presencialUltimaConsulta.subsede
+              presencialUltimaConsulta.subsede,
+              presencialUltimaConsulta.unidadeCuritiba || ""
             );
           }
         } else if (presencialUltimaConsulta) {
@@ -3105,19 +3127,7 @@
     }
 
     function presencialEnderecoExibicao(row) {
-      // O endereco informado para a unidade de Maringa nao deve substituir
-      // o endereco de outras unidades da regiao (ex.: Jandaia do Sul).
-      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || "");
-      const municipio = normalize(row?.municipio || "");
-      const uf = normalize(row?.uf || "");
-
-      if (
-        uf === "pr" &&
-        municipio === "maringa" &&
-        (nomeUnidade === "maringa" || nomeUnidade === "unidade maringa")
-      ) {
-        return "Avenida Carneiro Leão, 294 - Loja 04 - Zona 01 - CEP 87014-010";
-      }
+      // Exibe o endereço da própria linha presencial; não substitui por endereço presumido.
       return valorTexto(row?.endereco);
     }
 
@@ -3130,15 +3140,13 @@
     }
 
     function presencialSubsedeDoMunicipio(registroEad, ponto = null) {
-      const subsedeEad = String(registroEad?.subsede_responsavel || ponto?.[3] || "").trim();
-      if (subsedeEad) return subsedeEad;
-
+      // O módulo Presencial usa exclusivamente a subsede da própria base presencial.
+      // Não herda subsede_responsavel nem o ponto de referência do cadastro EaD.
       const registroPresencial = presencialGeoRegistros.find(row =>
         normalize(row.municipio) === normalize(registroEad?.municipio) &&
         normalize(row.uf) === normalize(registroEad?.uf) &&
         String(row.subsede || "").trim()
       );
-
       return String(registroPresencial?.subsede || "").trim();
     }
 
@@ -3151,13 +3159,23 @@
       aprovados.forEach(row => {
         const municipio = String(row.municipio || "").trim();
         const uf = String(row.uf || "").trim();
-        const chave = `${normalize(municipio)}|${normalize(uf)}`;
+        const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
+        const chave = `${normalize(municipio)}|${normalize(uf)}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}`;
         if (!municipio || !uf) return;
 
         if (!grupos.has(chave)) {
+          const nomeUnidade = String(row.nome_unidade || row.unidade || row.nome || "").trim();
+          const rotuloUnidade = identificadorCuritiba === "curitiba-centro"
+            ? "Curitiba — Centro"
+            : identificadorCuritiba === "curitiba-sede"
+              ? "Curitiba — Sede"
+              : municipio;
           grupos.set(chave, {
             municipio,
             uf,
+            identificadorCuritiba,
+            rotuloUnidade,
+            nomeUnidade,
             registros: [],
             unidades: new Set(),
             cursos: new Set()
@@ -3197,7 +3215,7 @@
       const itens = municipios.map(item => `
         <article class="ead-presencial-municipio">
           <div class="ead-presencial-municipio-info">
-            <strong>${escaparHTML(item.municipio)} - ${escaparHTML(item.uf)}</strong>
+            <strong>${escaparHTML(item.rotuloUnidade || item.municipio)} - ${escaparHTML(item.uf)}</strong>
             <small>
               ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
               · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
@@ -3209,6 +3227,7 @@
             data-presencial-municipio="${escaparHTML(item.municipio)}"
             data-presencial-uf="${escaparHTML(item.uf)}"
             data-presencial-subsede="${escaparHTML(subsede)}"
+            data-presencial-unidade-curitiba="${escaparHTML(item.identificadorCuritiba || "")}"
           >Consultar</button>
         </article>
       `).join("");
@@ -3237,27 +3256,24 @@
       `;
     }
 
-    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede) {
+    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede, unidadeCuritiba = "") {
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
-      const registrosMunicipio = presencialRegistrosAprovados().filter(row =>
+      const registros = presencialRegistrosAprovados().filter(row =>
         normalize(row.municipio) === normalize(municipio) &&
-        normalize(row.uf) === normalize(uf)
-      );
-      const registrosDaSubsede = registrosMunicipio.filter(row =>
-        presencialSubsedeCompativel(row.subsede, subsede)
-      );
-      const registros = (registrosDaSubsede.length ? registrosDaSubsede : registrosMunicipio)
-        .sort((a, b) =>
+        normalize(row.uf) === normalize(uf) &&
+        presencialSubsedeCompativel(row.subsede, subsede) &&
+        (!unidadeCuritiba || presencialIdentificadorUnidadeCuritiba(row) === unidadeCuritiba)
+      ).sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
-      presencialUltimaConsulta = { municipio, uf, subsede };
+      presencialUltimaConsulta = { municipio, uf, subsede, unidadeCuritiba };
       const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
 
       const cursosHtml = registros.map((row, index) => {
-        const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
+        const status = presencialStatusExibicao(row);
         const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
         return `
           <article class="ead-presencial-curso">
@@ -3284,7 +3300,7 @@
       container.innerHTML = `
         <div class="ead-presencial-detalhe-topo">
           <div>
-            <h4>${escaparHTML(municipio)} - ${escaparHTML(uf)}</h4>
+            <h4>${escaparHTML(unidadeCuritiba === "curitiba-centro" ? "Curitiba — Centro" : unidadeCuritiba === "curitiba-sede" ? "Curitiba — Sede" : municipio)} - ${escaparHTML(uf)}</h4>
             <p>Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
           </div>
           <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar aos municípios</button>
@@ -3335,13 +3351,14 @@
         ${municipios.map(item => `
           <article class="ead-presencial-municipio">
             <div class="ead-presencial-municipio-info">
-              <strong>${escaparHTML(item.municipio)} - ${escaparHTML(item.uf)}</strong>
+              <strong>${escaparHTML(item.rotuloUnidade || item.municipio)} - ${escaparHTML(item.uf)}</strong>
               <small>${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados · ${item.totalUnidades.toLocaleString("pt-BR")} unidades</small>
             </div>
             <button type="button" class="ead-presencial-consultar"
               data-presencial-municipio="${escaparHTML(item.municipio)}"
               data-presencial-uf="${escaparHTML(item.uf)}"
-              data-presencial-subsede="${escaparHTML(subsede)}">Consultar</button>
+              data-presencial-subsede="${escaparHTML(subsede)}"
+              data-presencial-unidade-curitiba="${escaparHTML(item.identificadorCuritiba || "")}">Consultar</button>
           </article>
         `).join("") || '<p class="ead-presencial-vazio">Nenhum curso aprovado foi encontrado para esta subsede.</p>'}
       `;
@@ -3360,7 +3377,8 @@
           presencialRenderizarCursosDoMunicipio(
             botao.dataset.presencialMunicipio,
             botao.dataset.presencialUf,
-            botao.dataset.presencialSubsede
+            botao.dataset.presencialSubsede,
+            botao.dataset.presencialUnidadeCuritiba || ""
           );
         });
       });
@@ -3781,7 +3799,7 @@
               if (detalhes) {
                 const safe = value => escaparHTML(String(value ?? ""));
                 const valor = value => value !== null && value !== undefined && String(value).trim() !== "" ? safe(value) : "Não informado";
-                const statusTexto = item => String(item.status_original || item.status_normalizado || item.status_mapa || "Sem status").replace(/_/g, " ");
+                const statusTexto = item => presencialStatusExibicao(item);
                 const statusClasse = item => {
                   const st = normalize(statusTexto(item));
                   if (st.includes("aprovado") || st.includes("validado") || st.includes("deferido")) return "ead-status-aprovado";
@@ -3804,10 +3822,15 @@
                   const dados = campos.length
                     ? campos.map(([label, value]) => `<div class="ead-curso-dado"><small>${safe(label)}</small><strong>${safe(value)}</strong></div>`).join("")
                     : `<div class="ead-curso-dado"><small>Detalhes</small><strong>Não há protocolo ou validação informado para este registro.</strong></div>`;
+                  const documento = presencialStatusAprovado(item)
+                    ? presencialDocumentoDoRegistro(item)
+                    : null;
                   const linkProtocolo = presencialStatusAprovado(item) ? presencialLinkProtocolo(item) : "";
-                  const acaoProtocolo = linkProtocolo
-                    ? `<a class="ead-presencial-baixar-protocolo" href="${safe(linkProtocolo)}" target="_blank" rel="noopener noreferrer" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
-                    : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`;
+                  const acaoProtocolo = documento?.storage_path
+                    ? `<button type="button" class="ead-presencial-baixar-protocolo" data-presencial-doc-index="${index}"><span aria-hidden="true">↓</span> Baixar protocolo validado</button>`
+                    : linkProtocolo
+                      ? `<a class="ead-presencial-baixar-protocolo" href="${safe(linkProtocolo)}" target="_blank" rel="noopener noreferrer" download><span aria-hidden="true">↓</span> Baixar protocolo validado</a>`
+                      : `<span class="ead-presencial-link-indisponivel">Link do PDF ainda não cadastrado</span>`;
                   return `<details class="ead-curso-card" ${index === 0 ? "open" : ""}>
                     <summary class="ead-curso-resumo">
                       <span class="ead-curso-nome">${safe(item.curso || "Curso não informado")}</span>
@@ -3841,6 +3864,12 @@
                     ${cursosHtml || `<p style="color:#60758b">Nenhum curso vinculado encontrado para esta unidade.</p>`}
                   </div>
                 `;
+                detalhes.querySelectorAll("[data-presencial-doc-index]").forEach(botao => {
+                  const indice = Number(botao.dataset.presencialDocIndex);
+                  const registroDocumento = rows[indice];
+                  if (!registroDocumento) return;
+                  botao.addEventListener("click", () => presencialBaixarProtocolo(registroDocumento));
+                });
                 detalhes.scrollIntoView({ behavior: "smooth", block: "nearest" });
               }
             });
