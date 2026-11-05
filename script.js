@@ -3160,7 +3160,11 @@
         const municipio = String(row.municipio || "").trim();
         const uf = String(row.uf || "").trim();
         const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
-        const chave = `${normalize(municipio)}|${normalize(uf)}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}`;
+        const separarUnidadeMaringa = normalize(municipio) === "maringa";
+        const identificadorUnidade = separarUnidadeMaringa
+          ? String(row.unidade_id || row.cnpj || presencialChaveUnidade(row) || "").trim()
+          : "";
+        const chave = `${normalize(municipio)}|${normalize(uf)}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}${identificadorUnidade ? `|unidade:${normalize(identificadorUnidade)}` : ""}`;
         if (!municipio || !uf) return;
 
         if (!grupos.has(chave)) {
@@ -3169,11 +3173,14 @@
             ? "Curitiba — Centro"
             : identificadorCuritiba === "curitiba-sede"
               ? "Curitiba — Sede"
-              : municipio;
+              : separarUnidadeMaringa
+                ? (nomeUnidade || municipio)
+                : municipio;
           grupos.set(chave, {
             municipio,
             uf,
             identificadorCuritiba,
+            identificadorUnidade,
             rotuloUnidade,
             nomeUnidade,
             registros: [],
@@ -3228,6 +3235,7 @@
             data-presencial-uf="${escaparHTML(item.uf)}"
             data-presencial-subsede="${escaparHTML(subsede)}"
             data-presencial-unidade-curitiba="${escaparHTML(item.identificadorCuritiba || "")}"
+            data-presencial-unidade-id="${escaparHTML(item.identificadorUnidade || "")}"
           >Consultar</button>
         </article>
       `).join("");
@@ -3256,7 +3264,7 @@
       `;
     }
 
-    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede, unidadeCuritiba = "") {
+    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede, unidadeCuritiba = "", unidadeId = "") {
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
@@ -3264,12 +3272,13 @@
         normalize(row.municipio) === normalize(municipio) &&
         normalize(row.uf) === normalize(uf) &&
         presencialSubsedeCompativel(row.subsede, subsede) &&
-        (!unidadeCuritiba || presencialIdentificadorUnidadeCuritiba(row) === unidadeCuritiba)
+        (!unidadeCuritiba || presencialIdentificadorUnidadeCuritiba(row) === unidadeCuritiba) &&
+        (!unidadeId || normalize(row.unidade_id || row.cnpj || presencialChaveUnidade(row)) === normalize(unidadeId))
       ).sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
-      presencialUltimaConsulta = { municipio, uf, subsede, unidadeCuritiba };
+      presencialUltimaConsulta = { municipio, uf, subsede, unidadeCuritiba, unidadeId };
       const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
 
       const cursosHtml = registros.map((row, index) => {
@@ -3358,7 +3367,8 @@
               data-presencial-municipio="${escaparHTML(item.municipio)}"
               data-presencial-uf="${escaparHTML(item.uf)}"
               data-presencial-subsede="${escaparHTML(subsede)}"
-              data-presencial-unidade-curitiba="${escaparHTML(item.identificadorCuritiba || "")}">Consultar</button>
+              data-presencial-unidade-curitiba="${escaparHTML(item.identificadorCuritiba || "")}"
+              data-presencial-unidade-id="${escaparHTML(item.identificadorUnidade || "")}">Consultar</button>
           </article>
         `).join("") || '<p class="ead-presencial-vazio">Nenhum curso aprovado foi encontrado para esta subsede.</p>'}
       `;
@@ -3378,7 +3388,8 @@
             botao.dataset.presencialMunicipio,
             botao.dataset.presencialUf,
             botao.dataset.presencialSubsede,
-            botao.dataset.presencialUnidadeCuritiba || ""
+            botao.dataset.presencialUnidadeCuritiba || "",
+            botao.dataset.presencialUnidadeId || ""
           );
         });
       });
