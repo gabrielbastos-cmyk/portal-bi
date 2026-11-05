@@ -2733,37 +2733,28 @@
         "situacao", "situacao_curso", "situacao_aprovacao",
         "status_aprovacao", "resultado_aprovacao"
       ];
-
       return camposStatus.some(campo => {
         const status = normalize(row?.[campo]);
-        if (!status) return false;
-
-        // Evita considerar status negativos como aprovados.
-        if (["nao aprovado", "reprovado", "indeferido", "pendente", "em analise"]
-          .some(negativo => status.includes(negativo))) return false;
-
         return ["aprovado", "validado", "deferido"].includes(status) ||
-          /(^|\s)aprovado($|\s)/.test(status);
+          /(^|\\s)aprovado($|\\s)/.test(status);
       });
     }
 
     function presencialChaveUnidade(row) {
-      const municipio = normalize(row?.municipio || "");
-      const uf = normalize(row?.uf || "");
-      const endereco = normalize(row?.endereco_normalizado || row?.endereco || "");
-      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
-      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
+      // A chave física deve distinguir Centro, Sede, CIC e demais endereços,
+      // mesmo quando compartilham subsede ou CNPJ cadastral.
+      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || row?.nome);
+      const endereco = normalize(row?.endereco_normalizado || row?.endereco);
+      const municipio = normalize(row?.municipio);
+      const uf = normalize(row?.uf);
+      const subsede = normalize(row?.subsede);
 
-      // Endereço é prioritário: unidades distintas no mesmo município
-      // (ex.: Curitiba Centro e CIC) devem continuar independentes.
-      if (endereco) return [municipio, uf, endereco].join("|");
-      if (cnpj) return [municipio, uf, cnpj, nomeUnidade].join("|");
+      if (nomeUnidade || endereco) {
+        return [subsede, municipio, uf, nomeUnidade, endereco].filter(Boolean).join("|");
+      }
 
-      const unidadeId = String(row?.unidade_id || "").trim();
-      if (unidadeId) return [municipio, uf, unidadeId, nomeUnidade].join("|");
-
-      return [municipio, uf, nomeUnidade].filter(Boolean).join("|") ||
-        String(row?.id || "").trim().toLowerCase();
+      const identificador = String(row?.unidade_id || row?.cnpj || row?.id || "").trim();
+      return identificador.toLowerCase();
     }
 
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
@@ -3239,48 +3230,74 @@
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
-      // Consulta todos os cursos aprovados do município/UF, sem restringir
-      // pela subsede do botão que abriu a consulta.
-      const registros = presencialRegistrosAprovados().filter(row =>
+      const registrosMunicipio = presencialRegistrosAprovados().filter(row =>
         normalize(row.municipio) === normalize(municipio) &&
         normalize(row.uf) === normalize(uf)
-      ).sort((a, b) =>
+      );
+      const registrosDaSubsede = registrosMunicipio.filter(row =>
+        presencialSubsedeCompativel(row.subsede, subsede)
+      );
+      const registros = (registrosDaSubsede.length ? registrosDaSubsede : registrosMunicipio)
+        .sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
       presencialUltimaConsulta = { municipio, uf, subsede };
       const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
 
-      const cursosHtml = registros.map((row, index) => {
-        const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
-        const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
+      const gruposUnidades = new Map();
+      registros.forEach(row => {
+        const chave = presencialChaveUnidade(row);
+        if (!gruposUnidades.has(chave)) {
+          gruposUnidades.set(chave, { nome: valorTexto(row.nome_unidade, row.municipio), endereco: presencialEnderecoExibicao(row), rows: [] });
+        }
+        gruposUnidades.get(chave).rows.push(row);
+      });
+
+      let numeroCurso = 0;
+      const cursosHtml = [...gruposUnidades.values()].map(unidade => {
+        const cursosUnidadeHtml = unidade.rows.map(row => {
+          numeroCurso += 1;
+          const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
+          const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
+          return `
+            <article class="ead-presencial-curso">
+              <div class="ead-presencial-curso-topo">
+                <strong>${numeroCurso}. ${escaparHTML(valorTexto(row.curso, "Curso não informado"))}</strong>
+                <span>${escaparHTML(status)}</span>
+              </div>
+              <div class="ead-presencial-curso-grade">
+                <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
+                <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
+                <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
+                <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
+                <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
+                <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
+                ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
+                <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
+                <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
+              </div>
+            </article>
+          `;
+        }).join("");
+
         return `
-          <article class="ead-presencial-curso">
-            <div class="ead-presencial-curso-topo">
-              <strong>${index + 1}. ${escaparHTML(valorTexto(row.curso, "Curso não informado"))}</strong>
-              <span>${escaparHTML(status)}</span>
-            </div>
-            <div class="ead-presencial-curso-grade">
-              <div><small>Unidade</small><strong>${escaparHTML(valorTexto(row.nome_unidade, row.municipio))}</strong></div>
-              <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
-              <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
-              <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
-              <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
-              <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
-              <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
-              ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
-              <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
-              <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
-            </div>
-          </article>
+          <section class="ead-presencial-grupo-unidade">
+            <header class="ead-presencial-grupo-unidade-topo">
+              <h5>${escaparHTML(unidade.nome)}</h5>
+              <p>${escaparHTML(unidade.endereco)} · ${unidade.rows.length.toLocaleString("pt-BR")} cursos aprovados</p>
+            </header>
+            ${cursosUnidadeHtml}
+          </section>
         `;
       }).join("");
+
 
       container.innerHTML = `
         <div class="ead-presencial-detalhe-topo">
           <div>
             <h4>${escaparHTML(municipio)} - ${escaparHTML(uf)}</h4>
-            <p>Cursos presenciais aprovados · Todas as unidades do município</p>
+            <p>Cursos presenciais aprovados · Unidades físicas separadas por nome e endereço · Subsede ${escaparHTML(subsede)}</p>
           </div>
           <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar aos municípios</button>
         </div>
@@ -3716,9 +3733,7 @@
             const latitude = numeroSeguro(row.latitude);
             const longitude = numeroSeguro(row.longitude);
             if (latitude === null || longitude === null) return;
-            const key = String(
-              row.endereco_normalizado || row.endereco || row.unidade_id || row.cnpj || row.id || ""
-            ).trim().toLowerCase();
+            const key = presencialChaveUnidade(row);
             if (!key) return;
             if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
             const item = porUnidade.get(key);
