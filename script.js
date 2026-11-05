@@ -2740,19 +2740,32 @@
       });
     }
 
-    function presencialChaveUnidade(row) {
-      const identificador = String(row?.unidade_id || row?.cnpj || "").trim();
-      if (identificador) return identificador.toLowerCase();
+    function presencialIdentificadorUnidadeCuritiba(row) {
+      const municipio = normalize(row?.municipio || "");
+      const subsede = normalize(row?.subsede || "");
+      const nome = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
+      const ehCuritiba = municipio === "curitiba" || subsede === "curitiba";
+      if (!ehCuritiba) return "";
 
-      const partes = [
+      // A base pode repetir unidade_id/CNPJ/endereço para Centro e Sede.
+      // O identificador complementar impede que essas duas unidades se misturem.
+      if (nome.includes("centro")) return "curitiba-centro";
+      if (nome.includes("sede")) return "curitiba-sede";
+      return "";
+    }
+
+    function presencialChaveUnidade(row) {
+      const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
+      const identificador = String(row?.unidade_id || row?.cnpj || "").trim();
+      const base = identificador || [
         row?.subsede,
         row?.municipio,
         row?.uf,
         row?.nome_unidade || row?.unidade || row?.nome,
         row?.endereco_normalizado || row?.endereco
-      ].map(valor => normalize(valor)).filter(Boolean);
+      ].map(valor => normalize(valor)).filter(Boolean).join("|") || String(row?.id || "").trim();
 
-      return partes.join("|") || String(row?.id || "").trim().toLowerCase();
+      return `${String(base).toLowerCase()}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}`;
     }
 
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
@@ -3663,7 +3676,7 @@
     // EaD — ATUALIZAÇÃO DO MAPA
     // ==================================================
 
-    async function atualizarMapaEaD(registros) {
+    async function atualizarMapaEaD(registros, registrosPresenciais = presencialGeoRegistros) {
       const painel = eadMapaPrepararElemento();
       if (!painel) return;
 
@@ -3704,7 +3717,7 @@
 
         if (mostrarPresencial && eadMapaMarcadoresPresencial) {
           const porUnidade = new Map();
-          presencialGeoRegistros.forEach(row => {
+          (registrosPresenciais || []).forEach(row => {
             const latitude = numeroSeguro(row.latitude);
             const longitude = numeroSeguro(row.longitude);
             if (latitude === null || longitude === null) return;
@@ -3712,21 +3725,9 @@
             const municipioNormalizado = normalize(row.municipio || "");
             const subsedeNormalizada = normalize(row.subsede || "");
 
-            // Em Curitiba, Sede e Centro precisam ser unidades distintas mesmo
-            // quando a base compartilha unidade_id ou endereço normalizado.
-            let chaveEspecialCuritiba = "";
-            if (municipioNormalizado === "curitiba" || subsedeNormalizada === "curitiba") {
-              if (nomeUnidadeNormalizado.includes("centro")) {
-                chaveEspecialCuritiba = "|curitiba-centro";
-              } else if (nomeUnidadeNormalizado.includes("sede")) {
-                chaveEspecialCuritiba = "|curitiba-sede";
-              }
-            }
-
-            const chaveBaseUnidade = String(
-              row.unidade_id || row.endereco_normalizado || row.endereco || row.id || ""
-            ).trim().toLowerCase();
-            const key = `${chaveBaseUnidade}${chaveEspecialCuritiba}`;
+            // Usa a mesma chave do restante do painel: Centro e Sede de Curitiba
+            // permanecem separados mesmo quando compartilham identificador/endereço.
+            const key = presencialChaveUnidade(row);
             if (!key) return;
             if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
             const item = porUnidade.get(key);
@@ -4026,7 +4027,7 @@
 
       const unidades = new Map();
       registrosPresenciais.forEach(row => {
-        const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
+        const key = presencialChaveUnidade(row);
         if (!key) return;
         if (!unidades.has(key)) unidades.set(key, { rows: [], cursos: new Set() });
         const item = unidades.get(key);
@@ -4068,7 +4069,7 @@
       if (tabela) tabela.hidden = apenasPresencial;
       if (!apenasPresencial) renderizarTabelaEaD(registrosEaD);
 
-      atualizarMapaEaD(registrosEaD);
+      atualizarMapaEaD(registrosEaD, registrosPresenciais);
     }
 
     // ==================================================
