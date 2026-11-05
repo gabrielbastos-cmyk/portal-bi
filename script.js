@@ -2741,20 +2741,18 @@
     }
 
     function presencialChaveUnidade(row) {
-      // A chave física deve distinguir Centro, Sede, CIC e demais endereços,
-      // mesmo quando compartilham subsede ou CNPJ cadastral.
-      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || row?.nome);
-      const endereco = normalize(row?.endereco_normalizado || row?.endereco);
-      const municipio = normalize(row?.municipio);
-      const uf = normalize(row?.uf);
-      const subsede = normalize(row?.subsede);
+      const identificador = String(row?.unidade_id || row?.cnpj || "").trim();
+      if (identificador) return identificador.toLowerCase();
 
-      if (nomeUnidade || endereco) {
-        return [subsede, municipio, uf, nomeUnidade, endereco].filter(Boolean).join("|");
-      }
+      const partes = [
+        row?.subsede,
+        row?.municipio,
+        row?.uf,
+        row?.nome_unidade || row?.unidade || row?.nome,
+        row?.endereco_normalizado || row?.endereco
+      ].map(valor => normalize(valor)).filter(Boolean);
 
-      const identificador = String(row?.unidade_id || row?.cnpj || row?.id || "").trim();
-      return identificador.toLowerCase();
+      return partes.join("|") || String(row?.id || "").trim().toLowerCase();
     }
 
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
@@ -3245,59 +3243,36 @@
       presencialUltimaConsulta = { municipio, uf, subsede };
       const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
 
-      const gruposUnidades = new Map();
-      registros.forEach(row => {
-        const chave = presencialChaveUnidade(row);
-        if (!gruposUnidades.has(chave)) {
-          gruposUnidades.set(chave, { nome: valorTexto(row.nome_unidade, row.municipio), endereco: presencialEnderecoExibicao(row), rows: [] });
-        }
-        gruposUnidades.get(chave).rows.push(row);
-      });
-
-      let numeroCurso = 0;
-      const cursosHtml = [...gruposUnidades.values()].map(unidade => {
-        const cursosUnidadeHtml = unidade.rows.map(row => {
-          numeroCurso += 1;
-          const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
-          const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
-          return `
-            <article class="ead-presencial-curso">
-              <div class="ead-presencial-curso-topo">
-                <strong>${numeroCurso}. ${escaparHTML(valorTexto(row.curso, "Curso não informado"))}</strong>
-                <span>${escaparHTML(status)}</span>
-              </div>
-              <div class="ead-presencial-curso-grade">
-                <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
-                <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
-                <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
-                <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
-                <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
-                <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
-                ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
-                <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
-                <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
-              </div>
-            </article>
-          `;
-        }).join("");
-
+      const cursosHtml = registros.map((row, index) => {
+        const status = row.status_normalizado || row.status_mapa || row.status_original || "Aprovado";
+        const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
         return `
-          <section class="ead-presencial-grupo-unidade">
-            <header class="ead-presencial-grupo-unidade-topo">
-              <h5>${escaparHTML(unidade.nome)}</h5>
-              <p>${escaparHTML(unidade.endereco)} · ${unidade.rows.length.toLocaleString("pt-BR")} cursos aprovados</p>
-            </header>
-            ${cursosUnidadeHtml}
-          </section>
+          <article class="ead-presencial-curso">
+            <div class="ead-presencial-curso-topo">
+              <strong>${index + 1}. ${escaparHTML(valorTexto(row.curso, "Curso não informado"))}</strong>
+              <span>${escaparHTML(status)}</span>
+            </div>
+            <div class="ead-presencial-curso-grade">
+              <div><small>Unidade</small><strong>${escaparHTML(valorTexto(row.nome_unidade, row.municipio))}</strong></div>
+              <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
+              <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
+              <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
+              <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
+              <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
+              <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
+              ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
+              <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
+              <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
+            </div>
+          </article>
         `;
       }).join("");
-
 
       container.innerHTML = `
         <div class="ead-presencial-detalhe-topo">
           <div>
             <h4>${escaparHTML(municipio)} - ${escaparHTML(uf)}</h4>
-            <p>Cursos presenciais aprovados · Unidades físicas separadas por nome e endereço · Subsede ${escaparHTML(subsede)}</p>
+            <p>Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
           </div>
           <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar aos municípios</button>
         </div>
@@ -3308,7 +3283,7 @@
         </div>
 
         <div class="ead-presencial-lista-cursos">
-          ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município.</p>'}
+          ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município e subsede.</p>'}
         </div>
       `;
 
@@ -3733,7 +3708,25 @@
             const latitude = numeroSeguro(row.latitude);
             const longitude = numeroSeguro(row.longitude);
             if (latitude === null || longitude === null) return;
-            const key = presencialChaveUnidade(row);
+            const nomeUnidadeNormalizado = normalize(row.nome_unidade || row.unidade || row.nome || "");
+            const municipioNormalizado = normalize(row.municipio || "");
+            const subsedeNormalizada = normalize(row.subsede || "");
+
+            // Em Curitiba, Sede e Centro precisam ser unidades distintas mesmo
+            // quando a base compartilha unidade_id ou endereço normalizado.
+            let chaveEspecialCuritiba = "";
+            if (municipioNormalizado === "curitiba" || subsedeNormalizada === "curitiba") {
+              if (nomeUnidadeNormalizado.includes("centro")) {
+                chaveEspecialCuritiba = "|curitiba-centro";
+              } else if (nomeUnidadeNormalizado.includes("sede")) {
+                chaveEspecialCuritiba = "|curitiba-sede";
+              }
+            }
+
+            const chaveBaseUnidade = String(
+              row.unidade_id || row.endereco_normalizado || row.endereco || row.id || ""
+            ).trim().toLowerCase();
+            const key = `${chaveBaseUnidade}${chaveEspecialCuritiba}`;
             if (!key) return;
             if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
             const item = porUnidade.get(key);
@@ -3765,7 +3758,12 @@
             const situacaoUnidade = normalize(row.situacao_unidade || "");
             const ativa = row.unidade_ativa === true || situacaoUnidade === "ativa";
             const cor = ativa ? "#16835b" : "#c62828";
-            const nome = row.nome_unidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`;
+            const nomeOriginalUnidade = row.nome_unidade || row.unidade || row.nome || "";
+            const nomeNormalizadoUnidade = normalize(nomeOriginalUnidade);
+            const nome = (normalize(row.municipio || "") === "curitiba" &&
+              (nomeNormalizadoUnidade.includes("centro") || nomeNormalizadoUnidade.includes("sede")))
+              ? `Curitiba - ${nomeNormalizadoUnidade.includes("centro") ? "Centro" : "Sede"}`
+              : (nomeOriginalUnidade || row.subsede || `${row.municipio || "Unidade"} - ${row.uf || ""}`);
             const endereco = row.endereco || "Endereço não informado";
             const escape = value => String(value ?? "").replace(/[&<>\\"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\":"&#92;","\"":"&quot;","'":"&#39;"}[ch]));
             const popup = `<div class="ead-popup-titulo">${escape(nome)}</div>` +
@@ -4028,7 +4026,7 @@
 
       const unidades = new Map();
       registrosPresenciais.forEach(row => {
-        const key = presencialChaveUnidade(row);
+        const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
         if (!key) return;
         if (!unidades.has(key)) unidades.set(key, { rows: [], cursos: new Set() });
         const item = unidades.get(key);
