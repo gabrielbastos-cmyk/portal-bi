@@ -2733,26 +2733,37 @@
         "situacao", "situacao_curso", "situacao_aprovacao",
         "status_aprovacao", "resultado_aprovacao"
       ];
+
       return camposStatus.some(campo => {
         const status = normalize(row?.[campo]);
+        if (!status) return false;
+
+        // Evita considerar status negativos como aprovados.
+        if (["nao aprovado", "reprovado", "indeferido", "pendente", "em analise"]
+          .some(negativo => status.includes(negativo))) return false;
+
         return ["aprovado", "validado", "deferido"].includes(status) ||
-          /(^|\\s)aprovado($|\\s)/.test(status);
+          /(^|\s)aprovado($|\s)/.test(status);
       });
     }
 
     function presencialChaveUnidade(row) {
-      const identificador = String(row?.unidade_id || row?.cnpj || "").trim();
-      if (identificador) return identificador.toLowerCase();
+      const municipio = normalize(row?.municipio || "");
+      const uf = normalize(row?.uf || "");
+      const endereco = normalize(row?.endereco_normalizado || row?.endereco || "");
+      const nomeUnidade = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
+      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
 
-      const partes = [
-        row?.subsede,
-        row?.municipio,
-        row?.uf,
-        row?.nome_unidade || row?.unidade || row?.nome,
-        row?.endereco_normalizado || row?.endereco
-      ].map(valor => normalize(valor)).filter(Boolean);
+      // Endereço é prioritário: unidades distintas no mesmo município
+      // (ex.: Curitiba Centro e CIC) devem continuar independentes.
+      if (endereco) return [municipio, uf, endereco].join("|");
+      if (cnpj) return [municipio, uf, cnpj, nomeUnidade].join("|");
 
-      return partes.join("|") || String(row?.id || "").trim().toLowerCase();
+      const unidadeId = String(row?.unidade_id || "").trim();
+      if (unidadeId) return [municipio, uf, unidadeId, nomeUnidade].join("|");
+
+      return [municipio, uf, nomeUnidade].filter(Boolean).join("|") ||
+        String(row?.id || "").trim().toLowerCase();
     }
 
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
@@ -3228,15 +3239,12 @@
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
-      const registrosMunicipio = presencialRegistrosAprovados().filter(row =>
+      // Consulta todos os cursos aprovados do município/UF, sem restringir
+      // pela subsede do botão que abriu a consulta.
+      const registros = presencialRegistrosAprovados().filter(row =>
         normalize(row.municipio) === normalize(municipio) &&
         normalize(row.uf) === normalize(uf)
-      );
-      const registrosDaSubsede = registrosMunicipio.filter(row =>
-        presencialSubsedeCompativel(row.subsede, subsede)
-      );
-      const registros = (registrosDaSubsede.length ? registrosDaSubsede : registrosMunicipio)
-        .sort((a, b) =>
+      ).sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
@@ -3272,7 +3280,7 @@
         <div class="ead-presencial-detalhe-topo">
           <div>
             <h4>${escaparHTML(municipio)} - ${escaparHTML(uf)}</h4>
-            <p>Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
+            <p>Cursos presenciais aprovados · Todas as unidades do município</p>
           </div>
           <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar aos municípios</button>
         </div>
@@ -3283,7 +3291,7 @@
         </div>
 
         <div class="ead-presencial-lista-cursos">
-          ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município e subsede.</p>'}
+          ${cursosHtml || '<p class="ead-presencial-vazio">Nenhum curso aprovado encontrado para este município.</p>'}
         </div>
       `;
 
@@ -3708,7 +3716,9 @@
             const latitude = numeroSeguro(row.latitude);
             const longitude = numeroSeguro(row.longitude);
             if (latitude === null || longitude === null) return;
-            const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
+            const key = String(
+              row.endereco_normalizado || row.endereco || row.unidade_id || row.cnpj || row.id || ""
+            ).trim().toLowerCase();
             if (!key) return;
             if (!porUnidade.has(key)) porUnidade.set(key, { row, cursos: new Set(), rows: [] });
             const item = porUnidade.get(key);
@@ -4003,7 +4013,7 @@
 
       const unidades = new Map();
       registrosPresenciais.forEach(row => {
-        const key = String(row.unidade_id || row.endereco_normalizado || row.endereco || row.id || "").trim().toLowerCase();
+        const key = presencialChaveUnidade(row);
         if (!key) return;
         if (!unidades.has(key)) unidades.set(key, { rows: [], cursos: new Set() });
         const item = unidades.get(key);
