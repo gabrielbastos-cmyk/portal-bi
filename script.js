@@ -6461,6 +6461,13 @@
         });
       }
 
+      function classificarCartaoFuturo(value) {
+        const v=txt(value).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").trim();
+        if(["sim","true","1","yes","com cartao futuro"].includes(v)) return "com";
+        if(["nao","false","0","no","sem cartao futuro",""].includes(v)) return "sem";
+        return "sem";
+      }
+
       function filtros(opcoes = {}) {
         // Os gráficos históricos ignoram somente o filtro de período, para manter
         // todos os meses visíveis. Consultor, subsede, cidade, status, empresa e
@@ -6472,9 +6479,12 @@
         const cidade=el("cc-filtro-cidade")?.value || "";
         const empresa=(el("cc-filtro-empresa")?.value || "").toLocaleLowerCase("pt-BR");
         const status=el("cc-filtro-status")?.value || "";
+        const cartaoFuturo=el("cc-filtro-cartao-futuro")?.value || "";
         return dados.filter(r => {
           const cnpj = normalizarCnpj(r.cnpj);
+          const cartao=classificarCartaoFuturo(r.cartao_futuro);
           return (!incluirPeriodo || !periodo || periodoKey(r.periodo_referencia)===periodo) &&
+            (!cartaoFuturo || cartao===cartaoFuturo) &&
             (!consultor || txt(r.consultor)===consultor) &&
             (!subsede || txt(r.subsede)===subsede) &&
             (!cidade || txt(r.cidade)===cidade) &&
@@ -6680,11 +6690,11 @@
       function atualizarTabela(lista) {
         const corpo=el("cc-tabela-corpo"); if(!corpo) return;
         const busca=(el("cc-busca")?.value||"").toLocaleLowerCase("pt-BR");
-        const filtrados=lista.filter(r=>!busca || [r.empresa,r.cnpj,formatarCnpj(r.cnpj),r.consultor,r.cidade,r.subsede,r.aprendiz,r.tipo_contrato].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(busca)));
+        const filtrados=lista.filter(r=>!busca || [r.empresa,r.cnpj,formatarCnpj(r.cnpj),r.consultor,r.cidade,r.subsede,r.aprendiz,r.tipo_contrato,r.cartao_futuro].some(v=>txt(v).toLocaleLowerCase("pt-BR").includes(busca)));
         const pagina=Math.max(1,Number(el("cc-pagina")?.value)||1), tamanho=50, totalPaginas=Math.max(1,Math.ceil(filtrados.length/tamanho)), p=Math.min(pagina,totalPaginas);
         if(el("cc-pagina")) el("cc-pagina").value=String(p);
         const inicio=(p-1)*tamanho, paginaDados=filtrados.slice(inicio,inicio+tamanho);
-        corpo.innerHTML=paginaDados.length?paginaDados.map(r=>`<tr><td>${escape(periodoLabel(periodoKey(r.periodo_referencia)))}</td><td>${escape(r.consultor||"—")}</td><td>${escape(r.subsede||"—")}</td><td>${escape(r.empresa||"—")}</td><td>${escape(formatarCnpj(r.cnpj))}</td><td>${escape(r.aprendiz||"—")}</td><td>${escape(r.cidade||"—")}</td><td>${escape(r.tipo_contrato||"—")}</td><td>${ativo(r)?"Ativo":"Inativo"}</td><td>${moeda(r.contribuicao_mensal)}</td></tr>`).join(""):`<tr><td colspan="10">Nenhum contrato encontrado com os filtros selecionados.</td></tr>`;
+        corpo.innerHTML=paginaDados.length?paginaDados.map(r=>`<tr><td>${escape(periodoLabel(periodoKey(r.periodo_referencia)))}</td><td>${escape(r.consultor||"—")}</td><td>${escape(r.subsede||"—")}</td><td>${escape(r.empresa||"—")}</td><td>${escape(formatarCnpj(r.cnpj))}</td><td>${escape(r.aprendiz||"—")}</td><td>${escape(r.cidade||"—")}</td><td>${escape(r.tipo_contrato||"—")}</td><td>${classificarCartaoFuturo(r.cartao_futuro)==="com"?"Com Cartão Futuro":"Sem Cartão Futuro"}</td><td>${ativo(r)?"Ativo":"Inativo"}</td><td>${moeda(r.contribuicao_mensal)}</td></tr>`).join(""):`<tr><td colspan="11">Nenhum contrato encontrado com os filtros selecionados.</td></tr>`;
         if(el("cc-contador")) el("cc-contador").textContent=filtrados.length?`Exibindo ${inicio+1}–${Math.min(inicio+tamanho,filtrados.length)} de ${inteiro(filtrados.length)} contratos · Página ${p} de ${totalPaginas}`:"Nenhum contrato encontrado.";
         if(el("cc-anterior")) el("cc-anterior").disabled=p<=1;
         if(el("cc-proxima")) el("cc-proxima").disabled=p>=totalPaginas;
@@ -6698,7 +6708,7 @@
         finally{carregando=false;if(botao)botao.disabled=false;}
       }
       function configurarEventos(){
-        ["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status"].forEach(id=>el(id)?.addEventListener("change",renderizar));
+        ["cc-filtro-periodo","cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-cartao-futuro"].forEach(id=>el(id)?.addEventListener("change",renderizar));
         el("cc-filtro-empresa")?.addEventListener("input",renderizar);
         el("cc-cnpj-busca")?.addEventListener("input",renderizarSeletorCnpj);
         el("cc-cnpj-marcar-visiveis")?.addEventListener("click",()=>{
@@ -6715,7 +6725,7 @@
         el("cc-busca")?.addEventListener("input",()=>{if(el("cc-pagina"))el("cc-pagina").value="1";atualizarTabela(filtros());});
         el("cc-atualizar")?.addEventListener("click",carregar);
         el("cc-limpar")?.addEventListener("click",()=>{
-          ["cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-empresa","cc-busca","cc-cnpj-busca"].forEach(id=>{if(el(id))el(id).value="";});
+          ["cc-filtro-consultor","cc-filtro-subsede","cc-filtro-cidade","cc-filtro-status","cc-filtro-cartao-futuro","cc-filtro-empresa","cc-busca","cc-cnpj-busca"].forEach(id=>{if(el(id))el(id).value="";});
           cnpjsSelecionados.clear();
           const sel=el("cc-filtro-periodo");
           if(sel){const vals=[...sel.options].map(o=>o.value).filter(Boolean);sel.value=vals.sort((a,b)=>periodoKey(a).localeCompare(periodoKey(b))).at(-1)||"";}
@@ -6725,9 +6735,9 @@
         el("cc-proxima")?.addEventListener("click",()=>{if(el("cc-pagina"))el("cc-pagina").value=String((Number(el("cc-pagina").value)||1)+1);atualizarTabela(filtros());});
         el("cc-exportar")?.addEventListener("click",()=>{
           const lista=filtros();
-          const headers=["Período","Consultor","Subsede","Empresa","CNPJ","Aprendiz","Cidade","Tipo de contrato","Ativo","Contribuição mensal"];
+          const headers=["Período","Consultor","Subsede","Empresa","CNPJ","Aprendiz","Cidade","Tipo de contrato","Cartão Futuro","Ativo","Contribuição mensal"];
           const escapar=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
-          const linhas=lista.map(r=>[periodoKey(r.periodo_referencia),r.consultor,r.subsede,r.empresa,formatarCnpj(r.cnpj),r.aprendiz,r.cidade,r.tipo_contrato,ativo(r)?"Ativo":"Inativo",r.contribuicao_mensal].map(escapar).join(";"));
+          const linhas=lista.map(r=>[periodoKey(r.periodo_referencia),r.consultor,r.subsede,r.empresa,formatarCnpj(r.cnpj),r.aprendiz,r.cidade,r.tipo_contrato,classificarCartaoFuturo(r.cartao_futuro)==="com"?"Com Cartão Futuro":"Sem Cartão Futuro",ativo(r)?"Ativo":"Inativo",r.contribuicao_mensal].map(escapar).join(";"));
           const blob=new Blob(["\\uFEFF"+[headers.join(";"),...linhas].join("\\r\\n")],{type:"text/csv;charset=utf-8;"});
           const url=URL.createObjectURL(blob),a=document.createElement("a");
           a.href=url;a.download="carteira-consultores.csv";a.click();
