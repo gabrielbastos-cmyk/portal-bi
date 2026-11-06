@@ -6461,7 +6461,11 @@
         });
       }
 
-      function filtros() {
+      function filtros(opcoes = {}) {
+        // Os gráficos históricos ignoram somente o filtro de período, para manter
+        // todos os meses visíveis. Consultor, subsede, cidade, status, empresa e
+        // CNPJs selecionados continuam sendo aplicados normalmente.
+        const incluirPeriodo = opcoes.incluirPeriodo !== false;
         const periodo=periodoSelecionado();
         const consultor=el("cc-filtro-consultor")?.value || "";
         const subsede=el("cc-filtro-subsede")?.value || "";
@@ -6470,7 +6474,7 @@
         const status=el("cc-filtro-status")?.value || "";
         return dados.filter(r => {
           const cnpj = normalizarCnpj(r.cnpj);
-          return (!periodo || periodoKey(r.periodo_referencia)===periodo) &&
+          return (!incluirPeriodo || !periodo || periodoKey(r.periodo_referencia)===periodo) &&
             (!consultor || txt(r.consultor)===consultor) &&
             (!subsede || txt(r.subsede)===subsede) &&
             (!cidade || txt(r.cidade)===cidade) &&
@@ -6517,7 +6521,7 @@
         if(el("cc-kpi-tkm")) el("cc-kpi-tkm").textContent=moeda(lista.length ? soma / lista.length : 0);
         if(el("cc-kpi-4h")) el("cc-kpi-4h").textContent=inteiro(lista.filter(r=>cargaHoraria(r)==="4h").length);
         if(el("cc-kpi-6h")) el("cc-kpi-6h").textContent=inteiro(lista.filter(r=>cargaHoraria(r)==="6h").length);
-        const historico=agregarMensal(dados), p=periodoSelecionado() || historico.at(-1)?.periodo;
+        const historico=agregarMensal(filtros({incluirPeriodo:false})), p=periodoSelecionado() || historico.at(-1)?.periodo;
         const i=historico.findIndex(x=>x.periodo===p), atual=historico[i], anterior=historico[i-1];
         const elC=el("cc-kpi-crescimento"), elF=el("cc-kpi-faturamento-crescimento"), elA=el("cc-kpi-ativos-crescimento");
         if(elC)elC.textContent=pctLabel(pct(atual?.contratos||0,anterior?.contratos||0));
@@ -6537,10 +6541,19 @@
       }
       function atualizarGraficos(lista) {
         if(!window.Chart) return;
-        const mensal=agregarMensal(dados), labels=mensal.map(x=>periodoLabel(x.periodo));
-        const cfgLinha=(label,serie,cor,formatarMoeda=false)=>({type:"line",data:{labels,datasets:[{label,data:mensal.map(serie),borderColor:cor,backgroundColor:cor+"22",fill:true,tension:.28,pointRadius:4,pointHoverRadius:6}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${formatarMoeda?moeda(ctx.raw):inteiro(ctx.raw)}`}},datalabels:{display:true,align:"top",anchor:"end",color:"#34445b",font:{weight:"600",size:10},formatter:v=>formatarMoeda?moeda(v):inteiro(v)}},scales:{y:{beginAtZero:true,grace:"12%"},x:{ticks:{maxRotation:0,autoSkip:false}}}}});
-        grafico("cc-grafico-periodo",cfgLinha("Contratos",x=>x.contratos,"#245b91"));
-        grafico("cc-grafico-faturamento",cfgLinha("Contribuição mensal",x=>x.faturamento,"#16835b",true));
+        // IMPORTANTE: usar a base filtrada sem limitar o histórico ao mês escolhido.
+        // Assim, ao selecionar Elaine, por exemplo, todos os meses exibem somente
+        // os contratos, aprendizes ativos e valores da carteira dela.
+        const historicoFiltrado=filtros({incluirPeriodo:false});
+        const mensal=agregarMensal(historicoFiltrado), labels=mensal.map(x=>periodoLabel(x.periodo));
+        const cfgLinha=(datasets,formatarMoeda=false)=>({type:"line",data:{labels,datasets:datasets.map(ds=>({label:ds.label,data:mensal.map(ds.serie),borderColor:ds.cor,backgroundColor:ds.cor+"22",fill:ds.fill===true,tension:.28,pointRadius:4,pointHoverRadius:6}))},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,position:"bottom"},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${formatarMoeda?moeda(ctx.raw):inteiro(ctx.raw)}`}},datalabels:{display:true,align:"top",anchor:"end",color:"#34445b",font:{weight:"600",size:10},formatter:v=>formatarMoeda?moeda(v):inteiro(v)}},scales:{y:{beginAtZero:true,grace:"12%"},x:{ticks:{maxRotation:0,autoSkip:false}}}}});
+        grafico("cc-grafico-periodo",cfgLinha([
+          {label:"Contratos",serie:x=>x.contratos,cor:"#245b91",fill:true},
+          {label:"Aprendizes ativos",serie:x=>x.ativos,cor:"#16835b"}
+        ]));
+        grafico("cc-grafico-faturamento",cfgLinha([
+          {label:"Contribuição mensal",serie:x=>x.faturamento,cor:"#16835b",fill:true}
+        ],true));
         const crescimento=mensal.map((x,i)=>i===0?null:pct(x.contratos,mensal[i-1].contratos));
         grafico("cc-grafico-crescimento", {
           type: "bar",
