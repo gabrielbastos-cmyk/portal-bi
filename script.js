@@ -16,6 +16,8 @@
     const PRESENCIAL_GEO_TABLE = "presencial_cursos_geografica";
     const EAD_PAGE_SIZE = 20;
     const PRESENCIAL_PROTOCOLOS_TABLE = "presencial_protocolos_documentos";
+    const PRESENCIAL_TURMAS_TABLE = "presencial_turmas_status";
+    let presencialTurmasCache = new Map();
     const PRESENCIAL_PROTOCOLOS_BUCKET = "presencial-protocolos";
     let presencialProtocolosCache = new Map();
     let presencialProtocolosTabelaDisponivel = false;
@@ -1622,6 +1624,7 @@
       // Documentos são carregados separadamente dos registros geográficos.
       // A ausência da tabela não interrompe o mapa nem os indicadores.
       await presencialCarregarProtocolos();
+      await presencialCarregarStatusTurmas();
 
       eadPaginaAtual = 1;
       preencherFiltrosEaD();
@@ -2816,6 +2819,92 @@
       );
     }
 
+    // Disponibilidade é independente para cada unidade física + curso aprovado.
+    function presencialChaveTurma(row) {
+      const unidadeKey = presencialChaveUnidade(row);
+      const cursoKey = normalize(row?.curso || "").replace(/[^a-z0-9]/g, "");
+      return unidadeKey && cursoKey ? `${unidadeKey}::${cursoKey}` : "";
+    }
+
+    async function presencialCarregarStatusTurmas() {
+      presencialTurmasCache = new Map();
+      if (!sb || !currentUser) return;
+      try {
+        const { data, error } = await sb.from(PRESENCIAL_TURMAS_TABLE)
+          .select("unidade_key, curso_chave, status_turma, atualizado_em, atualizado_por")
+          .limit(10000);
+        if (error) throw error;
+        (data || []).forEach(item => {
+          presencialTurmasCache.set(`${item.unidade_key}::${item.curso_chave}`, item);
+        });
+      } catch (error) {
+        console.warn("Status de turmas presenciais ainda não configurado:", error);
+      }
+    }
+
+    function presencialStatusTurma(row) {
+      const key = presencialChaveTurma(row);
+      const cursoKey = normalize(row?.curso || "").replace(/[^a-z0-9]/g, "");
+      return presencialTurmasCache.get(key) || { unidade_key: presencialChaveUnidade(row), curso_chave: cursoKey, status_turma: "sem_turma" };
+    }
+
+    async function presencialSalvarStatusTurma(row, status, controle) {
+      if (currentProfile?.role !== "admin") {
+        alert("Somente administradores podem alterar a disponibilidade das turmas.");
+        return;
+      }
+      const unidadeKey = presencialChaveUnidade(row);
+      const cursoKey = normalize(row?.curso || "").replace(/[^a-z0-9]/g, "");
+      if (!unidadeKey || !cursoKey) {
+        alert("Não foi possível identificar a unidade física e o curso para salvar a disponibilidade.");
+        return;
+      }
+      if (!["turma_aberta", "sem_turma"].includes(status)) return;
+      if (controle) controle.disabled = true;
+      try {
+        const payload = {
+          unidade_key: unidadeKey,
+          unidade_id: String(row?.unidade_id || ""),
+          nome_unidade: String(row?.nome_unidade || row?.unidade || row?.municipio || ""),
+          municipio: String(row?.municipio || ""),
+          uf: String(row?.uf || ""),
+          subsede: String(row?.subsede || ""),
+          curso: String(row?.curso || ""),
+          curso_chave: cursoKey,
+          status_turma: status,
+          atualizado_por: currentUser.id,
+          atualizado_em: new Date().toISOString()
+        };
+        const { data, error } = await sb.from(PRESENCIAL_TURMAS_TABLE)
+          .upsert(payload, { onConflict: "unidade_key,curso_chave" })
+          .select("unidade_key, curso_chave, status_turma, atualizado_em, atualizado_por")
+          .single();
+        if (error) throw error;
+        presencialTurmasCache.set(`${unidadeKey}::${cursoKey}`, data || payload);
+        if (controle) {
+          controle.dataset.saved = "true";
+          controle.title = `Atualizado em ${presencialFormatarDataPortal(payload.atualizado_em)}`;
+        }
+        const bloco = controle?.closest(".ead-presencial-disponibilidade");
+        const aviso = bloco?.querySelector("small");
+        const rotulo = bloco?.querySelector(".ead-presencial-status-turma");
+        if (rotulo) {
+          rotulo.textContent = status === "turma_aberta" ? "Tem turma aberta" : "Não tem turma aberta";
+          rotulo.classList.toggle("is-aberta", status === "turma_aberta");
+          rotulo.classList.toggle("is-sem-turma", status !== "turma_aberta");
+        }
+        if (aviso) aviso.textContent = status === "turma_aberta"
+          ? "Turma aberta nesta unidade física."
+          : "Sem turma aberta nesta unidade. Necessário captar 15 jovens.";
+      } catch (error) {
+        console.error("Erro ao salvar disponibilidade da turma:", error);
+        alert(`Não foi possível salvar a disponibilidade. Confira a tabela e as políticas RLS no Supabase. ${friendlyError(error)}`);
+        if (controle) controle.value = presencialStatusTurma(row).status_turma;
+      } finally {
+        if (controle) controle.disabled = false;
+      }
+    }
+
     // Localiza a URL pública/assinada do PDF do protocolo. A tabela pode usar
     // qualquer um dos nomes conhecidos abaixo; campos sem URL HTTP(S) são ignorados.
     function presencialLinkProtocolo(row) {
@@ -3380,6 +3469,12 @@
               <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
               <div><small>Validade</small><strong>${escaparHTML(presencialFormatarDataPortal(row.validade || row.data_validade))}</strong></div>
               <div><small>Situação da unidade</small><strong>${escaparHTML(valorTexto(row.situacao_unidade, row.unidade_ativa === true ? "Ativa" : "Não informado"))}</strong></div>
+              <div class="ead-presencial-disponibilidade">
+                <small>Disponibilidade de turma</small>
+                <strong class="ead-presencial-status-turma ${presencialStatusTurma(row).status_turma === "turma_aberta" ? "is-aberta" : "is-sem-turma"}">${presencialStatusTurma(row).status_turma === "turma_aberta" ? "Tem turma aberta" : "Não tem turma aberta"}</strong>
+                <small>${presencialStatusTurma(row).status_turma === "turma_aberta" ? "Turma aberta nesta unidade física." : "Necessário captar 15 jovens para abrir uma turma."}</small>
+                ${currentProfile?.role === "admin" ? `<label class="ead-presencial-admin-turma">Alterar situação<select class="ead-presencial-select-turma" data-presencial-turma="${index}" aria-label="Disponibilidade de turma para ${escaparHTML(row.curso || "curso")}"><option value="sem_turma" ${presencialStatusTurma(row).status_turma !== "turma_aberta" ? "selected" : ""}>Não tem turma aberta</option><option value="turma_aberta" ${presencialStatusTurma(row).status_turma === "turma_aberta" ? "selected" : ""}>Tem turma aberta</option></select></label>` : ""}
+              </div>
               ${portaria ? `<div><small>Portaria</small><strong>${escaparHTML(portaria)}</strong></div>` : ""}
               <div class="ead-presencial-endereco"><small>Endereço</small><strong>${escaparHTML(presencialEnderecoExibicao(row))}</strong></div>
               <div class="ead-presencial-protocolo-link"><span class="ead-presencial-link-indisponivel">Verificando PDF cadastrado...</span></div>
@@ -3407,6 +3502,10 @@
         </div>
       `;
 
+      container.querySelectorAll(".ead-presencial-select-turma").forEach(select => {
+        const row = registros[Number(select.dataset.presencialTurma)];
+        select.addEventListener("change", () => presencialSalvarStatusTurma(row, select.value, select));
+      });
       presencialVincularGerenciadorProtocolos(registros);
 
       $("ead-presencial-voltar-subsede")?.addEventListener("click", () => {
