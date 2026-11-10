@@ -2756,3 +2756,21 @@
   .presencial-protocolo-acoes button { width: 100%; }
   #ead-mapa-detalhes .ead-presencial-protocolo-acoes > button { width: 100%; }
 }
+
+/* Pesquisa de cursos presenciais aprovados */
+#ead-section #ead-filtro-curso-presencial {
+  border-color: #b9cddd;
+  background: #fff;
+}
+#ead-section #ead-filtro-curso-presencial:focus {
+  border-color: #159b83;
+  box-shadow: 0 0 0 3px rgba(21, 155, 131, .12);
+}
+#ead-mapa-detalhes .ead-presencial-busca-resultados {
+  margin-top: 14px;
+}
+#ead-mapa-detalhes .ead-presencial-cursos-encontrados {
+  color: #087963;
+  font-weight: 700;
+}
+
