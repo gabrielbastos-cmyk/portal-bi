@@ -2774,3 +2774,18 @@
   font-weight: 700;
 }
 
+
+
+/* Disponibilidade de turmas presenciais por unidade física + curso */
+#ead-mapa-detalhes .ead-presencial-disponibilidade {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 11px 12px; border: 1px solid #dce5ee; border-radius: 10px;
+  background: #f8fafc; min-width: 220px;
+}
+#ead-mapa-detalhes .ead-presencial-disponibilidade > small { color: #718096; font-size: 11px; }
+#ead-mapa-detalhes .ead-presencial-status-turma { font-size: 13px; font-weight: 800; }
+#ead-mapa-detalhes .ead-presencial-status-turma.is-aberta { color: #16835b; }
+#ead-mapa-detalhes .ead-presencial-status-turma.is-sem-turma { color: #b7791f; }
+#ead-mapa-detalhes .ead-presencial-admin-turma { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-top: 5px; color: #334b67; font-size: 11px; }
+#ead-mapa-detalhes .ead-presencial-select-turma { width: 100%; min-height: 36px; padding: 6px 9px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #24364b; }
+#ead-mapa-detalhes .ead-presencial-select-turma:disabled { opacity: .6; cursor: wait; }
