@@ -1510,6 +1510,12 @@
         });
       }
 
+      if ($("ead-filtro-curso-presencial")) {
+        $("ead-filtro-curso-presencial").addEventListener("input", event => {
+          presencialRenderizarBuscaCurso(event.target.value);
+        });
+      }
+
       ["ead-filtro-uf", "ead-filtro-distancia", "ead-filtro-potencial"].forEach(id => {
         if ($(id)) $(id).addEventListener("change", () => {
           eadPaginaAtual = 1;
@@ -3159,23 +3165,26 @@
       aprovados.forEach(row => {
         const municipio = String(row.municipio || "").trim();
         const uf = String(row.uf || "").trim();
-        const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
-        const separarUnidadeMaringa = normalize(municipio) === "maringa";
-        const identificadorUnidade = separarUnidadeMaringa
-          ? String(row.unidade_id || row.cnpj || presencialChaveUnidade(row) || "").trim()
-          : "";
-        const chave = `${normalize(municipio)}|${normalize(uf)}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}${identificadorUnidade ? `|unidade:${normalize(identificadorUnidade)}` : ""}`;
         if (!municipio || !uf) return;
 
+        const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
+        const nomeUnidade = String(row.nome_unidade || row.unidade || row.nome || "").trim();
+
+        // Cada endereço/unidade física vira um grupo independente em TODAS as cidades.
+        // unidade_id/CNPJ têm prioridade; na ausência deles, usa a chave composta
+        // com nome e endereço da própria unidade.
+        const identificadorUnidade = String(
+          row.unidade_id || row.cnpj || presencialChaveUnidade(row) || ""
+        ).trim();
+        const chave = `${normalize(municipio)}|${normalize(uf)}|unidade:${normalize(identificadorUnidade)}`;
+
         if (!grupos.has(chave)) {
-          const nomeUnidade = String(row.nome_unidade || row.unidade || row.nome || "").trim();
           const rotuloUnidade = identificadorCuritiba === "curitiba-centro"
             ? "Curitiba — Centro"
             : identificadorCuritiba === "curitiba-sede"
               ? "Curitiba — Sede"
-              : separarUnidadeMaringa
-                ? (nomeUnidade || municipio)
-                : municipio;
+              : (nomeUnidade || municipio);
+
           grupos.set(chave, {
             municipio,
             uf,
@@ -3183,6 +3192,7 @@
             identificadorUnidade,
             rotuloUnidade,
             nomeUnidade,
+            endereco: presencialEnderecoExibicao(row),
             registros: [],
             unidades: new Set(),
             cursos: new Set()
@@ -3203,10 +3213,82 @@
         ...grupo,
         totalCursosAprovados: grupo.registros.length,
         totalCursosDiferentes: grupo.cursos.size,
-        totalUnidades: grupo.unidades.size
+        totalUnidades: grupo.unidades.size || 1
       })).sort((a, b) =>
-        a.municipio.localeCompare(b.municipio, "pt-BR")
+        String(a.rotuloUnidade || a.municipio).localeCompare(
+          String(b.rotuloUnidade || b.municipio), "pt-BR"
+        )
       );
+    }
+
+    function presencialRenderizarBuscaCurso(termo) {
+      const container = $("ead-mapa-detalhes");
+      if (!container) return;
+
+      const busca = normalize(termo);
+      if (!busca) {
+        eadMapaRenderizarDetalhes(null);
+        return;
+      }
+
+      const aprovados = presencialRegistrosAprovados().filter(row =>
+        normalize(row.curso).includes(busca)
+      );
+      const grupos = new Map();
+
+      aprovados.forEach(row => {
+        const municipio = String(row.municipio || "").trim();
+        const uf = String(row.uf || "").trim();
+        const subsede = String(row.subsede || "").trim();
+        if (!municipio || !uf) return;
+
+        const unidadeId = String(row.unidade_id || row.cnpj || presencialChaveUnidade(row) || "").trim();
+        const unidadeKey = `${normalize(municipio)}|${normalize(uf)}|${normalize(subsede)}|${normalize(unidadeId)}`;
+        if (!grupos.has(unidadeKey)) {
+          grupos.set(unidadeKey, {
+            municipio, uf, subsede, unidadeId,
+            nome: String(row.nome_unidade || row.unidade || row.nome || municipio).trim(),
+            endereco: presencialEnderecoExibicao(row),
+            cursos: new Map()
+          });
+        }
+        const grupo = grupos.get(unidadeKey);
+        const cursoKey = normalize(row.curso);
+        if (!grupo.cursos.has(cursoKey)) grupo.cursos.set(cursoKey, row.curso);
+      });
+
+      const resultados = [...grupos.values()].sort((a, b) =>
+        a.nome.localeCompare(b.nome, "pt-BR")
+      );
+
+      container.innerHTML = `
+        <section class="ead-presencial-subsede ead-presencial-busca-resultados">
+          <div class="ead-presencial-detalhe-topo">
+            <div>
+              <h4>Unidades com curso aprovado: ${escaparHTML(termo)}</h4>
+              <p>Resultados encontrados somente em cursos presenciais aprovados.</p>
+            </div>
+            <span class="ead-presencial-contagem">${resultados.length} unidades</span>
+          </div>
+          ${resultados.map(item => `
+            <article class="ead-presencial-municipio">
+              <div class="ead-presencial-municipio-info">
+                <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
+                <small>${item.cursos.size} curso(s) correspondente(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
+                <small>${escaparHTML(item.endereco)}</small>
+                <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
+              </div>
+              <button type="button" class="ead-presencial-consultar"
+                data-presencial-municipio="${escaparHTML(item.municipio)}"
+                data-presencial-uf="${escaparHTML(item.uf)}"
+                data-presencial-subsede="${escaparHTML(item.subsede)}"
+                data-presencial-unidade-id="${escaparHTML(item.unidadeId)}">Consultar</button>
+            </article>
+          `).join("") || '<p class="ead-presencial-vazio">Nenhuma unidade possui curso aprovado com esse nome.</p>'}
+        </section>
+      `;
+
+      presencialVincularBotoesConsulta();
     }
 
     function presencialRenderizarBlocoSubsede(registroEad, ponto = null) {
