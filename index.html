@@ -9,14 +9,14 @@
       <!-- Logo oficial GERAR incorporada neste arquivo para não depender de imagem externa -->
 
       <!-- CSS principal -->
-      <link rel="stylesheet" href="./style.css?v=20261105-maringa-polos-mapa-v5">
+      <link rel="stylesheet" href="./style.css?v=20261110-unidades-curso-v1">
 
       <!-- Bibliotecas e configurações existentes -->
       <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
       <script src="./config.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-      <script src="./script.js?v=20261105-maringa-polos-mapa-v5" defer></script>
+      <script src="./script.js?v=20261110-unidades-curso-v1" defer></script>
 
       <style>
 
@@ -1150,6 +1150,16 @@
                 <select id="ead-filtro-uf">
                   <option value="">Todas as UFs</option>
                 </select>
+              </label>
+
+              <label for="ead-filtro-curso-presencial">
+                Pesquisar curso presencial aprovado
+                <input
+                  id="ead-filtro-curso-presencial"
+                  type="search"
+                  placeholder="Ex.: Comércio Varejo..."
+                  autocomplete="off"
+                >
               </label>
 
               <label for="ead-filtro-distancia">
