@@ -3261,6 +3261,21 @@
       return valorTexto(row?.endereco || row?.endereco_normalizado);
     }
 
+    function presencialRotuloEndereco(row) {
+      const endereco = normalize(presencialEnderecoExibicao(row));
+      const municipio = normalize(row?.municipio || "");
+      const antigoJoinville = municipio === "joinville" && endereco.includes("rua ararangua 242");
+      const antigoLondrina = municipio === "londrina" && endereco.includes("rua edwy taques de araujo 900");
+      if (antigoJoinville || antigoLondrina) return "Endereço antigo";
+      return "Endereço da unidade";
+    }
+
+    function presencialHtmlEndereco(row) {
+      const endereco = presencialEnderecoExibicao(row);
+      if (!endereco || endereco === "Não informado") return "";
+      return `<small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco(row))}:</strong> ${escaparHTML(endereco)}</small>`;
+    }
+
     function presencialFormatarDataPortal(valor) {
       if (!valor) return "Não informado";
       const texto = String(valor).trim();
@@ -3406,6 +3421,13 @@
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
                 <small>${escaparHTML(item.endereco)}</small>
+                <small class="ead-presencial-endereco-lista"><strong>${escaparHTML((() => {
+                  const endereco = normalize(item.endereco);
+                  const municipio = normalize(item.municipio);
+                  return (municipio === "joinville" && endereco.includes("rua ararangua 242")) ||
+                    (municipio === "londrina" && endereco.includes("rua edwy taques de araujo 900"))
+                    ? "Endereço antigo" : "Endereço da unidade";
+                })())}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
               <button type="button" class="ead-presencial-consultar"
@@ -3439,6 +3461,7 @@
               ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
               · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
             </small>
+            ${presencialHtmlEndereco(item.registros?.[0])}
           </div>
           <button
             type="button"
