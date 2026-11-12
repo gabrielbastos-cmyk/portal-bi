@@ -3246,31 +3246,9 @@
     }
 
     function presencialAgruparMunicipiosDaSubsede(subsede) {
-      const aprovados = presencialRegistrosAprovados().filter(row => {
-        if (!presencialSubsedeCompativel(row.subsede, subsede)) return false;
-
-        const municipio = normalize(row.municipio);
-        const subsedeNormalizada = normalize(subsede);
-        const curso = normalize(row.curso || row.nome_curso || row.curso_nome)
-          .replace(/[^a-z0-9]/g, "");
-
-        // Joinville: mantém todos os municípios/polos da subsede.
-        // Dentro do município Joinville, exibe somente o curso 21 (não o 20).
-        if (
-          subsedeNormalizada === "joinville" &&
-          municipio === "joinville" &&
-          curso === "20"
-        ) return false;
-
-        // Londrina: remove somente o polo de Rolândia, sem excluir Londrina
-        // nem os demais municípios vinculados à subsede.
-        if (
-          subsedeNormalizada === "londrina" &&
-          municipio === "rolandia"
-        ) return false;
-
-        return true;
-      });
+      const aprovados = presencialRegistrosAprovados().filter(row =>
+        presencialSubsedeCompativel(row.subsede, subsede)
+      );
       const grupos = new Map();
 
       aprovados.forEach(row => {
