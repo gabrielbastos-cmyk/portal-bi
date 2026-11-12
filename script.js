@@ -2799,44 +2799,24 @@
       return `${String(base).toLowerCase()}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}`;
     }
 
-    // Endereços oficiais: os registros do endereço antigo são consolidados
-    // no endereço atual, preservando cursos, protocolos e PDFs já vinculados.
+    // Cada endereço físico permanece como uma unidade independente.
+    // O CNPJ identifica o estabelecimento e o endereço diferencia as unidades,
+    // evitando juntar a unidade antiga com a atual.
     function presencialEnderecoCanonico(row) {
-      const municipio = normalize(row?.municipio || "");
-      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
-      const endereco = normalize(row?.endereco_normalizado || row?.endereco || "");
-
-      if (municipio === "joinville" && cnpj === "05653393000237" &&
-          (endereco.includes("rua ararangua 242") || endereco.includes("rua ararangua 280"))) {
-        return "rua ararangua 280 america";
-      }
-      if (municipio === "londrina" && cnpj === "05653393001128" &&
-          (endereco.includes("rua edwy taques de araujo 900") || endereco.includes("alameda manoel ribas 42"))) {
-        return "alameda manoel ribas 42 centro";
-      }
-      return endereco;
+      return normalize(row?.endereco_normalizado || row?.endereco || "");
     }
 
     function presencialNomeUnidadeCanonico(row) {
-      const municipio = normalize(row?.municipio || "");
-      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
-      if (municipio === "joinville" && cnpj === "05653393000237" &&
-          presencialEnderecoCanonico(row) === "rua ararangua 280 america") return "Joinville";
-      if (municipio === "londrina" && cnpj === "05653393001128" &&
-          presencialEnderecoCanonico(row) === "alameda manoel ribas 42 centro") return "Londrina";
       return String(row?.nome_unidade || row?.unidade || row?.nome || row?.municipio || "").trim();
     }
 
-    // A chave combina estabelecimento e endereço canônico. Assim, somente
-    // endereços antigos explicitamente substituídos são unidos; outras unidades
-    // do mesmo CNPJ continuam independentes.
     function presencialIdentificadorAgrupamento(row) {
       const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
       const endereco = presencialEnderecoCanonico(row);
       if (cnpj.length === 14 && endereco) return `cnpj:${cnpj}|endereco:${endereco}`;
 
       const unidadeId = String(row?.unidade_id || "").trim();
-      if (unidadeId) return `unidade:${normalize(unidadeId)}`;
+      if (unidadeId) return `unidade:${normalize(unidadeId)}|endereco:${endereco}`;
 
       const nome = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
       return `endereco:${endereco || nome || presencialChaveUnidade(row)}`;
@@ -3277,11 +3257,8 @@
     }
 
     function presencialEnderecoExibicao(row) {
-      const municipio = normalize(row?.municipio || "");
-      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
-      if (municipio === "joinville" && cnpj === "05653393000237" && presencialEnderecoCanonico(row) === "rua ararangua 280 america") return "Rua Araranguá, 280 - América";
-      if (municipio === "londrina" && cnpj === "05653393001128" && presencialEnderecoCanonico(row) === "alameda manoel ribas 42 centro") return "Alameda Manoel Ribas, 42 - Centro";
-      return valorTexto(row?.endereco);
+      // Mantém o endereço original de cada unidade, inclusive unidades antigas.
+      return valorTexto(row?.endereco || row?.endereco_normalizado);
     }
 
     function presencialFormatarDataPortal(valor) {
