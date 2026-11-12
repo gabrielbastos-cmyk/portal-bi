@@ -3262,12 +3262,14 @@
     }
 
     function presencialRotuloEndereco(row) {
+      // Identifica o endereço antigo pelo município, logradouro e número.
+      // A extração dos números evita falhas por hífen, vírgula, CEP ou complemento.
       const endereco = normalize(presencialEnderecoExibicao(row));
       const municipio = normalize(row?.municipio || "");
-      const antigoJoinville = municipio === "joinville" && endereco.includes("rua ararangua 242");
-      const antigoLondrina = municipio === "londrina" && endereco.includes("rua edwy taques de araujo 900");
-      if (antigoJoinville || antigoLondrina) return "Endereço antigo";
-      return "Endereço da unidade";
+      const numero = (String(presencialEnderecoExibicao(row) || "").match(/(?:rua|avenida|alameda|rodovia)[^,\n]*?,?\s*(\d{1,5})/i) || [])[1] || "";
+      const antigoJoinville = municipio === "joinville" && endereco.includes("rua ararangua") && numero === "242";
+      const antigoLondrina = municipio === "londrina" && endereco.includes("rua edwy taques de araujo") && numero === "900";
+      return antigoJoinville || antigoLondrina ? "Endereço antigo" : "Endereço da unidade";
     }
 
     function presencialHtmlEndereco(row) {
@@ -3421,13 +3423,7 @@
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
                 <small>${escaparHTML(item.endereco)}</small>
-                <small class="ead-presencial-endereco-lista"><strong>${escaparHTML((() => {
-                  const endereco = normalize(item.endereco);
-                  const municipio = normalize(item.municipio);
-                  return (municipio === "joinville" && endereco.includes("rua ararangua 242")) ||
-                    (municipio === "londrina" && endereco.includes("rua edwy taques de araujo 900"))
-                    ? "Endereço antigo" : "Endereço da unidade";
-                })())}:</strong> ${escaparHTML(item.endereco)}</small>
+                <small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco({ municipio: item.municipio, endereco: item.endereco }))}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
               <button type="button" class="ead-presencial-consultar"
