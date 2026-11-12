@@ -3298,16 +3298,69 @@
         if (curso) grupo.cursos.add(curso);
       });
 
-      return [...grupos.values()].map(grupo => ({
+      const listaAgrupada = [...grupos.values()].map(grupo => ({
         ...grupo,
         totalCursosAprovados: grupo.registros.length,
         totalCursosDiferentes: grupo.cursos.size,
         totalUnidades: grupo.unidades.size || 1
-      })).sort((a, b) =>
-        String(a.rotuloUnidade || a.municipio).localeCompare(
-          String(b.rotuloUnidade || b.municipio), "pt-BR"
-        )
-      );
+      }));
+
+      /*
+       * Correção pontual de duplicidade no mapa presencial:
+       * - Joinville: prioriza o agrupamento que possui exatamente 21 cursos aprovados.
+       * - Londrina: quando houver mais de um agrupamento para o mesmo município/UF,
+       *   mantém o agrupamento com maior quantidade de cursos aprovados.
+       * As demais cidades continuam mantendo cada unidade física separadamente.
+       */
+      const cidadesComCorrecaoDuplicidade = new Set(["joinville", "londrina"]);
+      const gruposPorMunicipio = new Map();
+
+      listaAgrupada.forEach(grupo => {
+        const cidade = normalize(grupo.municipio);
+        if (!cidadesComCorrecaoDuplicidade.has(cidade)) return;
+
+        const chaveCidade = `${cidade}|${normalize(grupo.uf)}`;
+        if (!gruposPorMunicipio.has(chaveCidade)) {
+          gruposPorMunicipio.set(chaveCidade, []);
+        }
+        gruposPorMunicipio.get(chaveCidade).push(grupo);
+      });
+
+      const gruposParaRemover = new Set();
+
+      gruposPorMunicipio.forEach((itens, chaveCidade) => {
+        if (itens.length <= 1) return;
+
+        const cidade = chaveCidade.split("|")[0];
+        let grupoMantido = null;
+
+        if (cidade === "joinville") {
+          grupoMantido = itens.find(item => item.totalCursosAprovados === 21) || null;
+        }
+
+        // Para Londrina, ou se Joinville não tiver um grupo com 21 cursos,
+        // mantém o agrupamento com mais cursos aprovados.
+        if (!grupoMantido) {
+          grupoMantido = [...itens].sort((a, b) =>
+            b.totalCursosAprovados - a.totalCursosAprovados ||
+            String(a.rotuloUnidade || "").localeCompare(
+              String(b.rotuloUnidade || ""), "pt-BR"
+            )
+          )[0];
+        }
+
+        itens.forEach(item => {
+          if (item !== grupoMantido) gruposParaRemover.add(item);
+        });
+      });
+
+      return listaAgrupada
+        .filter(grupo => !gruposParaRemover.has(grupo))
+        .sort((a, b) =>
+          String(a.rotuloUnidade || a.municipio).localeCompare(
+            String(b.rotuloUnidade || b.municipio), "pt-BR"
+          )
+        );
     }
 
     function presencialRenderizarBuscaCurso(termo) {
