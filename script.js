@@ -3262,13 +3262,14 @@
     }
 
     function presencialRotuloEndereco(row) {
-      // Identifica o endereço antigo pelo município, logradouro e número.
-      // A extração dos números evita falhas por hífen, vírgula, CEP ou complemento.
-      const endereco = normalize(presencialEnderecoExibicao(row));
+      // Identifica os endereços antigos pelo município, logradouro e número exato.
+      // A checagem por número isolado evita falhas com vírgulas, hífens, CEP e complementos.
+      const endereco = normalize(presencialEnderecoExibicao(row)).replace(/\s+/g, " ").trim();
       const municipio = normalize(row?.municipio || "");
-      const numero = (String(presencialEnderecoExibicao(row) || "").match(/(?:rua|avenida|alameda|rodovia)[^,\n]*?,?\s*(\d{1,5})/i) || [])[1] || "";
-      const antigoJoinville = municipio === "joinville" && endereco.includes("rua ararangua") && numero === "242";
-      const antigoLondrina = municipio === "londrina" && endereco.includes("rua edwy taques de araujo") && numero === "900";
+      const antigoJoinville = municipio === "joinville" &&
+        endereco.includes("rua ararangua") && /(?:^|\D)242(?:\D|$)/.test(endereco);
+      const antigoLondrina = municipio === "londrina" &&
+        endereco.includes("rua edwy taques de araujo") && /(?:^|\D)900(?:\D|$)/.test(endereco);
       return antigoJoinville || antigoLondrina ? "Endereço antigo" : "Endereço da unidade";
     }
 
@@ -3422,7 +3423,6 @@
               <div class="ead-presencial-municipio-info">
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
-                <small>${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco({ municipio: item.municipio, endereco: item.endereco }))}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
