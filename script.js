@@ -2798,6 +2798,31 @@
       return `${String(base).toLowerCase()}${identificadorCuritiba ? `|${identificadorCuritiba}` : ""}`;
     }
 
+    // Identificador estável da unidade física para a listagem geográfica.
+    // O CNPJ identifica o estabelecimento; unidade_id fica como alternativa quando
+    // o CNPJ não estiver preenchido. Assim, variações de unidade_id da mesma filial
+    // não criam cartões duplicados para o mesmo município/subsede.
+    function presencialIdentificadorAgrupamento(row) {
+      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
+      if (cnpj.length === 14) return `cnpj:${cnpj}`;
+
+      const unidadeId = String(row?.unidade_id || "").trim();
+      if (unidadeId) return `unidade:${normalize(unidadeId)}`;
+
+      const endereco = normalize(row?.endereco_normalizado || row?.endereco || "");
+      const nome = normalize(row?.nome_unidade || row?.unidade || row?.nome || "");
+      return `endereco:${endereco || nome || presencialChaveUnidade(row)}`;
+    }
+
+    function presencialChaveCursoUnico(row) {
+      return [
+        presencialIdentificadorAgrupamento(row),
+        normalize(row?.curso || ""),
+        normalize(row?.cbo || row?.codigo_cbo || ""),
+        normalize(row?.protocolo || row?.numero_protocolo || "")
+      ].join("|");
+    }
+
     function presencialRegistrosAprovados(registros = presencialGeoRegistros) {
       const unicos = new Map();
       (registros || []).forEach(row => {
@@ -3096,7 +3121,9 @@
           presencialRenderizarCursosDoMunicipio(
             presencialUltimaConsulta.municipio,
             presencialUltimaConsulta.uf,
-            presencialUltimaConsulta.subsede
+            presencialUltimaConsulta.subsede,
+            presencialUltimaConsulta.unidadeCuritiba || "",
+            presencialUltimaConsulta.unidadeId || ""
           );
         }
       } catch (error) {
@@ -3258,14 +3285,8 @@
 
         const identificadorCuritiba = presencialIdentificadorUnidadeCuritiba(row);
         const nomeUnidade = String(row.nome_unidade || row.unidade || row.nome || "").trim();
-
-        // Cada endereço/unidade física vira um grupo independente em TODAS as cidades.
-        // unidade_id/CNPJ têm prioridade; na ausência deles, usa a chave composta
-        // com nome e endereço da própria unidade.
-        const identificadorUnidade = String(
-          row.unidade_id || row.cnpj || presencialChaveUnidade(row) || ""
-        ).trim();
-        const chave = `${normalize(municipio)}|${normalize(uf)}|unidade:${normalize(identificadorUnidade)}`;
+        const identificadorUnidade = presencialIdentificadorAgrupamento(row);
+        const chave = `${normalize(municipio)}|${normalize(uf)}|${normalize(subsede)}|${identificadorUnidade}`;
 
         if (!grupos.has(chave)) {
           const rotuloUnidade = identificadorCuritiba === "curitiba-centro"
@@ -3282,28 +3303,31 @@
             rotuloUnidade,
             nomeUnidade,
             endereco: presencialEnderecoExibicao(row),
-            registros: [],
-            unidades: new Set(),
+            registros: new Map(),
+            unidades: new Set([identificadorUnidade]),
             cursos: new Set()
           });
         }
 
         const grupo = grupos.get(chave);
-        grupo.registros.push(row);
-
-        const unidade = presencialChaveUnidade(row);
-        if (unidade) grupo.unidades.add(unidade);
-
-        const curso = normalize(row.curso);
-        if (curso) grupo.cursos.add(curso);
+        const chaveCurso = presencialChaveCursoUnico(row);
+        if (!grupo.registros.has(chaveCurso)) {
+          grupo.registros.set(chaveCurso, row);
+          const curso = normalize(row.curso);
+          if (curso) grupo.cursos.add(curso);
+        }
       });
 
-      return [...grupos.values()].map(grupo => ({
-        ...grupo,
-        totalCursosAprovados: grupo.registros.length,
-        totalCursosDiferentes: grupo.cursos.size,
-        totalUnidades: grupo.unidades.size || 1
-      })).sort((a, b) =>
+      return [...grupos.values()].map(grupo => {
+        const registrosUnicos = [...grupo.registros.values()];
+        return {
+          ...grupo,
+          registros: registrosUnicos,
+          totalCursosAprovados: registrosUnicos.length,
+          totalCursosDiferentes: grupo.cursos.size,
+          totalUnidades: 1
+        };
+      }).sort((a, b) =>
         String(a.rotuloUnidade || a.municipio).localeCompare(
           String(b.rotuloUnidade || b.municipio), "pt-BR"
         )
@@ -3444,15 +3468,22 @@
         normalize(row.uf) === normalize(uf) &&
         presencialSubsedeCompativel(row.subsede, subsede) &&
         (!unidadeCuritiba || presencialIdentificadorUnidadeCuritiba(row) === unidadeCuritiba) &&
-        (!unidadeId || normalize(row.unidade_id || row.cnpj || presencialChaveUnidade(row)) === normalize(unidadeId))
-      ).sort((a, b) =>
+        (!unidadeId || presencialIdentificadorAgrupamento(row) === unidadeId)
+      );
+
+      const registrosUnicos = new Map();
+      registros.forEach(row => {
+        const chaveCurso = presencialChaveCursoUnico(row);
+        if (!registrosUnicos.has(chaveCurso)) registrosUnicos.set(chaveCurso, row);
+      });
+      const registrosExibicao = [...registrosUnicos.values()].sort((a, b) =>
         String(a.curso || "").localeCompare(String(b.curso || ""), "pt-BR")
       );
 
       presencialUltimaConsulta = { municipio, uf, subsede, unidadeCuritiba, unidadeId };
-      const unidades = new Set(registros.map(presencialChaveUnidade).filter(Boolean));
+      const unidades = new Set(registrosExibicao.map(presencialIdentificadorAgrupamento).filter(Boolean));
 
-      const cursosHtml = registros.map((row, index) => {
+      const cursosHtml = registrosExibicao.map((row, index) => {
         const status = presencialStatusExibicao(row);
         const portaria = row.portaria || row.numero_portaria || row.portaria_autorizacao || "";
         return `
@@ -3493,7 +3524,7 @@
         </div>
 
         <div class="ead-presencial-resumo">
-          <span><strong>${registros.length.toLocaleString("pt-BR")}</strong> cursos aprovados</span>
+          <span><strong>${registrosExibicao.length.toLocaleString("pt-BR")}</strong> cursos aprovados</span>
           <span><strong>${unidades.size.toLocaleString("pt-BR")}</strong> unidades</span>
         </div>
 
@@ -3503,10 +3534,10 @@
       `;
 
       container.querySelectorAll(".ead-presencial-select-turma").forEach(select => {
-        const row = registros[Number(select.dataset.presencialTurma)];
+        const row = registrosExibicao[Number(select.dataset.presencialTurma)];
         select.addEventListener("change", () => presencialSalvarStatusTurma(row, select.value, select));
       });
-      presencialVincularGerenciadorProtocolos(registros);
+      presencialVincularGerenciadorProtocolos(registrosExibicao);
 
       $("ead-presencial-voltar-subsede")?.addEventListener("click", () => {
         const registroEad = eadRegistros.find(row =>
