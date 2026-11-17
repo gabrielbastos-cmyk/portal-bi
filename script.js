@@ -584,7 +584,7 @@
     }
 
     const SUPERVISOR_MODULES = [
-      { key: "ead", label: "Análise Geográfica EaD" },
+      { key: "ead", label: "Análise Geográfica EaD — todas as subsedes" },
       { key: "metas_aprendiz", label: "Metas Aprendiz" },
       { key: "metas_estagio", label: "Metas Estágio" },
       { key: "carteira_consultores", label: "Carteira de Consultores" },
@@ -1583,15 +1583,10 @@
         offset += pageSize;
       }
 
-      // Para supervisores, limita os registros às subsedes autorizadas.
-      if (currentProfile?.role === "supervisor") {
-        const allowedSubsedes = new Set((currentAccess.subsedes || []).map(normalize));
-        eadRegistros = registros.filter(row =>
-          allowedSubsedes.has(normalize(row.subsede_responsavel))
-        );
-      } else {
-        eadRegistros = registros;
-      }
+      // A Análise Geográfica EaD é um módulo de consulta institucional:
+      // quando o administrador libera o módulo, o usuário autorizado visualiza
+      // todas as subsedes. A restrição regional de supervisor não se aplica aqui.
+      eadRegistros = registros;
       // Carrega também as unidades presenciais, agrupadas visualmente por endereço/unidade.
       // Os dados permanecem separados da tabela EaD para não misturar indicadores municipais.
       const presencialRows = [];
@@ -1615,12 +1610,9 @@
         if (pPage.length < presencialPageSize) break;
         presencialOffset += presencialPageSize;
       }
-      if (currentProfile?.role === "supervisor") {
-        const allowedSubsedes = new Set((currentAccess.subsedes || []).map(normalize));
-        presencialGeoRegistros = presencialRows.filter(row => allowedSubsedes.has(normalize(row.subsede)));
-      } else {
-        presencialGeoRegistros = presencialRows;
-      }
+      // O bloco Presencial da Análise Geográfica segue a mesma regra do EaD:
+      // o acesso ao módulo libera a visualização de todas as subsedes.
+      presencialGeoRegistros = presencialRows;
 
       // Documentos são carregados separadamente dos registros geográficos.
       // A ausência da tabela não interrompe o mapa nem os indicadores.
@@ -2974,11 +2966,9 @@
           .order("created_at", { ascending: false });
         if (error) throw error;
         presencialProtocolosTabelaDisponivel = true;
-        const permitidos = currentProfile?.role === "supervisor"
-          ? new Set((currentAccess.subsedes || []).map(normalize))
-          : null;
+        // Os protocolos também ficam disponíveis para todas as subsedes
+        // aos usuários que receberam acesso à Análise Geográfica EaD.
         (data || []).forEach(doc => {
-          if (permitidos && !permitidos.has(normalize(doc.subsede))) return;
           if (doc.registro_id && !presencialProtocolosCache.has(String(doc.registro_id))) {
             presencialProtocolosCache.set(String(doc.registro_id), doc);
           }
