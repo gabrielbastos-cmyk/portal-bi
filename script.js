@@ -2627,6 +2627,23 @@
             });
 
             const quantidadeCursos = eadCursosValidados(r).length;
+            const unidadesPresenciais = presencialRegistrosAprovados().filter(row =>
+              normalize(row.municipio) === normalize(r.municipio) &&
+              normalize(row.uf) === normalize(r.uf)
+            );
+            const unidadesPorChave = new Map();
+            unidadesPresenciais.forEach(row => {
+              const chave = presencialIdentificadorAgrupamento(row);
+              if (!unidadesPorChave.has(chave)) unidadesPorChave.set(chave, row);
+            });
+            const identificacaoUnidades = [...unidadesPorChave.values()].map(row => `
+              <small class="ead-proximo-unidade">
+                <strong>${escaparHTML(presencialRotuloUnidade(row))}</strong>
+                · Subsede: ${escaparHTML(valorTexto(row.subsede))}
+                · CNPJ da matriz: ${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjMatriz(row)))}
+                · CNPJ da unidade: ${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjUnidade(row)))}
+              </small>
+            `).join("");
 
             return `
               <article class="ead-proximo-item">
@@ -2636,6 +2653,7 @@
                     ${distancia} km em linha reta ·
                     ${quantidadeCursos} ${quantidadeCursos === 1 ? "curso validado" : "cursos validados"}
                   </small>
+                  ${identificacaoUnidades}
                 </div>
                 <button
                   type="button"
@@ -2842,6 +2860,59 @@
         /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
         "$1.$2.$3/$4-$5"
       );
+    }
+
+    // Aceita os nomes de coluna mais comuns usados nas planilhas de matriz/filial.
+    // O CNPJ da unidade continua sendo o CNPJ próprio do estabelecimento.
+    function presencialCnpjMatriz(row) {
+      const informado = row?.cnpj_matriz || row?.cnpj_da_matriz || row?.cnpj_sede ||
+        row?.cnpj_raiz_estabelecimento || row?.cnpj_principal || "";
+      if (informado) return informado;
+
+      // Quando matriz e filial estão em linhas separadas, localiza a matriz
+      // pelo mesmo radical do CNPJ e pelo estabelecimento 0001.
+      const cnpjAtual = String(row?.cnpj_unidade || row?.cnpj_filial ||
+        row?.cnpj_da_unidade || row?.cnpj_estabelecimento || row?.cnpj || "").replace(/\D/g, "");
+      if (cnpjAtual.length !== 14) return "";
+      const radical = cnpjAtual.slice(0, 8);
+      const matriz = (presencialGeoRegistros || []).find(candidato => {
+        const cnpj = String(candidato?.cnpj_unidade || candidato?.cnpj_filial ||
+          candidato?.cnpj_da_unidade || candidato?.cnpj_estabelecimento || candidato?.cnpj || "").replace(/\D/g, "");
+        return cnpj.length === 14 && cnpj.slice(0, 8) === radical && cnpj.slice(8, 12) === "0001";
+      });
+      return matriz?.cnpj_unidade || matriz?.cnpj_filial || matriz?.cnpj_da_unidade ||
+        matriz?.cnpj_estabelecimento || matriz?.cnpj || "";
+    }
+
+    function presencialCnpjUnidade(row) {
+      return row?.cnpj_unidade || row?.cnpj_filial || row?.cnpj_da_unidade ||
+        row?.cnpj_estabelecimento || row?.cnpj || "";
+    }
+
+    function presencialTipoEstabelecimento(row) {
+      const tipoInformado = normalize(
+        row?.tipo_estabelecimento || row?.tipo_unidade || row?.tipo_cadastro ||
+        row?.natureza_unidade || row?.matriz_filial || row?.tipo
+      );
+      if (/(matriz|sede)/.test(tipoInformado)) return "Matriz";
+      if (/(filial|unidade)/.test(tipoInformado)) return "Unidade";
+
+      const matriz = String(presencialCnpjMatriz(row) || "").replace(/\D/g, "");
+      const unidade = String(presencialCnpjUnidade(row) || "").replace(/\D/g, "");
+      if (matriz.length === 14 && unidade.length === 14) {
+        return matriz === unidade ? "Matriz" : "Unidade";
+      }
+      if (unidade.length === 14) {
+        if (unidade.slice(8, 12) === "0001") return "Matriz";
+        if (matriz.length === 14 && matriz !== unidade) return "Unidade";
+      }
+      return "";
+    }
+
+    function presencialRotuloUnidade(row) {
+      const nome = presencialNomeUnidadeCanonico(row) || valorTexto(row?.municipio);
+      const tipo = presencialTipoEstabelecimento(row);
+      return tipo ? `${nome} — ${tipo}` : nome;
     }
 
     // Disponibilidade é independente para cada unidade física + curso aprovado.
@@ -3309,7 +3380,7 @@
             ? "Curitiba — Centro"
             : identificadorCuritiba === "curitiba-sede"
               ? "Curitiba — Sede"
-              : (nomeUnidade || municipio);
+              : presencialRotuloUnidade(row);
 
           grupos.set(chave, {
             municipio,
@@ -3361,14 +3432,15 @@
         return;
       }
 
-      // A busca aceita município, nome da unidade, endereço, subsede,
-      // curso, CBO e protocolo — não apenas o nome do curso.
+      // Mantém a pesquisa ampla, mas quando o termo corresponde a um curso,
+      // cada resultado passa a representar a unidade + curso encontrado.
       const aprovados = presencialRegistrosAprovados().filter(row => {
         const campos = [row.municipio, row.uf, row.nome_unidade, row.unidade, row.nome,
           row.endereco, row.endereco_normalizado, row.subsede, row.curso, row.cbo,
           row.codigo_cbo, row.protocolo, row.numero_protocolo];
         return campos.some(valor => normalize(valor || "").includes(busca));
       });
+      const buscaPorCurso = aprovados.some(row => normalize(row.curso || "").includes(busca));
       const grupos = new Map();
 
       aprovados.forEach(row => {
@@ -3378,17 +3450,24 @@
         if (!municipio || !uf) return;
 
         const unidadeId = presencialIdentificadorAgrupamento(row);
+        const cursoEncontrado = buscaPorCurso && normalize(row.curso || "").includes(busca)
+          ? String(row.curso || "").trim()
+          : "";
+        // Se a busca for por curso, não mistura cursos diferentes no mesmo cartão.
         const unidadeKey = `${normalize(municipio)}|${normalize(uf)}|${normalize(subsede)}|${unidadeId}`;
-        if (!grupos.has(unidadeKey)) {
-          grupos.set(unidadeKey, {
+        const chave = cursoEncontrado ? `${unidadeKey}|curso:${normalize(cursoEncontrado)}` : unidadeKey;
+
+        if (!grupos.has(chave)) {
+          grupos.set(chave, {
             municipio, uf, subsede, unidadeId,
-            nome: presencialNomeUnidadeCanonico(row) || municipio,
+            nome: presencialRotuloUnidade(row) || municipio,
             endereco: presencialEnderecoExibicao(row),
+            cursoDireto: cursoEncontrado,
             cursos: new Map(),
             protocolos: new Set()
           });
         }
-        const grupo = grupos.get(unidadeKey);
+        const grupo = grupos.get(chave);
         const cursoKey = normalize(row.curso);
         if (cursoKey && !grupo.cursos.has(cursoKey)) grupo.cursos.set(cursoKey, row.curso);
         const protocolo = String(row.protocolo || row.numero_protocolo || "").trim();
@@ -3396,7 +3475,9 @@
       });
 
       const resultados = [...grupos.values()].sort((a, b) =>
-        `${a.nome} ${a.municipio}`.localeCompare(`${b.nome} ${b.municipio}`, "pt-BR")
+        `${a.nome} ${a.municipio} ${a.cursoDireto || ""}`.localeCompare(
+          `${b.nome} ${b.municipio} ${b.cursoDireto || ""}`, "pt-BR"
+        )
       );
 
       container.innerHTML = `
@@ -3404,9 +3485,11 @@
           <div class="ead-presencial-detalhe-topo">
             <div>
               <h4>Resultados da consulta presencial: ${escaparHTML(termo)}</h4>
-              <p>Pesquisa por município, unidade, endereço, subsede, curso ou protocolo. Exibindo registros presenciais aprovados.</p>
+              <p>${buscaPorCurso
+                ? "Cursos encontrados nas unidades presenciais aprovadas. Consultar abre diretamente o curso pesquisado."
+                : "Pesquisa por município, unidade, endereço, subsede, curso ou protocolo. Exibindo registros presenciais aprovados."}</p>
             </div>
-            <span class="ead-presencial-contagem">${resultados.length} unidade(s)</span>
+            <span class="ead-presencial-contagem">${resultados.length} resultado(s)</span>
           </div>
           ${resultados.map(item => `
             <article class="ead-presencial-municipio">
@@ -3420,7 +3503,8 @@
                 data-presencial-municipio="${escaparHTML(item.municipio)}"
                 data-presencial-uf="${escaparHTML(item.uf)}"
                 data-presencial-subsede="${escaparHTML(item.subsede)}"
-                data-presencial-unidade-id="${escaparHTML(item.unidadeId)}">Consultar</button>
+                data-presencial-unidade-id="${escaparHTML(item.unidadeId)}"
+                data-presencial-curso="${escaparHTML(item.cursoDireto || "")}">Consultar</button>
             </article>
           `).join("") || '<p class="ead-presencial-vazio">Nenhuma unidade com curso presencial aprovado foi encontrada para essa pesquisa. Verifique se o município possui registros na base presencial.</p>'}
         </section>
@@ -3485,7 +3569,7 @@
       `;
     }
 
-    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede, unidadeCuritiba = "", unidadeId = "") {
+    function presencialRenderizarCursosDoMunicipio(municipio, uf, subsede, unidadeCuritiba = "", unidadeId = "", cursoSelecionado = "") {
       const container = $("ead-mapa-detalhes");
       if (!container) return;
 
@@ -3494,7 +3578,8 @@
         normalize(row.uf) === normalize(uf) &&
         presencialSubsedeCompativel(row.subsede, subsede) &&
         (!unidadeCuritiba || presencialIdentificadorUnidadeCuritiba(row) === unidadeCuritiba) &&
-        (!unidadeId || presencialIdentificadorAgrupamento(row) === unidadeId)
+        (!unidadeId || presencialIdentificadorAgrupamento(row) === unidadeId) &&
+        (!cursoSelecionado || normalize(row.curso) === normalize(cursoSelecionado))
       );
 
       const registrosUnicos = new Map();
@@ -3519,8 +3604,9 @@
               <span>${escaparHTML(status)}</span>
             </div>
             <div class="ead-presencial-curso-grade">
-              <div><small>Unidade</small><strong>${escaparHTML(presencialNomeUnidadeCanonico(row) || row.municipio)}</strong></div>
-              <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(row.cnpj))}</strong></div>
+              <div><small>Unidade</small><strong>${escaparHTML(presencialRotuloUnidade(row))}</strong></div>
+              <div><small>CNPJ da matriz (sede)</small><strong>${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjMatriz(row)))}</strong></div>
+              <div><small>CNPJ da unidade (filial)</small><strong>${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjUnidade(row)))}</strong></div>
               <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
               <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
               <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
@@ -3544,7 +3630,7 @@
         <div class="ead-presencial-detalhe-topo">
           <div>
             <h4>${escaparHTML(unidadeCuritiba === "curitiba-centro" ? "Curitiba — Centro" : unidadeCuritiba === "curitiba-sede" ? "Curitiba — Sede" : municipio)} - ${escaparHTML(uf)}</h4>
-            <p>Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
+            <p>${cursoSelecionado ? `Curso pesquisado: ${escaparHTML(cursoSelecionado)} · ` : ""}Cursos presenciais aprovados · Subsede ${escaparHTML(subsede)}</p>
           </div>
           <button type="button" class="ead-mapa-botao" id="ead-presencial-voltar-subsede">← Voltar à pesquisa</button>
         </div>
@@ -3625,7 +3711,8 @@
             botao.dataset.presencialUf,
             botao.dataset.presencialSubsede,
             botao.dataset.presencialUnidadeCuritiba || "",
-            botao.dataset.presencialUnidadeId || ""
+            botao.dataset.presencialUnidadeId || "",
+            botao.dataset.presencialCurso || ""
           );
         });
       });
