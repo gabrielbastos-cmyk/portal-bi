@@ -1663,6 +1663,18 @@
       );
     }
 
+    // O mapa mantém todos os municípios da base EaD visíveis mesmo quando
+    // a classificação de distância/potencial é usada para filtrar a tabela e os KPIs.
+    // Município e UF continuam sendo respeitados como filtros geográficos.
+    function obterRegistrosEaDParaMapa() {
+      const municipio = normalize($("ead-filtro-municipio")?.value || "");
+      const uf = $("ead-filtro-uf")?.value || "";
+      return eadRegistros.filter(row =>
+        (!municipio || normalize(row.municipio).includes(municipio)) &&
+        (!uf || String(row.uf || "") === uf)
+      );
+    }
+
     // ==================================================
     // EaD — MAPA INTERATIVO
     // ==================================================
@@ -2889,6 +2901,22 @@
         row?.cnpj_estabelecimento || row?.cnpj || "";
     }
 
+
+    // Identificação exibida diretamente nos cartões da lista presencial.
+    // Não altera os dados nem o comportamento do botão Consultar.
+    function presencialHtmlIdentificacaoCnpj(row) {
+      if (!row) return "";
+      const cnpjMatriz = presencialFormatarCnpjPortal(presencialCnpjMatriz(row));
+      const cnpjUnidade = presencialFormatarCnpjPortal(presencialCnpjUnidade(row));
+      return `
+        <small class="ead-presencial-identificacao-cnpj">
+          CNPJ da matriz: ${escaparHTML(cnpjMatriz)}
+          <span aria-hidden="true"> · </span>
+          CNPJ da unidade/filial: ${escaparHTML(cnpjUnidade)}
+        </small>
+      `;
+    }
+
     function presencialTipoEstabelecimento(row) {
       const tipoInformado = normalize(
         row?.tipo_estabelecimento || row?.tipo_unidade || row?.tipo_cadastro ||
@@ -3462,6 +3490,7 @@
             municipio, uf, subsede, unidadeId,
             nome: presencialRotuloUnidade(row) || municipio,
             endereco: presencialEnderecoExibicao(row),
+            registroIdentificacao: row,
             cursoDireto: cursoEncontrado,
             cursos: new Map(),
             protocolos: new Set()
@@ -3496,6 +3525,7 @@
               <div class="ead-presencial-municipio-info">
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
+                ${presencialHtmlIdentificacaoCnpj(item.registroIdentificacao)}
                 <small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco({ municipio: item.municipio, endereco: item.endereco }))}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
@@ -3531,6 +3561,7 @@
               ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
               · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
             </small>
+            ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             ${presencialHtmlEndereco(item.registros?.[0])}
           </div>
           <button
@@ -3684,6 +3715,7 @@
             <div class="ead-presencial-municipio-info">
               <strong>${escaparHTML(item.rotuloUnidade || item.municipio)} - ${escaparHTML(item.uf)}</strong>
               <small>${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados · ${item.totalUnidades.toLocaleString("pt-BR")} unidades</small>
+              ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             </div>
             <button type="button" class="ead-presencial-consultar"
               data-presencial-municipio="${escaparHTML(item.municipio)}"
@@ -4033,6 +4065,10 @@
       if (!painel) return;
 
       const aviso = $("ead-mapa-aviso");
+      // Não usar registrosEaD (filtrados por distância/potencial) para desenhar
+      // os pontos: isso escondia municípios inteiros do mapa quando esses filtros
+      // estavam selecionados. Os indicadores e a tabela continuam filtrados.
+      const registrosCompletosMapa = obterRegistrosEaDParaMapa();
 
       try {
         await eadMapaCarregarLeaflet();
@@ -4213,14 +4249,14 @@
 
         if (!mostrarEaD) eadMapaMarcadoresMunicipios.clearLayers();
 
-        const selecao = mostrarEaD ? eadMapaObterSelecao(registros) : null;
+        const selecao = mostrarEaD ? eadMapaObterSelecao(registrosCompletosMapa) : null;
         const proximos = selecao ? eadMapaObterMunicipiosProximos(selecao) : [];
 
         // Com um município selecionado, mantemos no mapa os municípios filtrados,
         // o município selecionado e os municípios próximos com cursos validados.
         const mapaPorChave = new Map();
 
-        if (mostrarEaD) registros.forEach(r => mapaPorChave.set(eadChaveMunicipio(r), r));
+        if (mostrarEaD) registrosCompletosMapa.forEach(r => mapaPorChave.set(eadChaveMunicipio(r), r));
 
         if (selecao) {
           mapaPorChave.set(eadChaveMunicipio(selecao), selecao);
@@ -4320,7 +4356,7 @@
 
           if (aviso) {
             aviso.textContent =
-              `${mostrarEaD ? validos.toLocaleString("pt-BR") + " municípios EaD" : "EaD oculto"} no mapa. ` +
+              `${mostrarEaD ? validos.toLocaleString("pt-BR") + " municípios EaD (sem restringir por distância/potencial)" : "EaD oculto"} no mapa. ` +
               `${mostrarPresencial ? (eadMapaMarcadoresPresencial?.getLayers().length || 0) + " unidades presenciais" : "Presencial oculto"}. ` +
               `${todosPontos} pontos de atendimento EaD aproximados. ` +
               (modoFonte === "presencial" ? "Clique nos marcadores presenciais para ver endereço, situação e cursos da unidade." : "Digite ou selecione um município para consultar os detalhes EaD.");
