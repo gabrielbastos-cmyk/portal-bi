@@ -2901,22 +2901,6 @@
         row?.cnpj_estabelecimento || row?.cnpj || "";
     }
 
-
-    // Identificação exibida diretamente nos cartões da lista presencial.
-    // Não altera os dados nem o comportamento do botão Consultar.
-    function presencialHtmlIdentificacaoCnpj(row) {
-      if (!row) return "";
-      const cnpjMatriz = presencialFormatarCnpjPortal(presencialCnpjMatriz(row));
-      const cnpjUnidade = presencialFormatarCnpjPortal(presencialCnpjUnidade(row));
-      return `
-        <small class="ead-presencial-identificacao-cnpj">
-          CNPJ da matriz: ${escaparHTML(cnpjMatriz)}
-          <span aria-hidden="true"> · </span>
-          CNPJ da unidade/filial: ${escaparHTML(cnpjUnidade)}
-        </small>
-      `;
-    }
-
     function presencialTipoEstabelecimento(row) {
       const tipoInformado = normalize(
         row?.tipo_estabelecimento || row?.tipo_unidade || row?.tipo_cadastro ||
@@ -3490,7 +3474,6 @@
             municipio, uf, subsede, unidadeId,
             nome: presencialRotuloUnidade(row) || municipio,
             endereco: presencialEnderecoExibicao(row),
-            registroIdentificacao: row,
             cursoDireto: cursoEncontrado,
             cursos: new Map(),
             protocolos: new Set()
@@ -3525,7 +3508,6 @@
               <div class="ead-presencial-municipio-info">
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
-                ${presencialHtmlIdentificacaoCnpj(item.registroIdentificacao)}
                 <small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco({ municipio: item.municipio, endereco: item.endereco }))}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
@@ -3561,7 +3543,6 @@
               ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
               · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
             </small>
-            ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             ${presencialHtmlEndereco(item.registros?.[0])}
           </div>
           <button
@@ -3715,7 +3696,6 @@
             <div class="ead-presencial-municipio-info">
               <strong>${escaparHTML(item.rotuloUnidade || item.municipio)} - ${escaparHTML(item.uf)}</strong>
               <small>${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados · ${item.totalUnidades.toLocaleString("pt-BR")} unidades</small>
-              ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             </div>
             <button type="button" class="ead-presencial-consultar"
               data-presencial-municipio="${escaparHTML(item.municipio)}"
