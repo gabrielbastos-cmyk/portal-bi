@@ -2901,22 +2901,6 @@
         row?.cnpj_estabelecimento || row?.cnpj || "";
     }
 
-
-    // Identificação exibida diretamente nos cartões da lista presencial.
-    // Não altera os dados nem o comportamento do botão Consultar.
-    function presencialHtmlIdentificacaoCnpj(row) {
-      if (!row) return "";
-      const cnpjMatriz = presencialFormatarCnpjPortal(presencialCnpjMatriz(row));
-      const cnpjUnidade = presencialFormatarCnpjPortal(presencialCnpjUnidade(row));
-      return `
-        <small class="ead-presencial-identificacao-cnpj">
-          CNPJ da matriz: ${escaparHTML(cnpjMatriz)}
-          <span aria-hidden="true"> · </span>
-          CNPJ da unidade/filial: ${escaparHTML(cnpjUnidade)}
-        </small>
-      `;
-    }
-
     function presencialTipoEstabelecimento(row) {
       const tipoInformado = normalize(
         row?.tipo_estabelecimento || row?.tipo_unidade || row?.tipo_cadastro ||
@@ -2925,14 +2909,24 @@
       if (/(matriz|sede)/.test(tipoInformado)) return "Matriz";
       if (/(filial|unidade)/.test(tipoInformado)) return "Unidade";
 
-      const matriz = String(presencialCnpjMatriz(row) || "").replace(/\D/g, "");
+      // Primeiro identifica pelo CNPJ próprio do estabelecimento (ordem 0001 = matriz).
       const unidade = String(presencialCnpjUnidade(row) || "").replace(/\D/g, "");
+      if (unidade.length === 14 && unidade.slice(8, 12) === "0001") return "Matriz";
+
+      // Se houver CNPJ da matriz diferente do CNPJ próprio, este cartão é uma filial.
+      const matriz = String(presencialCnpjMatriz(row) || "").replace(/\D/g, "");
       if (matriz.length === 14 && unidade.length === 14) {
         return matriz === unidade ? "Matriz" : "Unidade";
       }
+
+      // Também procura a matriz entre os registros carregados, pelo mesmo radical do CNPJ.
       if (unidade.length === 14) {
-        if (unidade.slice(8, 12) === "0001") return "Matriz";
-        if (matriz.length === 14 && matriz !== unidade) return "Unidade";
+        const radical = unidade.slice(0, 8);
+        const existeMatriz = (presencialGeoRegistros || []).some(candidato => {
+          const cnpj = String(presencialCnpjUnidade(candidato) || "").replace(/\D/g, "");
+          return cnpj.length === 14 && cnpj.slice(0, 8) === radical && cnpj.slice(8, 12) === "0001";
+        });
+        if (existeMatriz) return "Unidade";
       }
       return "";
     }
@@ -3433,29 +3427,7 @@
         }
       });
 
-      // Se houver mais de um estabelecimento para o mesmo município/subsede,
-      // completa o título da unidade principal como Matriz quando outra unidade
-      // do mesmo grupo já estiver identificada como Unidade/Filial.
-      // Assim a distinção aparece no próprio cartão, sem abrir Consultar.
-      const gruposMunicipio = [...grupos.values()];
-      gruposMunicipio.forEach(grupo => {
-        const mesmaCidade = gruposMunicipio.filter(outro =>
-          outro !== grupo &&
-          normalize(outro.municipio) === normalize(grupo.municipio) &&
-          normalize(outro.uf) === normalize(grupo.uf) &&
-          normalize(outro.identificadorCuritiba || "") === normalize(grupo.identificadorCuritiba || "")
-        );
-        const rotuloAtual = String(grupo.rotuloUnidade || "");
-        const jaTemTipo = /(?:—|-)\s*(?:matriz|unidade|filial)$/i.test(rotuloAtual);
-        const existeUnidadeIrmã = mesmaCidade.some(outro =>
-          /(?:—|-)\s*(?:unidade|filial)$/i.test(String(outro.rotuloUnidade || ""))
-        );
-        if (!jaTemTipo && existeUnidadeIrmã) {
-          grupo.rotuloUnidade = `${presencialNomeUnidadeCanonico(grupo.registros.values().next().value) || grupo.municipio} — Matriz`;
-        }
-      });
-
-      return gruposMunicipio.map(grupo => {
+      return [...grupos.values()].map(grupo => {
         const registrosUnicos = [...grupo.registros.values()];
         return {
           ...grupo,
@@ -3512,7 +3484,6 @@
             municipio, uf, subsede, unidadeId,
             nome: presencialRotuloUnidade(row) || municipio,
             endereco: presencialEnderecoExibicao(row),
-            registroIdentificacao: row,
             cursoDireto: cursoEncontrado,
             cursos: new Map(),
             protocolos: new Set()
@@ -3547,7 +3518,6 @@
               <div class="ead-presencial-municipio-info">
                 <strong>${escaparHTML(item.nome)} — ${escaparHTML(item.municipio)} / ${escaparHTML(item.uf)}</strong>
                 <small>${item.cursos.size} curso(s) aprovado(s) · ${item.protocolos.size} protocolo(s) · Subsede ${escaparHTML(item.subsede || "Não informada")}</small>
-                ${presencialHtmlIdentificacaoCnpj(item.registroIdentificacao)}
                 <small class="ead-presencial-endereco-lista"><strong>${escaparHTML(presencialRotuloEndereco({ municipio: item.municipio, endereco: item.endereco }))}:</strong> ${escaparHTML(item.endereco)}</small>
                 <small class="ead-presencial-cursos-encontrados">${[...item.cursos.values()].map(escaparHTML).join(" · ")}</small>
               </div>
@@ -3583,7 +3553,6 @@
               ${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados
               · ${item.totalUnidades.toLocaleString("pt-BR")} unidades
             </small>
-            ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             ${presencialHtmlEndereco(item.registros?.[0])}
           </div>
           <button
@@ -3658,8 +3627,7 @@
             </div>
             <div class="ead-presencial-curso-grade">
               <div><small>Unidade</small><strong>${escaparHTML(presencialRotuloUnidade(row))}</strong></div>
-              <div><small>CNPJ da matriz (sede)</small><strong>${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjMatriz(row)))}</strong></div>
-              <div><small>CNPJ da unidade (filial)</small><strong>${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjUnidade(row)))}</strong></div>
+              <div><small>CNPJ</small><strong>${escaparHTML(presencialFormatarCnpjPortal(presencialCnpjUnidade(row)))}</strong></div>
               <div><small>CBO</small><strong>${escaparHTML(valorTexto(row.cbo || row.codigo_cbo))}</strong></div>
               <div><small>Protocolo</small><strong>${escaparHTML(valorTexto(row.protocolo || row.numero_protocolo))}</strong></div>
               <div><small>Data de aprovação / protocolo</small><strong>${escaparHTML(presencialFormatarDataPortal(row.data_protocolo || row.data_aprovacao))}</strong></div>
@@ -3737,7 +3705,6 @@
             <div class="ead-presencial-municipio-info">
               <strong>${escaparHTML(item.rotuloUnidade || item.municipio)} - ${escaparHTML(item.uf)}</strong>
               <small>${item.totalCursosAprovados.toLocaleString("pt-BR")} cursos aprovados · ${item.totalUnidades.toLocaleString("pt-BR")} unidades</small>
-              ${presencialHtmlIdentificacaoCnpj(item.registros?.[0])}
             </div>
             <button type="button" class="ead-presencial-consultar"
               data-presencial-municipio="${escaparHTML(item.municipio)}"
