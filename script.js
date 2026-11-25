@@ -3433,7 +3433,29 @@
         }
       });
 
-      return [...grupos.values()].map(grupo => {
+      // Se houver mais de um estabelecimento para o mesmo município/subsede,
+      // completa o título da unidade principal como Matriz quando outra unidade
+      // do mesmo grupo já estiver identificada como Unidade/Filial.
+      // Assim a distinção aparece no próprio cartão, sem abrir Consultar.
+      const gruposMunicipio = [...grupos.values()];
+      gruposMunicipio.forEach(grupo => {
+        const mesmaCidade = gruposMunicipio.filter(outro =>
+          outro !== grupo &&
+          normalize(outro.municipio) === normalize(grupo.municipio) &&
+          normalize(outro.uf) === normalize(grupo.uf) &&
+          normalize(outro.identificadorCuritiba || "") === normalize(grupo.identificadorCuritiba || "")
+        );
+        const rotuloAtual = String(grupo.rotuloUnidade || "");
+        const jaTemTipo = /(?:—|-)\s*(?:matriz|unidade|filial)$/i.test(rotuloAtual);
+        const existeUnidadeIrmã = mesmaCidade.some(outro =>
+          /(?:—|-)\s*(?:unidade|filial)$/i.test(String(outro.rotuloUnidade || ""))
+        );
+        if (!jaTemTipo && existeUnidadeIrmã) {
+          grupo.rotuloUnidade = `${presencialNomeUnidadeCanonico(grupo.registros.values().next().value) || grupo.municipio} — Matriz`;
+        }
+      });
+
+      return gruposMunicipio.map(grupo => {
         const registrosUnicos = [...grupo.registros.values()];
         return {
           ...grupo,
