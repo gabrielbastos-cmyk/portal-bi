@@ -2937,6 +2937,45 @@
       return tipo ? `${nome} — ${tipo}` : nome;
     }
 
+    // Nos cartões da lista, só acrescenta MATRIZ/UNIDADE quando a base
+    // realmente contém os dois estabelecimentos do mesmo CNPJ-raiz.
+    // O título usa o município (não o nome interno da unidade).
+    function presencialRotuloCartao(row) {
+      const municipio = valorTexto(row?.municipio);
+      const cnpjUnidade = String(presencialCnpjUnidade(row) || "").replace(/\\D/g, "");
+      const cnpjMatriz = String(presencialCnpjMatriz(row) || "").replace(/\\D/g, "");
+      let temMatrizEFilial = false;
+
+      if (cnpjUnidade.length === 14) {
+        const raiz = cnpjUnidade.slice(0, 8);
+        let temMatriz = false;
+        let temFilial = false;
+
+        (presencialGeoRegistros || []).forEach(candidato => {
+          const cnpj = String(presencialCnpjUnidade(candidato) || "").replace(/\\D/g, "");
+          if (cnpj.length !== 14 || cnpj.slice(0, 8) !== raiz) return;
+          if (cnpj.slice(8, 12) === "0001") temMatriz = true;
+          else temFilial = true;
+        });
+
+        temMatrizEFilial = temMatriz && temFilial;
+      }
+
+      // Também reconhece bases que informam explicitamente o CNPJ da matriz.
+      if (cnpjMatriz.length === 14 && cnpjUnidade.length === 14 &&
+          cnpjMatriz.slice(0, 8) === cnpjUnidade.slice(0, 8) &&
+          cnpjMatriz !== cnpjUnidade) {
+        temMatrizEFilial = true;
+      }
+
+      if (temMatrizEFilial) {
+        const tipo = presencialTipoEstabelecimento(row);
+        if (tipo) return `${municipio} — ${tipo}`;
+      }
+
+      return presencialRotuloUnidade(row);
+    }
+
     // Disponibilidade é independente para cada unidade física + curso aprovado.
     function presencialChaveTurma(row) {
       const unidadeKey = presencialChaveUnidade(row);
@@ -3402,7 +3441,7 @@
             ? "Curitiba — Centro"
             : identificadorCuritiba === "curitiba-sede"
               ? "Curitiba — Sede"
-              : presencialRotuloUnidade(row);
+              : presencialRotuloCartao(row);
 
           grupos.set(chave, {
             municipio,
