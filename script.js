@@ -2909,12 +2909,16 @@
       if (/(matriz|sede)/.test(tipoInformado)) return "Matriz";
       if (/(filial|unidade)/.test(tipoInformado)) return "Unidade";
 
-      // Primeiro identifica pelo CNPJ próprio do estabelecimento (ordem 0001 = matriz).
+      // Identifica pelo CNPJ próprio do estabelecimento (ordem 0001 = matriz).
       const unidade = String(presencialCnpjUnidade(row) || "").replace(/\D/g, "");
+      const matriz = String(presencialCnpjMatriz(row) || "").replace(/\D/g, "");
       if (unidade.length === 14 && unidade.slice(8, 12) === "0001") return "Matriz";
 
+      // Algumas linhas trazem somente o CNPJ da matriz. Se não houver CNPJ
+      // próprio (ou se ele for igual ao da matriz), o registro representa a matriz.
+      if (matriz.length === 14 && (!unidade || unidade === matriz)) return "Matriz";
+
       // Se houver CNPJ da matriz diferente do CNPJ próprio, este cartão é uma filial.
-      const matriz = String(presencialCnpjMatriz(row) || "").replace(/\D/g, "");
       if (matriz.length === 14 && unidade.length === 14) {
         return matriz === unidade ? "Matriz" : "Unidade";
       }
@@ -2942,37 +2946,10 @@
     // O título usa o município (não o nome interno da unidade).
     function presencialRotuloCartao(row) {
       const municipio = valorTexto(row?.municipio);
-      const cnpjUnidade = String(presencialCnpjUnidade(row) || "").replace(/\\D/g, "");
-      const cnpjMatriz = String(presencialCnpjMatriz(row) || "").replace(/\\D/g, "");
-      let temMatrizEFilial = false;
-
-      if (cnpjUnidade.length === 14) {
-        const raiz = cnpjUnidade.slice(0, 8);
-        let temMatriz = false;
-        let temFilial = false;
-
-        (presencialGeoRegistros || []).forEach(candidato => {
-          const cnpj = String(presencialCnpjUnidade(candidato) || "").replace(/\\D/g, "");
-          if (cnpj.length !== 14 || cnpj.slice(0, 8) !== raiz) return;
-          if (cnpj.slice(8, 12) === "0001") temMatriz = true;
-          else temFilial = true;
-        });
-
-        temMatrizEFilial = temMatriz && temFilial;
-      }
-
-      // Também reconhece bases que informam explicitamente o CNPJ da matriz.
-      if (cnpjMatriz.length === 14 && cnpjUnidade.length === 14 &&
-          cnpjMatriz.slice(0, 8) === cnpjUnidade.slice(0, 8) &&
-          cnpjMatriz !== cnpjUnidade) {
-        temMatrizEFilial = true;
-      }
-
-      if (temMatrizEFilial) {
-        const tipo = presencialTipoEstabelecimento(row);
-        if (tipo) return `${municipio} — ${tipo}`;
-      }
-
+      const tipo = presencialTipoEstabelecimento(row);
+      // O tipo precisa aparecer no título do cartão, em caixa alta,
+      // sem depender de uma segunda linha ou do botão Consultar.
+      if (tipo) return `${municipio} — ${tipo.toUpperCase()}`;
       return presencialRotuloUnidade(row);
     }
 
